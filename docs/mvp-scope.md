@@ -10,7 +10,7 @@ The MVP proves the Code Factory orchestration loop before tightening agent verif
 - Assume the CLI is run from the target repository root.
 - Use Docker Sandbox clone mode so PRD Branch checkout, file changes, commits, and pushes happen inside the PRD Sandbox rather than the host working tree.
 - Use GitHub CLI as the GitHub integration layer. Missing required external commands fail naturally through command execution.
-- Discover valid Implementation Issues from attached sub-issues whose `## Parent` section references the PRD.
+- Discover valid Implementation Issues from the PRD's native GitHub sub-issue links (each issue's native `parent_issue_url`), not a `## Parent` body section.
 - Sort Implementation Issues by GitHub issue number.
 - Skip closed Implementation Issues.
 - Stop on an open HITL Issue with an idempotent parent PRD comment.

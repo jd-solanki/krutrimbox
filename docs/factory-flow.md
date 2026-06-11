@@ -16,7 +16,7 @@ Explicit Runs also enforce Factory-Owned PRD eligibility. A requested PRD not au
 2. The PRD is authored by `jd-solanki`.
 3. The PRD has attached sub-issues.
 4. Each valid Implementation Issue is labeled `PRD-sub-issue`.
-5. Each valid Implementation Issue contains a `## Parent` section with `Parent PRD: #<prd-number>`.
+5. Each valid Implementation Issue is linked to the PRD through GitHub's native sub-issue relationship. The Code Factory reads that relationship — the PRD's attached sub-issues and each issue's native `parent_issue_url` — instead of parsing a `## Parent` body section.
 6. Each open valid Implementation Issue has exactly one state label: `ready-for-agent` or `ready-for-human`.
 7. The Code Factory builds the Implementation Sequence by sorting valid Implementation Issues by GitHub issue number.
 

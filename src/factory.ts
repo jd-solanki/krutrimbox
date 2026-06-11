@@ -161,7 +161,7 @@ export function buildImplementationSequence(
   for (const issue of attachedSubIssues) {
     const labels = labelNames(issue);
 
-    if (!labels.includes(IMPLEMENTATION_LABEL) || !hasMatchingParentSection(issue.body, prdNumber)) {
+    if (!labels.includes(IMPLEMENTATION_LABEL) || issue.parentNumber !== prdNumber) {
       continue;
     }
 
@@ -650,12 +650,6 @@ function isGitHubClient(value: GitHubClient | CodeFactoryDependencies): value is
 
 function labelNames(issue: GitHubIssue): string[] {
   return issue.labels.map((label) => label.name);
-}
-
-function hasMatchingParentSection(body: string, prdNumber: number): boolean {
-  return new RegExp(String.raw`Parent PRD:\s*#${prdNumber}\b`).test(
-    extractMarkdownSection(body, "Parent")
-  );
 }
 
 function extractMarkdownSection(body: string, heading: string): string {

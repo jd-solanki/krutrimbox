@@ -40,7 +40,7 @@ describe("buildImplementationSequence", () => {
       implementationIssue({
         number: 6,
         title: "Wrong parent",
-        body: "## Parent\n\nParent PRD: #2",
+        parentNumber: 2,
         labels: ["PRD-sub-issue", "ready-for-agent"]
       }),
       implementationIssue({
@@ -525,7 +525,7 @@ describe("createCodeFactory", () => {
           [
             implementationIssue({
               number: 5,
-              body: "## Parent\n\nParent PRD: #2",
+              parentNumber: 2,
               labels: ["PRD-sub-issue", "ready-for-agent"]
             })
           ]
@@ -744,7 +744,8 @@ function prdIssue({
     body,
     state: "OPEN",
     author: { login: author },
-    labels: [{ name: "PRD" }, { name: "ready-for-agent" }]
+    labels: [{ name: "PRD" }, { name: "ready-for-agent" }],
+    parentNumber: null
   };
 }
 
@@ -763,21 +764,24 @@ function blockerIssue({
     body: "",
     state,
     author: { login: "jd-solanki" },
-    labels: []
+    labels: [],
+    parentNumber: null
   };
 }
 
 function implementationIssue({
   number,
   title = "Implementation issue",
-  body = "## Parent\n\nParent PRD: #1",
+  body = "Implementation issue body",
   state = "OPEN",
+  parentNumber = 1,
   labels
 }: {
   number: number;
   title?: string;
   body?: string;
   state?: "OPEN" | "CLOSED";
+  parentNumber?: number | null;
   labels: string[];
 }): GitHubIssue {
   return {
@@ -786,7 +790,8 @@ function implementationIssue({
     body,
     state,
     author: { login: "jd-solanki" },
-    labels: labels.map((name) => ({ name }))
+    labels: labels.map((name) => ({ name })),
+    parentNumber
   };
 }
 

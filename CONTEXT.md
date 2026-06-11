@@ -33,7 +33,7 @@ A Factory Run mode that discovers open PRDs labeled `PRD` and `ready-for-agent` 
 _Avoid_: sweep, queue run, all run
 
 **Implementation Issue**:
-A PRD sub-issue that represents one ordered slice of work for a PRD. An Implementation Issue is either agent-ready or requires human input before the Code Factory can continue.
+A PRD sub-issue, linked to its PRD through GitHub's native sub-issue relationship, that represents one ordered slice of work for a PRD. An Implementation Issue is either agent-ready or requires human input before the Code Factory can continue.
 _Avoid_: task, ticket, child issue
 
 **Implementation Sequence**:

@@ -139,12 +139,13 @@ describe("GitHubCliClient", () => {
                       {
                         number: 3,
                         title: "Discover PRDs",
-                        body: "## Parent\n\nParent PRD: #1",
+                        body: "Implementation issue body",
                         state: "OPEN",
                         author: { login: "jd-solanki" },
                         labels: {
                           nodes: [{ name: "PRD-sub-issue" }, { name: "ready-for-agent" }]
-                        }
+                        },
+                        parent: { number: 1 }
                       }
                     ]
                   }
@@ -163,7 +164,8 @@ describe("GitHubCliClient", () => {
     expect(subIssues[0]).toMatchObject({
       number: 3,
       title: "Discover PRDs",
-      labels: [{ name: "PRD-sub-issue" }, { name: "ready-for-agent" }]
+      labels: [{ name: "PRD-sub-issue" }, { name: "ready-for-agent" }],
+      parentNumber: 1
     });
     expect(runner.calls[1].args).toEqual([
       "api",

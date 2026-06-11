@@ -32,6 +32,10 @@ export interface GitHubIssue {
   labels: Array<{
     name: string;
   }>;
+  // The PRD this issue is attached to through GitHub's native sub-issue link
+  // (REST `parent_issue_url` / GraphQL `parent`). Null for top-level issues such
+  // as PRDs, or when the issue was not fetched through the sub-issue relationship.
+  parentNumber: number | null;
 }
 
 export interface GitHubClient {
@@ -387,6 +391,9 @@ interface RawGraphqlIssue {
       name: string;
     }>;
   };
+  parent: {
+    number: number;
+  } | null;
 }
 
 const SUB_ISSUES_QUERY = `
@@ -407,6 +414,9 @@ query($owner: String!, $repo: String!, $number: Int!) {
               name
             }
           }
+          parent {
+            number
+          }
         }
       }
     }
@@ -422,7 +432,10 @@ function parseIssue(issue: RawGhIssue): GitHubIssue {
     author: {
       login: issue.author.login
     },
-    labels: issue.labels.map((label) => ({ name: label.name }))
+    labels: issue.labels.map((label) => ({ name: label.name })),
+    // `gh issue view`/`issue list` do not return the sub-issue parent link; the
+    // parent is read natively when an issue is fetched via getAttachedSubIssues.
+    parentNumber: null
   };
 }
 
@@ -435,7 +448,8 @@ function parseGraphqlIssue(issue: RawGraphqlIssue): GitHubIssue {
     author: {
       login: issue.author?.login ?? ""
     },
-    labels: issue.labels.nodes.map((label) => ({ name: label.name }))
+    labels: issue.labels.nodes.map((label) => ({ name: label.name })),
+    parentNumber: issue.parent?.number ?? null
   };
 }
 
