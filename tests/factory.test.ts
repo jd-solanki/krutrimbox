@@ -257,7 +257,10 @@ describe("createCodeFactory", () => {
       "ensureSandbox",
       "checkoutBranch",
       "runAfkIssue",
-      "commitAndPush"
+      "commitAndPush",
+      "ensureSandbox",
+      "runFinalReview",
+      "removeSandbox"
     ]);
     expect(sandbox.calls[0].input).toEqual({ sandboxName: "code-factory-prd-1" });
     expect(sandbox.calls[1].input).toEqual({
@@ -319,6 +322,187 @@ describe("createCodeFactory", () => {
       expect.stringContaining("Branch: `code-factory/prd-1`")
     );
     expect(github.setPullRequestLabels).toHaveBeenCalledWith(12, ["PRD"]);
+  });
+
+  test("runs final review when all Implementation Issues are already resolved at run start", async () => {
+    const github = new FakeGitHubClient({
+      prds: [prdIssue({ body: "Full PRD body" })],
+      pullRequests: [{ number: 10, labels: [{ name: "PRD" }] }],
+      subIssuesByPrd: new Map([
+        [
+          1,
+          [
+            implementationIssue({ number: 3, title: "Bootstrap", state: "CLOSED", labels: ["PRD-sub-issue"] }),
+            implementationIssue({ number: 4, title: "Factory loop", state: "CLOSED", labels: ["PRD-sub-issue"] })
+          ]
+        ]
+      ])
+    });
+    const sandbox = new FakeSandboxRunner();
+    const factory = createCodeFactory({
+      github,
+      sandbox,
+      lockStore: new FakeLockStore(),
+      templates: new FixtureTemplates()
+    });
+
+    await factory.runExplicit(1);
+
+    expect(sandbox.calls.map((call) => call.name)).toEqual([
+      "ensureSandbox",
+      "runFinalReview",
+      "removeSandbox"
+    ]);
+    const reviewCall = sandbox.calls.find((call) => call.name === "runFinalReview");
+    expect(String(reviewCall?.input.prompt)).toContain("Full PRD body");
+    expect(String(reviewCall?.input.prompt)).toContain("- #3 - Bootstrap (CLOSED)");
+    expect(String(reviewCall?.input.prompt)).toContain("- #4 - Factory loop (CLOSED)");
+    expect(github.markPullRequestReadyForReview).toHaveBeenCalledWith(10);
+    expect(github.requestPullRequestReview).toHaveBeenCalledWith(10, "jd-solanki");
+    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: "code-factory-prd-1" });
+  });
+
+  test("updates an existing final review comment idempotently", async () => {
+    const github = new FakeGitHubClient({
+      prds: [prdIssue()],
+      pullRequests: [{ number: 10, labels: [{ name: "PRD" }] }],
+      subIssuesByPrd: new Map([
+        [1, [implementationIssue({ number: 3, title: "Bootstrap", state: "CLOSED", labels: ["PRD-sub-issue"] })]]
+      ]),
+      comments: new Map([
+        [10, [{ id: "200", body: "<!-- code-factory:final-review-prd-1 -->\nold review" }]]
+      ])
+    });
+    const factory = createCodeFactory({
+      github,
+      sandbox: new FakeSandboxRunner(),
+      lockStore: new FakeLockStore(),
+      templates: new FixtureTemplates()
+    });
+
+    await factory.runExplicit(1);
+
+    expect(github.updateIssueComment).toHaveBeenCalledWith(
+      "200",
+      expect.stringContaining("<!-- code-factory:final-review-prd-1 -->")
+    );
+    expect(github.createIssueComment).not.toHaveBeenCalledWith(
+      10,
+      expect.stringContaining("<!-- code-factory:final-review-prd-1 -->")
+    );
+  });
+
+  test("requests review from PRD Author when they differ from PR Author", async () => {
+    const github = new FakeGitHubClient({
+      prds: [prdIssue({ author: "jd-solanki" })],
+      pullRequests: [{ number: 10, labels: [{ name: "PRD" }] }],
+      subIssuesByPrd: new Map([
+        [1, [implementationIssue({ number: 3, state: "CLOSED", labels: ["PRD-sub-issue"] })]]
+      ])
+    });
+    github.getAuthenticatedUser.mockResolvedValue("factory-bot");
+    const factory = createCodeFactory({
+      github,
+      sandbox: new FakeSandboxRunner(),
+      lockStore: new FakeLockStore(),
+      templates: new FixtureTemplates()
+    });
+
+    await factory.runExplicit(1);
+
+    expect(github.requestPullRequestReview).toHaveBeenCalledWith(10, "jd-solanki");
+    expect(github.createIssueComment).not.toHaveBeenCalledWith(
+      10,
+      expect.stringContaining("@jd-solanki")
+    );
+  });
+
+  test("tags PRD Author in a comment instead of requesting self-review when authors match", async () => {
+    const github = new FakeGitHubClient({
+      prds: [prdIssue({ author: "jd-solanki" })],
+      pullRequests: [{ number: 10, labels: [{ name: "PRD" }] }],
+      subIssuesByPrd: new Map([
+        [1, [implementationIssue({ number: 3, state: "CLOSED", labels: ["PRD-sub-issue"] })]]
+      ])
+    });
+    github.getAuthenticatedUser.mockResolvedValue("jd-solanki");
+    const factory = createCodeFactory({
+      github,
+      sandbox: new FakeSandboxRunner(),
+      lockStore: new FakeLockStore(),
+      templates: new FixtureTemplates()
+    });
+
+    await factory.runExplicit(1);
+
+    expect(github.requestPullRequestReview).not.toHaveBeenCalled();
+    expect(github.createIssueComment).toHaveBeenCalledWith(
+      10,
+      expect.stringContaining("@jd-solanki")
+    );
+  });
+
+  test("removes the PRD Sandbox after final review routing succeeds", async () => {
+    const github = new FakeGitHubClient({
+      prds: [prdIssue()],
+      pullRequests: [{ number: 10, labels: [{ name: "PRD" }] }],
+      subIssuesByPrd: new Map([
+        [1, [implementationIssue({ number: 3, state: "CLOSED", labels: ["PRD-sub-issue"] })]]
+      ])
+    });
+    const sandbox = new FakeSandboxRunner();
+    const factory = createCodeFactory({
+      github,
+      sandbox,
+      lockStore: new FakeLockStore(),
+      templates: new FixtureTemplates()
+    });
+
+    await factory.runExplicit(1);
+
+    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: "code-factory-prd-1" });
+  });
+
+  test("never merges the PRD Pull Request during final review routing", async () => {
+    const github = new FakeGitHubClient({
+      prds: [prdIssue()],
+      pullRequests: [{ number: 10, labels: [{ name: "PRD" }] }],
+      subIssuesByPrd: new Map([
+        [1, [implementationIssue({ number: 3, state: "CLOSED", labels: ["PRD-sub-issue"] })]]
+      ])
+    });
+    const factory = createCodeFactory({
+      github,
+      sandbox: new FakeSandboxRunner(),
+      lockStore: new FakeLockStore(),
+      templates: new FixtureTemplates()
+    });
+
+    await factory.runExplicit(1);
+
+    expect(github.markPullRequestReadyForReview).toHaveBeenCalledOnce();
+    expect("mergePullRequest" in github).toBe(false);
+  });
+
+  test("skips final review when no PRD Pull Request exists", async () => {
+    const github = new FakeGitHubClient({
+      prds: [prdIssue()],
+      subIssuesByPrd: new Map([
+        [1, [implementationIssue({ number: 3, state: "CLOSED", labels: ["PRD-sub-issue"] })]]
+      ])
+    });
+    const sandbox = new FakeSandboxRunner();
+    const factory = createCodeFactory({
+      github,
+      sandbox,
+      lockStore: new FakeLockStore(),
+      templates: new FixtureTemplates()
+    });
+
+    await factory.runExplicit(1);
+
+    expect(sandbox.runFinalReview).not.toHaveBeenCalled();
+    expect(github.markPullRequestReadyForReview).not.toHaveBeenCalled();
   });
 
   test("batch runs continue after a PRD-local HITL pause", async () => {
@@ -419,6 +603,10 @@ class FakeGitHubClient implements GitHubClient {
     this.pullRequestBodies.push(body);
   });
   public readonly setPullRequestLabels = vi.fn(async () => undefined);
+  public readonly getAuthenticatedUser = vi.fn(async () => "factory-bot");
+  public readonly getPullRequestDiff = vi.fn(async () => "--- a/foo\n+++ b/foo\n@@ -1 +1 @@\n-old\n+new");
+  public readonly markPullRequestReadyForReview = vi.fn(async () => undefined);
+  public readonly requestPullRequestReview = vi.fn(async () => undefined);
 
   public readonly prds: GitHubIssue[];
   public readonly issues = new Map<number, GitHubIssue>();
@@ -481,6 +669,13 @@ class FakeSandboxRunner implements SandboxRunner {
       this.calls.push({ name: "commitAndPush", input });
     }
   );
+  public readonly runFinalReview = vi.fn(async (input: { sandboxName: string; prompt: string }) => {
+    this.calls.push({ name: "runFinalReview", input });
+    return "## Code Factory Review\n\n### Findings\n\nNo findings.";
+  });
+  public readonly removeSandbox = vi.fn(async (input: { sandboxName: string }) => {
+    this.calls.push({ name: "removeSandbox", input });
+  });
 }
 
 class FakeLockStore implements PrdLockStore {
@@ -518,7 +713,11 @@ class FixtureTemplates implements TemplateRenderer {
       "templates/pr-body.md":
         "## Parent PRD\n\nCloses #{{prd_number}}\n\n## Implementation Issues\n\n{{implementation_issue_checklist}}\n\n## Code Factory\n\nBranch: `{{prd_branch}}`\nSandbox: `{{prd_sandbox}}`",
       "prompts/afk-issue.md":
-        "Do not create commits or push branches.\nWork on `{{prd_branch}}`.\n\n## Parent PRD\n{{prd_body}}\n\n## Current AFK Issue\n{{issue_body}}\n\n## Earlier Implementation Issues\n{{earlier_issues}}\n\n## Later Implementation Issues\n{{later_issues}}"
+        "Do not create commits or push branches.\nWork on `{{prd_branch}}`.\n\n## Parent PRD\n{{prd_body}}\n\n## Current AFK Issue\n{{issue_body}}\n\n## Earlier Implementation Issues\n{{earlier_issues}}\n\n## Later Implementation Issues\n{{later_issues}}",
+      "templates/final-review-comment.md":
+        "<!-- code-factory:final-review-prd-{{prd_number}} -->\n\n{{review_body}}",
+      "prompts/final-review.md":
+        "## Parent PRD\n{{prd_body}}\n\n## Implementation Issues\n{{implementation_issues}}\n\n## Pull Request Diff\n{{pr_diff}}"
     };
     const template = templates[templatePath];
 

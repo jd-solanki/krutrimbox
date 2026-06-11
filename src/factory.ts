@@ -48,6 +48,8 @@ export interface SandboxRunner {
   checkoutBranch(input: SandboxBranchInput): Promise<void>;
   runAfkIssue(input: SandboxAfkInput): Promise<void>;
   commitAndPush(input: SandboxCommitInput): Promise<void>;
+  runFinalReview(input: SandboxFinalReviewInput): Promise<string>;
+  removeSandbox(input: SandboxInput): Promise<void>;
 }
 
 export interface PrdLock {
@@ -85,6 +87,10 @@ interface SandboxAfkInput extends SandboxBranchInput {
 
 interface SandboxCommitInput extends SandboxBranchInput {
   issueNumber: number;
+}
+
+interface SandboxFinalReviewInput extends SandboxInput {
+  prompt: string;
 }
 
 type PrdProcessOutcome = "completed" | "issue-completed" | "paused" | "issue-error" | "skipped";
@@ -251,6 +257,11 @@ async function processLockedPrd(context: PrdContext, prd: GitHubIssue): Promise<
 
   if (sequence.openIssues.length === 0) {
     context.logger.log(`Code Factory: PRD #${prd.number} has no open Implementation Issues.`);
+
+    if (sequence.resolvedIssues.length > 0) {
+      await runFinalReviewPhase(context, prd, sequence, branchName, sandboxName);
+    }
+
     return "completed";
   }
 
@@ -293,6 +304,12 @@ async function processLockedPrd(context: PrdContext, prd: GitHubIssue): Promise<
       labels: issue.labels
     });
   }
+
+  const allResolvedSequence: ImplementationSequence = {
+    openIssues: [],
+    resolvedIssues: [...sequence.resolvedIssues, ...processedIssues]
+  };
+  await runFinalReviewPhase(context, prd, allResolvedSequence, branchName, sandboxName);
 
   return "completed";
 }
@@ -431,6 +448,80 @@ async function postAfkErrorComment(
   await upsertIssueComment(context.github, issue.number, afkErrorMarker(issue.number), body);
 }
 
+async function runFinalReviewPhase(
+  context: PrdContext,
+  prd: GitHubIssue,
+  sequence: ImplementationSequence,
+  branchName: string,
+  sandboxName: string
+): Promise<void> {
+  const pullRequest = await context.github.findPullRequestByHead(branchName);
+
+  if (!pullRequest) {
+    context.logger.log(
+      `Code Factory: no PRD Pull Request found for PRD #${prd.number}; skipping final review.`
+    );
+    return;
+  }
+
+  context.logger.log(`Code Factory: running final review for PRD #${prd.number}.`);
+
+  const diff = await context.github.getPullRequestDiff(pullRequest.number);
+  const prompt = await buildFinalReviewPrompt(context, prd, sequence, diff);
+
+  await context.sandbox.ensureSandbox({ sandboxName });
+  const reviewBody = await context.sandbox.runFinalReview({ sandboxName, prompt });
+
+  const commentBody = await context.templates.render("templates/final-review-comment.md", {
+    prd_number: prd.number,
+    review_body: reviewBody
+  });
+
+  await upsertIssueComment(
+    context.github,
+    pullRequest.number,
+    finalReviewMarker(prd.number),
+    commentBody
+  );
+
+  await context.github.markPullRequestReadyForReview(pullRequest.number);
+  context.logger.log(
+    `Code Factory: marked PRD Pull Request #${pullRequest.number} ready for review.`
+  );
+
+  const prAuthor = await context.github.getAuthenticatedUser();
+  const prdAuthor = prd.author.login;
+
+  if (prdAuthor !== prAuthor) {
+    await context.github.requestPullRequestReview(pullRequest.number, prdAuthor);
+    context.logger.log(
+      `Code Factory: requested review from ${prdAuthor} for PRD Pull Request #${pullRequest.number}.`
+    );
+  } else {
+    const tagBody = `@${prdAuthor} the Code Factory has completed all Implementation Issues for PRD #${prd.number}. Please review the PR.`;
+    await context.github.createIssueComment(pullRequest.number, tagBody);
+    context.logger.log(
+      `Code Factory: tagged ${prdAuthor} in PRD Pull Request #${pullRequest.number} (self-review).`
+    );
+  }
+
+  await context.sandbox.removeSandbox({ sandboxName });
+  context.logger.log(`Code Factory: removed PRD Sandbox ${sandboxName}.`);
+}
+
+async function buildFinalReviewPrompt(
+  context: PrdContext,
+  prd: GitHubIssue,
+  sequence: ImplementationSequence,
+  diff: string
+): Promise<string> {
+  return context.templates.render("prompts/final-review.md", {
+    prd_body: prd.body,
+    implementation_issues: formatEarlierIssues(sequence.resolvedIssues),
+    pr_diff: diff
+  });
+}
+
 async function createOrUpdatePrdPullRequest(
   context: PrdContext,
   input: {
@@ -545,6 +636,10 @@ function afkErrorMarker(issueNumber: number): string {
   return `<!-- code-factory:afk-error-issue-${issueNumber} -->`;
 }
 
+function finalReviewMarker(prdNumber: number): string {
+  return `<!-- code-factory:final-review-prd-${prdNumber} -->`;
+}
+
 function isFactoryOwnedPrd(prd: GitHubIssue): boolean {
   return prd.author.login === FACTORY_OWNER;
 }
@@ -656,6 +751,14 @@ class CommandSandboxRunner implements SandboxRunner {
 
   public async runAfkIssue(input: SandboxAfkInput): Promise<void> {
     await this.runner.run("sbx", ["exec", input.sandboxName, "--", "codex", "exec", input.prompt]);
+  }
+
+  public async runFinalReview(input: SandboxFinalReviewInput): Promise<string> {
+    return this.runner.run("sbx", ["exec", input.sandboxName, "--", "codex", "exec", input.prompt]);
+  }
+
+  public async removeSandbox(input: SandboxInput): Promise<void> {
+    await this.runner.run("sbx", ["rm", input.sandboxName]);
   }
 
   public async commitAndPush(input: SandboxCommitInput): Promise<void> {

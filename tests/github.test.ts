@@ -339,6 +339,59 @@ describe("GitHubCliClient", () => {
     ]);
   });
 
+  test("gets the authenticated GitHub user login", async () => {
+    const runner = new FixtureRunner(
+      new Map([
+        [commandKey("gh", ["api", "/user"]), JSON.stringify({ login: "factory-bot" })]
+      ])
+    );
+    const client = new GitHubCliClient(runner);
+
+    await expect(client.getAuthenticatedUser()).resolves.toBe("factory-bot");
+    expect(runner.calls[0]).toEqual({ command: "gh", args: ["api", "/user"] });
+  });
+
+  test("fetches the pull request diff", async () => {
+    const runner = new FixtureRunner(
+      new Map([
+        [commandKey("gh", ["pr", "diff", "8"]), "--- a/foo\n+++ b/foo\n@@ -1 +1 @@\n-old\n+new"]
+      ])
+    );
+    const client = new GitHubCliClient(runner);
+
+    await expect(client.getPullRequestDiff(8)).resolves.toBe(
+      "--- a/foo\n+++ b/foo\n@@ -1 +1 @@\n-old\n+new"
+    );
+    expect(runner.calls[0]).toEqual({ command: "gh", args: ["pr", "diff", "8"] });
+  });
+
+  test("marks a pull request ready for review", async () => {
+    const runner = new FixtureRunner(
+      new Map([[commandKey("gh", ["pr", "ready", "8"]), ""]])
+    );
+    const client = new GitHubCliClient(runner);
+
+    await client.markPullRequestReadyForReview(8);
+
+    expect(runner.calls[0]).toEqual({ command: "gh", args: ["pr", "ready", "8"] });
+  });
+
+  test("requests review on a pull request from a specific reviewer", async () => {
+    const runner = new FixtureRunner(
+      new Map([
+        [commandKey("gh", ["pr", "edit", "8", "--add-reviewer", "jd-solanki"]), ""]
+      ])
+    );
+    const client = new GitHubCliClient(runner);
+
+    await client.requestPullRequestReview(8, "jd-solanki");
+
+    expect(runner.calls[0]).toEqual({
+      command: "gh",
+      args: ["pr", "edit", "8", "--add-reviewer", "jd-solanki"]
+    });
+  });
+
   test("updates a PRD Pull Request body and applies only the PRD label", async () => {
     const runner = new FixtureRunner(
       new Map([
