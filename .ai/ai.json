@@ -1,0 +1,18 @@
+{
+  "packages": {
+    "jd-solanki/.ai": {
+      "version": "v1.0.10",
+      "linked": [
+        "skills/automate-commit-based-gh-release-changelog",
+        "skills/automate-npm-release",
+        "skills/comment-code",
+        "skills/github-labels",
+        "skills/grill-me",
+        "skills/grill-with-docs",
+        "skills/to-issues",
+        "skills/to-prd",
+        "skills/write-a-skill"
+      ]
+    }
+  }
+}
