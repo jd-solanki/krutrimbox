@@ -75,9 +75,6 @@ Use the child issue number or URL in later "Blocked by" references, but use the 
 After all issues for an existing parent PRD have been created, apply `ready-for-agent` to the parent PRD issue. This marks that the PRD has been broken down and is ready for agents to pick up its child work. Do not apply `ready-for-agent` to the parent before every approved slice has a published issue.
 
 <issue-template>
-## Parent
-A reference to the parent issue on the issue tracker (if the source was an existing issue, otherwise omit this section).
-
 ## What to build
 A concise description of this vertical slice. Describe the end-to-end behavior, not layer-by-layer implementation.
 

@@ -1,7 +1,7 @@
 {
   "packages": {
     "jd-solanki/.ai": {
-      "version": "v1.0.10",
+      "version": "v1.0.11",
       "linked": [
         "skills/automate-commit-based-gh-release-changelog",
         "skills/automate-npm-release",
