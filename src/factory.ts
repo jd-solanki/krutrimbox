@@ -1,9 +1,21 @@
-import { GitHubCliClient, type GitHubClient, type GitHubIssue } from "./github.js";
+import { mkdir, readFile, rm } from "node:fs/promises";
+import path from "node:path";
+import {
+  ExecFileCommandRunner,
+  GitHubCliClient,
+  type CommandRunner,
+  type CreatePullRequestInput,
+  type GitHubClient,
+  type GitHubIssue
+} from "./github.js";
 
 export const FACTORY_OWNER = "jd-solanki";
 export const IMPLEMENTATION_LABEL = "PRD-sub-issue";
 export const AFK_LABEL = "ready-for-agent";
 export const HITL_LABEL = "ready-for-human";
+export const PRD_LABEL = "PRD";
+export const PRD_BRANCH_PREFIX = "code-factory/prd-";
+export const PRD_SANDBOX_PREFIX = "code-factory-prd-";
 
 export interface CodeFactoryRunner {
   runExplicit(prdNumber: number): Promise<void>;
@@ -31,40 +43,107 @@ export interface ImplementationSequence {
   resolvedIssues: ResolvedIssue[];
 }
 
-export function createCodeFactory(github: GitHubClient = new GitHubCliClient()): CodeFactoryRunner {
+export interface SandboxRunner {
+  ensureSandbox(input: SandboxInput): Promise<void>;
+  checkoutBranch(input: SandboxBranchInput): Promise<void>;
+  runAfkIssue(input: SandboxAfkInput): Promise<void>;
+  commitAndPush(input: SandboxCommitInput): Promise<void>;
+}
+
+export interface PrdLock {
+  release(): Promise<void>;
+}
+
+export interface PrdLockStore {
+  acquire(prdNumber: number): Promise<PrdLock | null>;
+}
+
+export interface TemplateRenderer {
+  render(templatePath: string, values: Record<string, string | number>): Promise<string>;
+}
+
+export interface CodeFactoryDependencies {
+  github?: GitHubClient;
+  sandbox?: SandboxRunner;
+  lockStore?: PrdLockStore;
+  templates?: TemplateRenderer;
+  logger?: Pick<Console, "log">;
+  cwd?: string;
+}
+
+interface SandboxInput {
+  sandboxName: string;
+}
+
+interface SandboxBranchInput extends SandboxInput {
+  branchName: string;
+}
+
+interface SandboxAfkInput extends SandboxBranchInput {
+  prompt: string;
+}
+
+interface SandboxCommitInput extends SandboxBranchInput {
+  issueNumber: number;
+}
+
+type PrdProcessOutcome = "completed" | "issue-completed" | "paused" | "issue-error" | "skipped";
+
+interface PrdContext {
+  github: GitHubClient;
+  sandbox: SandboxRunner;
+  lockStore: PrdLockStore;
+  templates: TemplateRenderer;
+  logger: Pick<Console, "log">;
+}
+
+export function createCodeFactory(
+  githubOrDependencies: GitHubClient | CodeFactoryDependencies = {}
+): CodeFactoryRunner {
+  const dependencies = isGitHubClient(githubOrDependencies)
+    ? { github: githubOrDependencies }
+    : githubOrDependencies;
+  const cwd = dependencies.cwd ?? process.cwd();
+  const commandRunner = new ExecFileCommandRunner();
+  const context: PrdContext = {
+    github: dependencies.github ?? new GitHubCliClient(),
+    sandbox: dependencies.sandbox ?? new CommandSandboxRunner(commandRunner),
+    lockStore: dependencies.lockStore ?? new FilePrdLockStore(cwd),
+    templates: dependencies.templates ?? new FileTemplateRenderer(cwd),
+    logger: dependencies.logger ?? console
+  };
+
   return {
     async runExplicit(prdNumber: number): Promise<void> {
-      await github.ensureRequiredLabels();
+      await context.github.ensureRequiredLabels();
 
-      const prd = await github.getIssue(prdNumber);
+      const prd = await context.github.getIssue(prdNumber);
 
       if (!isFactoryOwnedPrd(prd)) {
-        console.log(
+        context.logger.log(
           `Code Factory: skipping PRD #${prd.number}; author ${prd.author.login} is not ${FACTORY_OWNER}.`
         );
         return;
       }
 
-      console.log(`Code Factory: starting Explicit Run for PRD #${prd.number}.`);
-      console.log(`Code Factory: processing only Factory-Owned PRDs by ${FACTORY_OWNER}.`);
-      await processPrd(github, prd);
+      context.logger.log(`Code Factory: starting Explicit Run for PRD #${prd.number}.`);
+      context.logger.log(`Code Factory: processing only Factory-Owned PRDs by ${FACTORY_OWNER}.`);
+      await processPrd(context, prd);
     },
 
     async runBatch(): Promise<void> {
-      console.log("Code Factory: starting Batch Run for ready PRDs.");
-      await github.ensureRequiredLabels();
-      console.log(`Code Factory: discovering Factory-Owned PRDs by ${FACTORY_OWNER}.`);
+      context.logger.log("Code Factory: starting Batch Run for ready PRDs.");
+      await context.github.ensureRequiredLabels();
+      context.logger.log(`Code Factory: discovering Factory-Owned PRDs by ${FACTORY_OWNER}.`);
 
-      const prds = await github.listReadyPrds(FACTORY_OWNER);
+      const prds = await context.github.listReadyPrds(FACTORY_OWNER);
 
       for (const prd of prds) {
-        await processPrd(github, prd);
+        await processPrd(context, prd);
       }
     }
   };
 }
-
-export const runCodeFactory: CodeFactoryRunner = createCodeFactory();
 
 export function buildImplementationSequence(
   prdNumber: number,
@@ -117,34 +196,361 @@ export function buildImplementationSequence(
   };
 }
 
-async function processPrd(github: GitHubClient, prd: GitHubIssue): Promise<void> {
-  if (prd.state !== "OPEN") {
-    console.log(`Code Factory: skipping PRD #${prd.number}; PRD is ${prd.state}.`);
-    return;
+export function deterministicPrdBranch(prdNumber: number): string {
+  return `${PRD_BRANCH_PREFIX}${prdNumber}`;
+}
+
+export function deterministicPrdSandbox(prdNumber: number): string {
+  return `${PRD_SANDBOX_PREFIX}${prdNumber}`;
+}
+
+export function parseBlockingIssueNumbers(body: string): number[] {
+  const section = extractMarkdownSection(body, "Blocked by");
+  const numbers = new Set<number>();
+
+  for (const match of section.matchAll(/#(\d+)\b/g)) {
+    numbers.add(Number(match[1]));
   }
 
-  console.log(`Code Factory: building Implementation Sequence for PRD #${prd.number}.`);
+  return [...numbers].sort((left, right) => left - right);
+}
 
-  const subIssues = await github.getAttachedSubIssues(prd.number);
+async function processPrd(context: PrdContext, prd: GitHubIssue): Promise<PrdProcessOutcome> {
+  if (prd.state !== "OPEN") {
+    context.logger.log(`Code Factory: skipping PRD #${prd.number}; PRD is ${prd.state}.`);
+    return "skipped";
+  }
+
+  const lock = await context.lockStore.acquire(prd.number);
+
+  if (!lock) {
+    context.logger.log(`Code Factory: skipping PRD #${prd.number}; PRD is already locked.`);
+    return "skipped";
+  }
+
+  try {
+    return await processLockedPrd(context, prd);
+  } finally {
+    await lock.release();
+  }
+}
+
+async function processLockedPrd(context: PrdContext, prd: GitHubIssue): Promise<PrdProcessOutcome> {
+  const branchName = deterministicPrdBranch(prd.number);
+  const sandboxName = deterministicPrdSandbox(prd.number);
+
+  context.logger.log(`Code Factory: building Implementation Sequence for PRD #${prd.number}.`);
+
+  const subIssues = await context.github.getAttachedSubIssues(prd.number);
   const sequence = buildImplementationSequence(prd.number, subIssues);
+  const closedIssueNumbers = new Set(sequence.resolvedIssues.map((issue) => issue.number));
 
   for (const issue of sequence.resolvedIssues) {
-    console.log(`Code Factory: skipping Resolved Issue #${issue.number}.`);
+    context.logger.log(`Code Factory: skipping Resolved Issue #${issue.number}.`);
   }
 
   if (sequence.openIssues.length === 0) {
-    console.log(`Code Factory: PRD #${prd.number} has no open Implementation Issues.`);
-    return;
+    context.logger.log(`Code Factory: PRD #${prd.number} has no open Implementation Issues.`);
+    return "completed";
   }
 
   const orderedIssues = sequence.openIssues
     .map((issue) => `#${issue.number} (${issue.kind})`)
     .join(", ");
-  console.log(`Code Factory: Implementation Sequence for PRD #${prd.number}: ${orderedIssues}.`);
+  context.logger.log(`Code Factory: Implementation Sequence for PRD #${prd.number}: ${orderedIssues}.`);
+
+  const processedIssues: ResolvedIssue[] = [];
+
+  for (const issue of sequence.openIssues) {
+    if (issue.kind === "hitl") {
+      await postHitlPauseComment(context, prd, issue, branchName, sandboxName);
+      context.logger.log(`Code Factory: paused PRD #${prd.number} at HITL Issue #${issue.number}.`);
+      return "paused";
+    }
+
+    const priorIssues = [...sequence.resolvedIssues, ...processedIssues];
+    const laterIssues = sequence.openIssues.filter((candidate) => candidate.number > issue.number);
+    const outcome = await processAfkIssue(context, {
+      prd,
+      issue,
+      sequence,
+      priorIssues,
+      laterIssues,
+      branchName,
+      sandboxName,
+      closedIssueNumbers
+    });
+
+    if (outcome !== "issue-completed") {
+      return outcome;
+    }
+
+    closedIssueNumbers.add(issue.number);
+    processedIssues.push({
+      number: issue.number,
+      title: issue.title,
+      state: "CLOSED",
+      labels: issue.labels
+    });
+  }
+
+  return "completed";
+}
+
+async function processAfkIssue(
+  context: PrdContext,
+  input: {
+    prd: GitHubIssue;
+    issue: ImplementationIssue;
+    sequence: ImplementationSequence;
+    priorIssues: ResolvedIssue[];
+    laterIssues: ImplementationIssue[];
+    branchName: string;
+    sandboxName: string;
+    closedIssueNumbers: Set<number>;
+  }
+): Promise<PrdProcessOutcome> {
+  const { prd, issue, sequence, priorIssues, laterIssues, branchName, sandboxName } = input;
+
+  try {
+    const unresolvedBlockers = await findUnresolvedBlockers(context.github, issue);
+
+    if (unresolvedBlockers.length > 0) {
+      await postAfkErrorComment(context, prd, issue, branchName, sandboxName, unresolvedBlockers);
+      context.logger.log(
+        `Code Factory: stopped PRD #${prd.number}; AFK Issue #${issue.number} has unresolved blockers.`
+      );
+      return "issue-error";
+    }
+
+    await context.sandbox.ensureSandbox({ sandboxName });
+    await context.sandbox.checkoutBranch({ sandboxName, branchName });
+    await context.sandbox.runAfkIssue({
+      sandboxName,
+      branchName,
+      prompt: await buildAfkPrompt(context, prd, issue, priorIssues, laterIssues, branchName)
+    });
+    await context.sandbox.commitAndPush({
+      sandboxName,
+      branchName,
+      issueNumber: issue.number
+    });
+
+    const closedAfterCurrent = new Set(input.closedIssueNumbers);
+    closedAfterCurrent.add(issue.number);
+    await createOrUpdatePrdPullRequest(context, {
+      prd,
+      sequence,
+      branchName,
+      sandboxName,
+      closedIssueNumbers: closedAfterCurrent
+    });
+    await context.github.closeIssue(issue.number);
+    context.logger.log(`Code Factory: completed AFK Issue #${issue.number}.`);
+
+    return "issue-completed";
+  } catch (error) {
+    await postAfkErrorComment(context, prd, issue, branchName, sandboxName, [
+      formatError(error)
+    ]);
+    context.logger.log(`Code Factory: stopped PRD #${prd.number}; AFK Issue #${issue.number} failed.`);
+    return "issue-error";
+  }
+}
+
+async function findUnresolvedBlockers(
+  github: GitHubClient,
+  issue: ImplementationIssue
+): Promise<string[]> {
+  const blockerNumbers = parseBlockingIssueNumbers(issue.body);
+  const unresolved: string[] = [];
+
+  for (const blockerNumber of blockerNumbers) {
+    const blocker = await github.getIssue(blockerNumber);
+
+    if (blocker.state !== "CLOSED") {
+      unresolved.push(`#${blocker.number} - ${blocker.title} (${blocker.state})`);
+    }
+  }
+
+  return unresolved;
+}
+
+async function buildAfkPrompt(
+  context: PrdContext,
+  prd: GitHubIssue,
+  issue: ImplementationIssue,
+  priorIssues: ResolvedIssue[],
+  laterIssues: ImplementationIssue[],
+  branchName: string
+): Promise<string> {
+  return context.templates.render("prompts/afk-issue.md", {
+    prd_branch: branchName,
+    prd_body: prd.body,
+    issue_body: issue.body,
+    earlier_issues: formatEarlierIssues(priorIssues),
+    later_issues: formatLaterIssues(laterIssues)
+  });
+}
+
+async function postHitlPauseComment(
+  context: PrdContext,
+  prd: GitHubIssue,
+  issue: ImplementationIssue,
+  branchName: string,
+  sandboxName: string
+): Promise<void> {
+  const body = await context.templates.render("templates/hitlpause-comment.md", {
+    prd_number: prd.number,
+    prd_author: prd.author.login,
+    issue_number: issue.number,
+    issue_title: issue.title,
+    prd_branch: branchName,
+    prd_sandbox: sandboxName
+  });
+
+  await upsertIssueComment(context.github, prd.number, hitlMarker(prd.number, issue.number), body);
+}
+
+async function postAfkErrorComment(
+  context: PrdContext,
+  prd: GitHubIssue,
+  issue: ImplementationIssue,
+  branchName: string,
+  sandboxName: string,
+  errors: string[]
+): Promise<void> {
+  const body = await context.templates.render("templates/afk-error-comment.md", {
+    prd_number: prd.number,
+    issue_number: issue.number,
+    error_summary: errors.join("\n"),
+    prd_branch: branchName,
+    prd_sandbox: sandboxName
+  });
+
+  await upsertIssueComment(context.github, issue.number, afkErrorMarker(issue.number), body);
+}
+
+async function createOrUpdatePrdPullRequest(
+  context: PrdContext,
+  input: {
+    prd: GitHubIssue;
+    sequence: ImplementationSequence;
+    branchName: string;
+    sandboxName: string;
+    closedIssueNumbers: Set<number>;
+  }
+): Promise<void> {
+  const body = await renderPrdPullRequestBody(context, input);
+  const existingPullRequest = await context.github.findPullRequestByHead(input.branchName);
+
+  if (existingPullRequest) {
+    await context.github.updatePullRequestBody(existingPullRequest.number, body);
+    await context.github.setPullRequestLabels(existingPullRequest.number, [PRD_LABEL]);
+    return;
+  }
+
+  const pullRequest = await context.github.createDraftPullRequest({
+    title: `Code Factory PRD #${input.prd.number}: ${input.prd.title}`,
+    body,
+    head: input.branchName,
+    base: await context.github.getDefaultBranch(),
+    labels: [PRD_LABEL]
+  } satisfies CreatePullRequestInput);
+  await context.github.setPullRequestLabels(pullRequest.number, [PRD_LABEL]);
+}
+
+async function renderPrdPullRequestBody(
+  context: PrdContext,
+  input: {
+    prd: GitHubIssue;
+    sequence: ImplementationSequence;
+    branchName: string;
+    sandboxName: string;
+    closedIssueNumbers: Set<number>;
+  }
+): Promise<string> {
+  return context.templates.render("templates/pr-body.md", {
+    prd_number: input.prd.number,
+    prd_branch: input.branchName,
+    prd_sandbox: input.sandboxName,
+    implementation_issue_checklist: formatImplementationChecklist(
+      input.sequence,
+      input.closedIssueNumbers
+    )
+  });
+}
+
+async function upsertIssueComment(
+  github: GitHubClient,
+  issueNumber: number,
+  marker: string,
+  body: string
+): Promise<void> {
+  const comments = await github.listIssueComments(issueNumber);
+  const existing = comments.find((comment) => comment.body.includes(marker));
+
+  if (existing) {
+    await github.updateIssueComment(existing.id, body);
+    return;
+  }
+
+  await github.createIssueComment(issueNumber, body);
+}
+
+function formatImplementationChecklist(
+  sequence: ImplementationSequence,
+  closedIssueNumbers: Set<number>
+): string {
+  const issues = [...sequence.resolvedIssues, ...sequence.openIssues].sort(
+    (left, right) => left.number - right.number
+  );
+
+  if (issues.length === 0) {
+    return "- No Implementation Issues found.";
+  }
+
+  return issues
+    .map((issue) => `- [${closedIssueNumbers.has(issue.number) ? "x" : " "}] #${issue.number} - ${issue.title}`)
+    .join("\n");
+}
+
+function formatEarlierIssues(issues: ResolvedIssue[]): string {
+  if (issues.length === 0) {
+    return "None.";
+  }
+
+  return issues.map((issue) => `- #${issue.number} - ${issue.title} (${issue.state})`).join("\n");
+}
+
+function formatLaterIssues(issues: ImplementationIssue[]): string {
+  if (issues.length === 0) {
+    return "None.";
+  }
+
+  return issues
+    .map((issue) => {
+      const blockers = parseBlockingIssueNumbers(issue.body);
+      const blockerText = blockers.length > 0 ? `, blocked by ${blockers.map((number) => `#${number}`).join(", ")}` : "";
+      return `- #${issue.number} - ${issue.title} (${issue.kind}${blockerText})`;
+    })
+    .join("\n");
+}
+
+function hitlMarker(prdNumber: number, issueNumber: number): string {
+  return `<!-- code-factory:hitl-prd-${prdNumber}-issue-${issueNumber} -->`;
+}
+
+function afkErrorMarker(issueNumber: number): string {
+  return `<!-- code-factory:afk-error-issue-${issueNumber} -->`;
 }
 
 function isFactoryOwnedPrd(prd: GitHubIssue): boolean {
   return prd.author.login === FACTORY_OWNER;
+}
+
+function isGitHubClient(value: GitHubClient | CodeFactoryDependencies): value is GitHubClient {
+  return "ensureRequiredLabels" in value && "getIssue" in value;
 }
 
 function labelNames(issue: GitHubIssue): string[] {
@@ -152,11 +558,17 @@ function labelNames(issue: GitHubIssue): string[] {
 }
 
 function hasMatchingParentSection(body: string, prdNumber: number): boolean {
+  return new RegExp(String.raw`Parent PRD:\s*#${prdNumber}\b`).test(
+    extractMarkdownSection(body, "Parent")
+  );
+}
+
+function extractMarkdownSection(body: string, heading: string): string {
   const lines = body.split(/\r?\n/);
-  const startIndex = lines.findIndex((line) => line.trim() === "## Parent");
+  const startIndex = lines.findIndex((line) => line.trim() === `## ${heading}`);
 
   if (startIndex === -1) {
-    return false;
+    return "";
   }
 
   const sectionLines: string[] = [];
@@ -169,5 +581,111 @@ function hasMatchingParentSection(body: string, prdNumber: number): boolean {
     sectionLines.push(line);
   }
 
-  return new RegExp(String.raw`Parent PRD:\s*#${prdNumber}\b`).test(sectionLines.join("\n"));
+  return sectionLines.join("\n");
 }
+
+function formatError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+class FileTemplateRenderer implements TemplateRenderer {
+  public constructor(private readonly cwd: string) {}
+
+  public async render(
+    templatePath: string,
+    values: Record<string, string | number>
+  ): Promise<string> {
+    const template = await readFile(path.join(this.cwd, templatePath), "utf8");
+
+    return template.replace(/{{(\w+)}}/g, (_match, key: string) => {
+      const value = values[key];
+      return typeof value === "undefined" ? "" : String(value);
+    });
+  }
+}
+
+class FilePrdLockStore implements PrdLockStore {
+  public constructor(private readonly cwd: string) {}
+
+  public async acquire(prdNumber: number): Promise<PrdLock | null> {
+    const locksDir = path.join(this.cwd, ".code-factory", "locks");
+    const lockDir = path.join(locksDir, `prd-${prdNumber}.lock`);
+
+    await mkdir(locksDir, { recursive: true });
+
+    try {
+      await mkdir(lockDir);
+    } catch (error) {
+      if (isNodeError(error) && error.code === "EEXIST") {
+        return null;
+      }
+
+      throw error;
+    }
+
+    return {
+      release: async () => {
+        await rm(lockDir, { recursive: true, force: true });
+      }
+    };
+  }
+}
+
+class CommandSandboxRunner implements SandboxRunner {
+  public constructor(private readonly runner: CommandRunner) {}
+
+  public async ensureSandbox(input: SandboxInput): Promise<void> {
+    try {
+      await this.runner.run("sbx", ["inspect", input.sandboxName]);
+    } catch {
+      await this.runner.run("sbx", ["clone", "--name", input.sandboxName, "."]);
+    }
+  }
+
+  public async checkoutBranch(input: SandboxBranchInput): Promise<void> {
+    await this.runner.run("sbx", [
+      "exec",
+      input.sandboxName,
+      "--",
+      "git",
+      "checkout",
+      "-B",
+      input.branchName
+    ]);
+  }
+
+  public async runAfkIssue(input: SandboxAfkInput): Promise<void> {
+    await this.runner.run("sbx", ["exec", input.sandboxName, "--", "codex", "exec", input.prompt]);
+  }
+
+  public async commitAndPush(input: SandboxCommitInput): Promise<void> {
+    await this.runner.run("sbx", ["exec", input.sandboxName, "--", "git", "add", "-A"]);
+    await this.runner.run("sbx", [
+      "exec",
+      input.sandboxName,
+      "--",
+      "git",
+      "commit",
+      "-m",
+      "chore: code factory implementation",
+      "-m",
+      `Refs #${input.issueNumber}`
+    ]);
+    await this.runner.run("sbx", [
+      "exec",
+      input.sandboxName,
+      "--",
+      "git",
+      "push",
+      "-u",
+      "origin",
+      input.branchName
+    ]);
+  }
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error;
+}
+
+export const runCodeFactory: CodeFactoryRunner = createCodeFactory();

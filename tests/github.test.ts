@@ -178,6 +178,223 @@ describe("GitHubCliClient", () => {
       "number=1"
     ]);
   });
+
+  test("lists, creates, and updates issue comments through GitHub REST commands", async () => {
+    const runner = new FixtureRunner(
+      new Map([
+        [
+          commandKey("gh", ["repo", "view", "--json", "owner,name"]),
+          JSON.stringify({ owner: { login: "jd-solanki" }, name: "code-factory" })
+        ],
+        [
+          commandKey("gh", ["api", "repos/jd-solanki/code-factory/issues/4/comments"]),
+          JSON.stringify([{ id: 123, body: "<!-- marker -->\nold" }])
+        ],
+        [
+          commandKey("gh", [
+            "api",
+            "repos/jd-solanki/code-factory/issues/4/comments",
+            "-f",
+            "body=new comment"
+          ]),
+          "{}"
+        ],
+        [
+          commandKey("gh", [
+            "api",
+            "repos/jd-solanki/code-factory/issues/comments/123",
+            "-X",
+            "PATCH",
+            "-f",
+            "body=updated comment"
+          ]),
+          "{}"
+        ]
+      ])
+    );
+    const client = new GitHubCliClient(runner);
+
+    await expect(client.listIssueComments(4)).resolves.toEqual([
+      { id: "123", body: "<!-- marker -->\nold" }
+    ]);
+    await client.createIssueComment(4, "new comment");
+    await client.updateIssueComment("123", "updated comment");
+
+    expect(runner.calls).toEqual([
+      {
+        command: "gh",
+        args: ["repo", "view", "--json", "owner,name"]
+      },
+      {
+        command: "gh",
+        args: ["api", "repos/jd-solanki/code-factory/issues/4/comments"]
+      },
+      {
+        command: "gh",
+        args: [
+          "api",
+          "repos/jd-solanki/code-factory/issues/4/comments",
+          "-f",
+          "body=new comment"
+        ]
+      },
+      {
+        command: "gh",
+        args: [
+          "api",
+          "repos/jd-solanki/code-factory/issues/comments/123",
+          "-X",
+          "PATCH",
+          "-f",
+          "body=updated comment"
+        ]
+      }
+    ]);
+  });
+
+  test("creates a draft PRD Pull Request and finds it by deterministic branch", async () => {
+    const runner = new FixtureRunner(
+      new Map([
+        [
+          commandKey("gh", [
+            "pr",
+            "create",
+            "--draft",
+            "--title",
+            "Code Factory PRD #1: PRD",
+            "--body",
+            "body",
+            "--base",
+            "main",
+            "--head",
+            "code-factory/prd-1",
+            "--label",
+            "PRD"
+          ]),
+          "https://github.com/jd-solanki/code-factory/pull/8\n"
+        ],
+        [
+          commandKey("gh", [
+            "pr",
+            "list",
+            "--state",
+            "all",
+            "--head",
+            "code-factory/prd-1",
+            "--limit",
+            "10",
+            "--json",
+            "number,labels"
+          ]),
+          JSON.stringify([{ number: 8, labels: [{ name: "PRD" }] }])
+        ]
+      ])
+    );
+    const client = new GitHubCliClient(runner);
+
+    await expect(
+      client.createDraftPullRequest({
+        title: "Code Factory PRD #1: PRD",
+        body: "body",
+        base: "main",
+        head: "code-factory/prd-1",
+        labels: ["PRD"]
+      })
+    ).resolves.toEqual({ number: 8, labels: [{ name: "PRD" }] });
+
+    expect(runner.calls).toEqual([
+      {
+        command: "gh",
+        args: [
+          "pr",
+          "create",
+          "--draft",
+          "--title",
+          "Code Factory PRD #1: PRD",
+          "--body",
+          "body",
+          "--base",
+          "main",
+          "--head",
+          "code-factory/prd-1",
+          "--label",
+          "PRD"
+        ]
+      },
+      {
+        command: "gh",
+        args: [
+          "pr",
+          "list",
+          "--state",
+          "all",
+          "--head",
+          "code-factory/prd-1",
+          "--limit",
+          "10",
+          "--json",
+          "number,labels"
+        ]
+      }
+    ]);
+  });
+
+  test("updates a PRD Pull Request body and applies only the PRD label", async () => {
+    const runner = new FixtureRunner(
+      new Map([
+        [
+          commandKey("gh", ["pr", "edit", "8", "--body", "new body"]),
+          ""
+        ],
+        [
+          commandKey("gh", ["pr", "view", "8", "--json", "number,labels"]),
+          JSON.stringify({
+            number: 8,
+            labels: [{ name: "PRD" }, { name: "ready-for-agent" }]
+          })
+        ],
+        [
+          commandKey("gh", [
+            "pr",
+            "edit",
+            "8",
+            "--add-label",
+            "PRD",
+            "--remove-label",
+            "ready-for-agent"
+          ]),
+          ""
+        ]
+      ])
+    );
+    const client = new GitHubCliClient(runner);
+
+    await client.updatePullRequestBody(8, "new body");
+    await client.setPullRequestLabels(8, ["PRD"]);
+
+    expect(runner.calls).toEqual([
+      {
+        command: "gh",
+        args: ["pr", "edit", "8", "--body", "new body"]
+      },
+      {
+        command: "gh",
+        args: ["pr", "view", "8", "--json", "number,labels"]
+      },
+      {
+        command: "gh",
+        args: [
+          "pr",
+          "edit",
+          "8",
+          "--add-label",
+          "PRD",
+          "--remove-label",
+          "ready-for-agent"
+        ]
+      }
+    ]);
+  });
 });
 
 function issueFixture({
