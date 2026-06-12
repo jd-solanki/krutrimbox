@@ -6,7 +6,8 @@ import {
   type CommandRunner,
   type CreatePullRequestInput,
   type GitHubClient,
-  type GitHubIssue
+  type GitHubIssue,
+  type GitHubPullRequest
 } from "./github.js";
 
 export const FACTORY_OWNER = "jd-solanki";
@@ -284,6 +285,7 @@ export class FactoryRun {
   private readonly logger: Pick<Console, "log">;
   public readonly branchName: string;
   public readonly sandboxName: string;
+  private readonly prdPullRequest: PrdPullRequest;
   private readonly closedIssueNumbers = new Set<number>();
   private readonly processedIssues: ResolvedIssue[] = [];
 
@@ -297,6 +299,14 @@ export class FactoryRun {
     this.logger = dependencies.logger;
     this.branchName = deterministicPrdBranch(prd.number);
     this.sandboxName = deterministicPrdSandbox(prd.number);
+    this.prdPullRequest = new PrdPullRequest(
+      this.github,
+      this.templates,
+      this.logger,
+      prd,
+      this.branchName,
+      this.sandboxName
+    );
   }
 
   public async process(): Promise<FactoryRunOutcome> {
@@ -393,7 +403,7 @@ export class FactoryRun {
 
       const closedAfterCurrent = new Set(this.closedIssueNumbers);
       closedAfterCurrent.add(issue.number);
-      await this.createOrUpdatePrdPullRequest(sequence, closedAfterCurrent);
+      await this.prdPullRequest.ensureReflectsSequence(sequence, closedAfterCurrent);
       await this.github.closeIssue(issue.number);
       this.logger.log(`Code Factory: completed AFK Issue #${issue.number}.`);
 
@@ -461,9 +471,9 @@ export class FactoryRun {
 
   private async routeFinalReview(sequence: ImplementationSequence): Promise<void> {
     const { prd } = this;
-    const pullRequest = await this.github.findPullRequestByHead(this.branchName);
+    const pr = await this.prdPullRequest.find();
 
-    if (!pullRequest) {
+    if (!pr) {
       this.logger.log(
         `Code Factory: no PRD Pull Request found for PRD #${prd.number}; skipping final review.`
       );
@@ -472,7 +482,7 @@ export class FactoryRun {
 
     this.logger.log(`Code Factory: running final review for PRD #${prd.number}.`);
 
-    const diff = await this.github.getPullRequestDiff(pullRequest.number);
+    const diff = await this.prdPullRequest.diff(pr.number);
     const prompt = await this.buildFinalReviewPrompt(sequence, diff);
 
     await this.sandbox.ensureSandbox({ sandboxName: this.sandboxName });
@@ -483,28 +493,8 @@ export class FactoryRun {
       review_body: reviewBody
     });
 
-    await this.upsertComment(pullRequest.number, finalReviewMarker(prd.number), commentBody);
-
-    await this.github.markPullRequestReadyForReview(pullRequest.number);
-    this.logger.log(
-      `Code Factory: marked PRD Pull Request #${pullRequest.number} ready for review.`
-    );
-
-    const prAuthor = await this.github.getAuthenticatedUser();
-    const prdAuthor = prd.author.login;
-
-    if (prdAuthor !== prAuthor) {
-      await this.github.requestPullRequestReview(pullRequest.number, prdAuthor);
-      this.logger.log(
-        `Code Factory: requested review from ${prdAuthor} for PRD Pull Request #${pullRequest.number}.`
-      );
-    } else {
-      const tagBody = `@${prdAuthor} the Code Factory has completed all Implementation Issues for PRD #${prd.number}. Please review the PR.`;
-      await this.github.createIssueComment(pullRequest.number, tagBody);
-      this.logger.log(
-        `Code Factory: tagged ${prdAuthor} in PRD Pull Request #${pullRequest.number} (self-review).`
-      );
-    }
+    await this.upsertComment(pr.number, finalReviewMarker(prd.number), commentBody);
+    await this.prdPullRequest.routeForReview(pr.number, prd.author.login);
 
     await this.sandbox.removeSandbox({ sandboxName: this.sandboxName });
     this.logger.log(`Code Factory: removed PRD Sandbox ${this.sandboxName}.`);
@@ -521,41 +511,6 @@ export class FactoryRun {
     });
   }
 
-  private async createOrUpdatePrdPullRequest(
-    sequence: ImplementationSequence,
-    closedIssueNumbers: Set<number>
-  ): Promise<void> {
-    const body = await this.renderPrdPullRequestBody(sequence, closedIssueNumbers);
-    const existingPullRequest = await this.github.findPullRequestByHead(this.branchName);
-
-    if (existingPullRequest) {
-      await this.github.updatePullRequestBody(existingPullRequest.number, body);
-      await this.github.setPullRequestLabels(existingPullRequest.number, [PRD_LABEL]);
-      return;
-    }
-
-    const pullRequest = await this.github.createDraftPullRequest({
-      title: `Code Factory PRD #${this.prd.number}: ${this.prd.title}`,
-      body,
-      head: this.branchName,
-      base: await this.github.getDefaultBranch(),
-      labels: [PRD_LABEL]
-    } satisfies CreatePullRequestInput);
-    await this.github.setPullRequestLabels(pullRequest.number, [PRD_LABEL]);
-  }
-
-  private async renderPrdPullRequestBody(
-    sequence: ImplementationSequence,
-    closedIssueNumbers: Set<number>
-  ): Promise<string> {
-    return this.templates.render("templates/pr-body.md", {
-      prd_number: this.prd.number,
-      prd_branch: this.branchName,
-      prd_sandbox: this.sandboxName,
-      implementation_issue_checklist: formatImplementationChecklist(sequence, closedIssueNumbers)
-    });
-  }
-
   private async upsertComment(issueNumber: number, marker: string, body: string): Promise<void> {
     const comments = await this.github.listIssueComments(issueNumber);
     const existing = comments.find((comment) => comment.body.includes(marker));
@@ -566,6 +521,89 @@ export class FactoryRun {
     }
 
     await this.github.createIssueComment(issueNumber, body);
+  }
+}
+
+// The single pull request that accumulates a PRD's AFK Issue commits, identified
+// by its PRD Branch. Owns find-or-create, the deterministic PRD Pull Request
+// Body, the "exactly the PRD label" invariant, and Final Reviewer routing
+// (ADR-0004). Review generation (a Sandbox concern) and the idempotent review
+// comment (a Factory Comment Marker concern) stay with the Factory Run that
+// drives it.
+export class PrdPullRequest {
+  public constructor(
+    private readonly github: GitHubClient,
+    private readonly templates: TemplateRenderer,
+    private readonly logger: Pick<Console, "log">,
+    private readonly prd: GitHubIssue,
+    private readonly branchName: string,
+    private readonly sandboxName: string
+  ) {}
+
+  public find(): Promise<GitHubPullRequest | null> {
+    return this.github.findPullRequestByHead(this.branchName);
+  }
+
+  public diff(pullRequestNumber: number): Promise<string> {
+    return this.github.getPullRequestDiff(pullRequestNumber);
+  }
+
+  public async ensureReflectsSequence(
+    sequence: ImplementationSequence,
+    closedIssueNumbers: Set<number>
+  ): Promise<void> {
+    const body = await this.renderBody(sequence, closedIssueNumbers);
+    const existing = await this.github.findPullRequestByHead(this.branchName);
+
+    if (existing) {
+      await this.github.updatePullRequestBody(existing.number, body);
+      await this.github.setPullRequestLabels(existing.number, [PRD_LABEL]);
+      return;
+    }
+
+    const created = await this.github.createDraftPullRequest({
+      title: `Code Factory PRD #${this.prd.number}: ${this.prd.title}`,
+      body,
+      head: this.branchName,
+      base: await this.github.getDefaultBranch(),
+      labels: [PRD_LABEL]
+    } satisfies CreatePullRequestInput);
+    await this.github.setPullRequestLabels(created.number, [PRD_LABEL]);
+  }
+
+  public async routeForReview(pullRequestNumber: number, prdAuthor: string): Promise<void> {
+    await this.github.markPullRequestReadyForReview(pullRequestNumber);
+    this.logger.log(
+      `Code Factory: marked PRD Pull Request #${pullRequestNumber} ready for review.`
+    );
+
+    const prAuthor = await this.github.getAuthenticatedUser();
+
+    if (prdAuthor !== prAuthor) {
+      await this.github.requestPullRequestReview(pullRequestNumber, prdAuthor);
+      this.logger.log(
+        `Code Factory: requested review from ${prdAuthor} for PRD Pull Request #${pullRequestNumber}.`
+      );
+      return;
+    }
+
+    const tagBody = `@${prdAuthor} the Code Factory has completed all Implementation Issues for PRD #${this.prd.number}. Please review the PR.`;
+    await this.github.createIssueComment(pullRequestNumber, tagBody);
+    this.logger.log(
+      `Code Factory: tagged ${prdAuthor} in PRD Pull Request #${pullRequestNumber} (self-review).`
+    );
+  }
+
+  private async renderBody(
+    sequence: ImplementationSequence,
+    closedIssueNumbers: Set<number>
+  ): Promise<string> {
+    return this.templates.render("templates/pr-body.md", {
+      prd_number: this.prd.number,
+      prd_branch: this.branchName,
+      prd_sandbox: this.sandboxName,
+      implementation_issue_checklist: formatImplementationChecklist(sequence, closedIssueNumbers)
+    });
   }
 }
 

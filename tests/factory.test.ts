@@ -6,6 +6,7 @@ import {
   deterministicPrdSandbox,
   FactoryRun,
   parseBlockingIssueNumbers,
+  PrdPullRequest,
   SANDBOX_CODEX_EXEC_FLAGS,
   type PrdLock,
   type PrdLockStore,
@@ -633,6 +634,78 @@ describe("FactoryRun", () => {
 
     expect(run.branchName).toBe("code-factory/prd-7");
     expect(run.sandboxName).toBe("code-factory-prd-7");
+  });
+});
+
+describe("PrdPullRequest", () => {
+  const sequence = buildImplementationSequence(1, [
+    implementationIssue({ number: 3, title: "Bootstrap", state: "CLOSED", labels: ["PRD-sub-issue"] })
+  ]);
+
+  function prModule(github: FakeGitHubClient) {
+    return new PrdPullRequest(
+      github,
+      new FixtureTemplates(),
+      { log: vi.fn() },
+      prdIssue(),
+      "code-factory/prd-1",
+      "code-factory-prd-1"
+    );
+  }
+
+  test("ensureReflectsSequence creates a draft PRD Pull Request and applies only the PRD label", async () => {
+    const github = new FakeGitHubClient({ prds: [prdIssue()] });
+
+    await prModule(github).ensureReflectsSequence(sequence, new Set([3]));
+
+    expect(github.createDraftPullRequest).toHaveBeenCalledWith({
+      title: "Code Factory PRD #1: PRD: Code Factory MVP",
+      body: expect.stringContaining("- [x] #3 - Bootstrap"),
+      head: "code-factory/prd-1",
+      base: "main",
+      labels: ["PRD"]
+    });
+    expect(github.setPullRequestLabels).toHaveBeenCalledWith(10, ["PRD"]);
+  });
+
+  test("ensureReflectsSequence updates an existing PRD Pull Request and re-applies only the PRD label", async () => {
+    const github = new FakeGitHubClient({
+      prds: [prdIssue()],
+      pullRequests: [{ number: 12, labels: [{ name: "PRD" }, { name: "extra" }] }]
+    });
+
+    await prModule(github).ensureReflectsSequence(sequence, new Set([3]));
+
+    expect(github.createDraftPullRequest).not.toHaveBeenCalled();
+    expect(github.updatePullRequestBody).toHaveBeenCalledWith(
+      12,
+      expect.stringContaining("- [x] #3 - Bootstrap")
+    );
+    expect(github.setPullRequestLabels).toHaveBeenCalledWith(12, ["PRD"]);
+  });
+
+  test("routeForReview requests review from the PRD Author when distinct from the PR Author", async () => {
+    const github = new FakeGitHubClient({ prds: [prdIssue()] });
+    github.getAuthenticatedUser.mockResolvedValue("factory-bot");
+
+    await prModule(github).routeForReview(10, "jd-solanki");
+
+    expect(github.markPullRequestReadyForReview).toHaveBeenCalledWith(10);
+    expect(github.requestPullRequestReview).toHaveBeenCalledWith(10, "jd-solanki");
+    expect(github.createIssueComment).not.toHaveBeenCalled();
+  });
+
+  test("routeForReview tags the PRD Author for self-review when they are the PR Author", async () => {
+    const github = new FakeGitHubClient({ prds: [prdIssue()] });
+    github.getAuthenticatedUser.mockResolvedValue("jd-solanki");
+
+    await prModule(github).routeForReview(10, "jd-solanki");
+
+    expect(github.requestPullRequestReview).not.toHaveBeenCalled();
+    expect(github.createIssueComment).toHaveBeenCalledWith(
+      10,
+      expect.stringContaining("@jd-solanki")
+    );
   });
 });
 
