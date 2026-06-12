@@ -562,6 +562,197 @@ describe("CodeFactory", () => {
   });
 });
 
+describe("CodeFactory MVP smoke", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test("explicit run completes ordered AFK issues through PR, final review, and cleanup seams", async () => {
+    const github = new FakeGitHubClient({
+      prds: [prdIssue({ body: "Full parent PRD smoke fixture" })],
+      issues: [
+        blockerIssue({ number: 2, title: "Bootstrap CLI", state: "CLOSED" }),
+        blockerIssue({ number: 4, title: "Factory loop", state: "CLOSED" })
+      ],
+      subIssuesByPrd: new Map([
+        [
+          1,
+          [
+            implementationIssue({
+              number: 6,
+              title: "Final review",
+              body: "## Parent\n\nParent PRD: #1\n\n## Blocked by\n\n- #4",
+              labels: ["PRD-sub-issue", "ready-for-agent"]
+            }),
+            implementationIssue({
+              number: 4,
+              title: "Factory loop",
+              body: "## Parent\n\nParent PRD: #1\n\n## Blocked by\n\n- #2",
+              labels: ["PRD-sub-issue", "ready-for-agent"]
+            }),
+            implementationIssue({
+              number: 2,
+              title: "Bootstrap CLI",
+              state: "CLOSED",
+              labels: ["PRD-sub-issue"]
+            })
+          ]
+        ]
+      ]),
+      comments: new Map([
+        [10, [{ id: "existing-final-review", body: "<!-- code-factory:final-review-prd-1 -->\nold" }]]
+      ])
+    });
+    const sandbox = new FakeSandboxRunner();
+    const lockStore = recordingLockStore();
+    const factory = new CodeFactory({
+      github,
+      sandbox,
+      lockStore,
+      templates: fixtureTemplates,
+      logger: { log: vi.fn() }
+    });
+
+    await factory.runExplicit(1);
+
+    expect(lockStore.acquired).toEqual([1]);
+    expect(lockStore.released).toEqual([1]);
+    expect(sandbox.calls.map((call) => call.name)).toEqual([
+      "ensureSandbox",
+      "checkoutBranch",
+      "runAfkIssue",
+      "commitAndPush",
+      "ensureSandbox",
+      "checkoutBranch",
+      "runAfkIssue",
+      "commitAndPush",
+      "ensureSandbox",
+      "runFinalReview",
+      "removeSandbox"
+    ]);
+    expect(sandbox.runAfkIssue).toHaveBeenCalledTimes(2);
+    expect(sandbox.calls.filter((call) => call.name.toLowerCase().includes("resume"))).toEqual([]);
+    expect(sandbox.runAfkIssue.mock.calls.map(([input]) => input.branchName)).toEqual([
+      "code-factory/prd-1",
+      "code-factory/prd-1"
+    ]);
+    expect(String(sandbox.runAfkIssue.mock.calls[0]?.[0].prompt)).toContain("Full parent PRD smoke fixture");
+    expect(String(sandbox.runAfkIssue.mock.calls[0]?.[0].prompt)).toContain("- #6 - Final review (afk, blocked by #4)");
+    expect(String(sandbox.runAfkIssue.mock.calls[1]?.[0].prompt)).toContain("- #4 - Factory loop (CLOSED)");
+    expect(String(sandbox.runAfkIssue.mock.calls[1]?.[0].prompt)).not.toContain("Final review (afk");
+    expect(sandbox.commitAndPush.mock.calls.map(([input]) => input.issueNumber)).toEqual([4, 6]);
+    expect(github.closeIssue.mock.calls.map(([issueNumber]) => issueNumber)).toEqual([4, 6]);
+    expect(github.createDraftPullRequest).toHaveBeenCalledWith({
+      title: "Code Factory PRD #1: PRD: Code Factory MVP",
+      body: expect.stringContaining("Closes #1"),
+      head: "code-factory/prd-1",
+      base: "main",
+      labels: ["PRD"]
+    });
+    expect(github.pullRequestBodies.at(-1)).toContain("- [x] #2 - Bootstrap CLI");
+    expect(github.pullRequestBodies.at(-1)).toContain("- [x] #4 - Factory loop");
+    expect(github.pullRequestBodies.at(-1)).toContain("- [x] #6 - Final review");
+    expect(github.setPullRequestLabels).toHaveBeenLastCalledWith(10, ["PRD"]);
+    expect(String(sandbox.runFinalReview.mock.calls[0]?.[0].prompt)).toContain("--- a/foo");
+    expect(github.updateIssueComment).toHaveBeenCalledWith(
+      "existing-final-review",
+      expect.stringContaining("## Code Factory Review")
+    );
+    expect(github.markPullRequestReadyForReview).toHaveBeenCalledWith(10);
+    expect(github.requestPullRequestReview).toHaveBeenCalledWith(10, "jd-solanki");
+    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: "code-factory-prd-1" });
+
+    const firstCommitOrder = sandbox.commitAndPush.mock.invocationCallOrder[0];
+    const firstCloseOrder = github.closeIssue.mock.invocationCallOrder[0];
+    const reviewOrder = sandbox.runFinalReview.mock.invocationCallOrder[0];
+    const readyOrder = github.markPullRequestReadyForReview.mock.invocationCallOrder[0];
+    expect(firstCommitOrder).toBeLessThan(firstCloseOrder);
+    expect(reviewOrder).toBeLessThan(readyOrder);
+  });
+
+  test("batch run orders discovered PRDs and continues after PRD-local stops", async () => {
+    const pausedPrd = prdIssue({ number: 3 });
+    const completedPrd = prdIssue({ number: 5 });
+    const lockedPrd = prdIssue({ number: 9 });
+    const github = new FakeGitHubClient({
+      prds: [lockedPrd, completedPrd, pausedPrd],
+      subIssuesByPrd: new Map([
+        [
+          3,
+          [
+            implementationIssue({
+              number: 30,
+              parentNumber: 3,
+              title: "Human checkpoint",
+              labels: ["PRD-sub-issue", "ready-for-human"]
+            })
+          ]
+        ],
+        [
+          5,
+          [
+            implementationIssue({
+              number: 50,
+              parentNumber: 5,
+              title: "Batch AFK",
+              labels: ["PRD-sub-issue", "ready-for-agent"]
+            })
+          ]
+        ],
+        [
+          9,
+          [
+            implementationIssue({
+              number: 90,
+              parentNumber: 9,
+              title: "Should not run",
+              labels: ["PRD-sub-issue", "ready-for-agent"]
+            })
+          ]
+        ]
+      ]),
+      comments: new Map([
+        [3, [{ id: "existing-hitl", body: "<!-- code-factory:hitl-prd-3-issue-30 -->\nold" }]]
+      ])
+    });
+    const sandbox = new FakeSandboxRunner();
+    const lockStore = recordingLockStore({ lockedPrds: new Set([9]) });
+    const factory = new CodeFactory({
+      github,
+      sandbox,
+      lockStore,
+      templates: fixtureTemplates,
+      logger: { log: vi.fn() }
+    });
+
+    await factory.runBatch();
+
+    expect(github.listReadyPrds).toHaveBeenCalledWith("jd-solanki");
+    expect(lockStore.acquired).toEqual([3, 5, 9]);
+    expect(lockStore.released).toEqual([3, 5]);
+    expect(github.getAttachedSubIssues.mock.calls.map(([prdNumber]) => prdNumber)).toEqual([3, 5]);
+    expect(github.updateIssueComment).toHaveBeenCalledWith(
+      "existing-hitl",
+      expect.stringContaining("Code Factory is paused for PRD #3.")
+    );
+    expect(github.createIssueComment).not.toHaveBeenCalledWith(
+      3,
+      expect.stringContaining("Code Factory is paused for PRD #3.")
+    );
+    expect(sandbox.commitAndPush).toHaveBeenCalledWith({
+      sandboxName: "code-factory-prd-5",
+      branchName: "code-factory/prd-5",
+      issueNumber: 50
+    });
+    expect(github.closeIssue).toHaveBeenCalledWith(50);
+    expect(github.getAttachedSubIssues).not.toHaveBeenCalledWith(9);
+
+    const pauseOrder = github.updateIssueComment.mock.invocationCallOrder[0];
+    const batchAfkOrder = sandbox.runAfkIssue.mock.invocationCallOrder[0];
+    expect(pauseOrder).toBeLessThan(batchAfkOrder);
+  });
+});
+
 describe("FactoryRun", () => {
   function silentLogger() {
     return { log: vi.fn() };
@@ -847,6 +1038,29 @@ function fakeLockStore({ locked = false }: { locked?: boolean } = {}): PrdLockSt
       return lock;
     })
   };
+}
+
+function recordingLockStore({ lockedPrds = new Set<number>() }: { lockedPrds?: Set<number> } = {}) {
+  const store = {
+    acquired: [] as number[],
+    released: [] as number[],
+    acquire: vi.fn(async (prdNumber: number) => {
+      store.acquired.push(prdNumber);
+
+      if (lockedPrds.has(prdNumber)) {
+        return null;
+      }
+
+      const lock: PrdLock = {
+        release: vi.fn(async () => {
+          store.released.push(prdNumber);
+        })
+      };
+      return lock;
+    })
+  };
+
+  return store satisfies PrdLockStore & { acquired: number[]; released: number[] };
 }
 
 const fixtureTemplates: TemplateRenderer = {
