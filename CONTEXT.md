@@ -100,6 +100,18 @@ _Avoid_: agent done, run passed, implementation complete
 The Docker sandbox used by the Code Factory while delivering one PRD. It may be reused across AFK Issues for code and dependency continuity, while Codex sessions inside it remain fresh per issue.
 _Avoid_: container, VM, issue sandbox
 
+**Code Factory Sandbox Template**:
+The custom Docker Sandboxes template image used for PRD Sandboxes. It extends Docker's Codex sandbox template with repository-required tools, currently `pnpm`, so fresh Sandboxed Agent sessions have the same package-manager surface the Code Factory expects.
+_Avoid_: Dockerfile, base image, custom container
+
+**Sandbox Template Store**:
+Docker Sandboxes' template image store, populated with `sbx template load` from a saved Docker image tar. A locally built Docker image is not enough by itself; `sbx create --template` resolves images from the sandbox template store or a registry.
+_Avoid_: Docker image cache, local image list, registry
+
+**Sandbox Workspace Path**:
+The absolute repository path passed to `sbx create` and `sbx exec --workdir`. Clone-mode sandboxes expose the private repository clone at this path, while plain `sbx exec` starts elsewhere and may not be inside a Git repository.
+_Avoid_: cwd, working directory, repo path
+
 **PRD Lock**:
 A local lock that prevents more than one Factory Run from processing the same PRD at the same time.
 _Avoid_: mutex, concurrency guard, run lock

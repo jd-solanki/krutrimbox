@@ -8,6 +8,9 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "sandbox:build-template": "docker build -f Dockerfile.sandbox -t code-factory-codex:pnpm .",
+    "sandbox:load-template": "docker image save code-factory-codex:pnpm -o /tmp/code-factory-codex-pnpm.tar && sbx template load /tmp/code-factory-codex-pnpm.tar",
+    "sandbox:prepare-template": "pnpm sandbox:build-template && pnpm sandbox:load-template",
     "start": "node dist/cli.js",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"

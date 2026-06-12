@@ -16,6 +16,14 @@ export const HITL_LABEL = "ready-for-human";
 export const PRD_LABEL = "PRD";
 export const PRD_BRANCH_PREFIX = "code-factory/prd-";
 export const PRD_SANDBOX_PREFIX = "code-factory-prd-";
+export const DEFAULT_SANDBOX_TEMPLATE = "docker.io/library/code-factory-codex:pnpm";
+export const SANDBOX_CODEX_EXEC_FLAGS = [
+  "--ephemeral",
+  "--ask-for-approval",
+  "never",
+  "--sandbox",
+  "danger-full-access"
+] as const;
 
 export interface CodeFactoryRunner {
   runExplicit(prdNumber: number): Promise<void>;
@@ -71,6 +79,7 @@ export interface CodeFactoryDependencies {
   templates?: TemplateRenderer;
   logger?: Pick<Console, "log">;
   cwd?: string;
+  sandboxTemplate?: string;
 }
 
 interface SandboxInput {
@@ -109,11 +118,16 @@ export function createCodeFactory(
   const dependencies = isGitHubClient(githubOrDependencies)
     ? { github: githubOrDependencies }
     : githubOrDependencies;
-  const cwd = dependencies.cwd ?? process.cwd();
+  const cwd = path.resolve(dependencies.cwd ?? process.cwd());
   const commandRunner = new ExecFileCommandRunner();
   const context: PrdContext = {
     github: dependencies.github ?? new GitHubCliClient(),
-    sandbox: dependencies.sandbox ?? new CommandSandboxRunner(commandRunner),
+    sandbox: dependencies.sandbox
+      ?? new CommandSandboxRunner(
+        commandRunner,
+        cwd,
+        dependencies.sandboxTemplate ?? process.env.CODE_FACTORY_SANDBOX_TEMPLATE ?? DEFAULT_SANDBOX_TEMPLATE
+      ),
     lockStore: dependencies.lockStore ?? new FilePrdLockStore(cwd),
     templates: dependencies.templates ?? new FileTemplateRenderer(cwd),
     logger: dependencies.logger ?? console
@@ -721,21 +735,31 @@ class FilePrdLockStore implements PrdLockStore {
 }
 
 class CommandSandboxRunner implements SandboxRunner {
-  public constructor(private readonly runner: CommandRunner) {}
+  public constructor(
+    private readonly runner: CommandRunner,
+    private readonly workspacePath: string,
+    private readonly templateImage: string
+  ) {}
 
   public async ensureSandbox(input: SandboxInput): Promise<void> {
     const output = await this.runner.run("sbx", ["ls", "--json"]);
     const { sandboxes } = JSON.parse(output) as { sandboxes: Array<{ name: string }> };
     if (!sandboxes.some(s => s.name === input.sandboxName)) {
-      await this.runner.run("sbx", ["create", "--clone", "--name", input.sandboxName, "codex", "."]);
+      await this.runner.run("sbx", [
+        "create",
+        "--clone",
+        "--template",
+        this.templateImage,
+        "--name",
+        input.sandboxName,
+        "codex",
+        this.workspacePath
+      ]);
     }
   }
 
   public async checkoutBranch(input: SandboxBranchInput): Promise<void> {
-    await this.runner.run("sbx", [
-      "exec",
-      input.sandboxName,
-      "--",
+    await this.exec(input.sandboxName, [
       "git",
       "checkout",
       "-B",
@@ -744,11 +768,11 @@ class CommandSandboxRunner implements SandboxRunner {
   }
 
   public async runAfkIssue(input: SandboxAfkInput): Promise<void> {
-    await this.runner.run("sbx", ["exec", input.sandboxName, "--", "codex", "exec", input.prompt]);
+    await this.exec(input.sandboxName, this.codexExecCommand(input.prompt));
   }
 
   public async runFinalReview(input: SandboxFinalReviewInput): Promise<string> {
-    return this.runner.run("sbx", ["exec", input.sandboxName, "--", "codex", "exec", input.prompt]);
+    return this.exec(input.sandboxName, this.codexExecCommand(input.prompt));
   }
 
   public async removeSandbox(input: SandboxInput): Promise<void> {
@@ -756,11 +780,8 @@ class CommandSandboxRunner implements SandboxRunner {
   }
 
   public async commitAndPush(input: SandboxCommitInput): Promise<void> {
-    await this.runner.run("sbx", ["exec", input.sandboxName, "--", "git", "add", "-A"]);
-    await this.runner.run("sbx", [
-      "exec",
-      input.sandboxName,
-      "--",
+    await this.exec(input.sandboxName, ["git", "add", "-A"]);
+    await this.exec(input.sandboxName, [
       "git",
       "commit",
       "-m",
@@ -768,16 +789,28 @@ class CommandSandboxRunner implements SandboxRunner {
       "-m",
       `Refs #${input.issueNumber}`
     ]);
-    await this.runner.run("sbx", [
-      "exec",
-      input.sandboxName,
-      "--",
+    await this.exec(input.sandboxName, [
       "git",
       "push",
       "-u",
       "origin",
       input.branchName
     ]);
+  }
+
+  private async exec(sandboxName: string, command: string[]): Promise<string> {
+    return this.runner.run("sbx", [
+      "exec",
+      "--workdir",
+      this.workspacePath,
+      sandboxName,
+      "--",
+      ...command
+    ]);
+  }
+
+  private codexExecCommand(prompt: string): string[] {
+    return ["codex", "exec", ...SANDBOX_CODEX_EXEC_FLAGS, prompt];
   }
 }
 

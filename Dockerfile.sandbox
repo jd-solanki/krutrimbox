@@ -1,0 +1,6 @@
+FROM docker/sandbox-templates:codex
+
+USER root
+RUN npm install -g pnpm@10.23.0
+
+USER agent

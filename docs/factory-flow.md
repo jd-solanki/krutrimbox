@@ -30,7 +30,11 @@ If a PRD is already locked, the Code Factory skips it and continues.
 
 The Code Factory uses Docker Sandbox clone mode for PRD Sandboxes. The host repository is the launch/source repository, but PRD Branch checkout, file changes, commits, and pushes happen inside the PRD Sandbox private clone rather than the host working tree.
 
+PRD Sandboxes are created from the Code Factory Sandbox Template, currently `docker.io/library/code-factory-codex:pnpm`, so Sandboxed Agents have repository-required tooling such as `pnpm` available before implementation starts. See `docs/sandbox-template.md` for machine setup and template loading instructions.
+
 The outer TypeScript Code Factory runs implementation git commands inside the PRD Sandbox, not on the host. This includes branch checkout, staging, committing, and pushing.
+
+The outer Code Factory passes the absolute repository path to `sbx create` and uses that same path with `sbx exec --workdir`. In clone mode, the private repository clone is available at that path inside the sandbox; Docker Sandboxes' default exec directory is not guaranteed to be a Git repository.
 
 GitHub mutation commands run from the host through the outer Code Factory's authenticated `gh` session. The Sandboxed Agent may use read-only `gh` commands for inspection, and sandbox git commands mutate only the PRD Sandbox private clone.
 
@@ -67,6 +71,8 @@ For the MVP, the outer Code Factory stages all working tree changes inside the P
 The MVP treats a successful `codex exec` process exit as the Sandboxed Agent's completion signal. Structured output can be introduced later if the completion signal proves too loose or difficult for the Code Factory to interpret.
 
 Each AFK Issue gets a fresh Codex context window. The Factory Run may reuse the PRD Branch for code continuity, but it must not resume a previous Codex conversation between Implementation Issues.
+
+Sandboxed Codex sessions are launched with explicit non-interactive settings: `--ephemeral --ask-for-approval never --sandbox danger-full-access`. Docker Sandbox clone mode provides the outer isolation boundary; the inner Codex process must not pause for approvals because no human is attached to the AFK Issue session.
 
 Only the outer Code Factory owns GitHub orchestration state and git commit/push operations. The Sandboxed Agent implements the AFK Issue and reports completion, and may use Read-Only GitHub Access for inspection, but must not create commits, push branches, close issues, create or edit the PRD Pull Request, change labels, post comments, or change parent PRD state.
 
