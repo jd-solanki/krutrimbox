@@ -65,7 +65,7 @@ export class CommandSandboxRunner {
   }
 
   public async removeSandbox(input: SandboxInput): Promise<void> {
-    await this.runner("sbx", ["rm", input.sandboxName]);
+    await this.runner("sbx", ["rm", "--force", input.sandboxName]);
   }
 
   public async commitAndPush(input: SandboxCommitInput): Promise<void> {
