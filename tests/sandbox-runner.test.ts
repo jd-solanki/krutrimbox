@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { CommandSandboxRunner } from "../src/factory/index.js";
-import type { CommandRunner } from "../src/github.js";
+import { CommandSandboxRunner } from "../src/lib/factory/index";
+import type { CommandRunner } from "../src/lib/github";
 
 describe("CommandSandboxRunner", () => {
   test("removes clone sandboxes without an interactive confirmation prompt", async () => {

@@ -1,6 +1,6 @@
 import { createWriteStream, mkdirSync } from "node:fs";
 import path from "node:path";
-import { deterministicPrdSandbox } from "./sequence.js";
+import { deterministicPrdSandbox } from "./sequence";
 
 // A per-PRD log sink for one Factory Run. Status lines (`log`) are tee'd to the
 // terminal and the file so a run stays visible while it happens; the raw

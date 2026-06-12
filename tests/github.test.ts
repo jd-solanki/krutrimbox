@@ -1,6 +1,6 @@
 import { Writable } from "node:stream";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { createExecFileCommandRunner, createGitHubCliClient, type CommandRunner } from "../src/github.js";
+import { createExecFileCommandRunner, createGitHubCliClient, type CommandRunner } from "../src/lib/github";
 
 function fixtureRunner(responses: Map<string, string>) {
   const calls: Array<{ command: string; args: string[] }> = [];

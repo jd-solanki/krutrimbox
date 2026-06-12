@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { createProgram, type CliDispatch } from "../src/cli.js";
+import { createProgram, type CliDispatch } from "../src/index";
 
 function createTestDispatch(): CliDispatch {
   return {

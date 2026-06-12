@@ -15,19 +15,19 @@ import {
   type PrdLockStore,
   type SandboxRunner,
   type TemplateRenderer
-} from "../src/factory/index.js";
+} from "../src/lib/factory/index";
 import type {
   CreatePullRequestInput,
   GitHubClient,
   GitHubComment,
   GitHubIssue,
   GitHubPullRequest
-} from "../src/github.js";
+} from "../src/lib/github";
 
 // Replace the file-backed run log with a silent, in-memory sink so CodeFactory
 // tests never touch `.code-factory/logs`. `filePath: null` also suppresses the
 // "writing logs to ..." line, keeping the console-log assertions unaffected.
-vi.mock("../src/factory/run-log.js", () => ({
+vi.mock("../src/lib/factory/run-log", () => ({
   createFileRunLogFactory: () => () => ({
     stream: { write: () => true },
     filePath: null,
@@ -1182,7 +1182,7 @@ test("deterministic PRD branch and sandbox names stay stable", () => {
 describe("run logging end-to-end", () => {
   test("writes status lines and streamed sandbox output to a per-PRD log file", async () => {
     const { createFileRunLogFactory } =
-      await vi.importActual<typeof import("../src/factory/run-log.js")>("../src/factory/run-log.js");
+      await vi.importActual<typeof import("../src/lib/factory/run-log")>("../src/lib/factory/run-log");
 
     const github = new FakeGitHubClient({
       prds: [prdIssue({ body: "Full parent PRD body" })],

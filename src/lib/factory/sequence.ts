@@ -1,11 +1,11 @@
-import type { GitHubIssue } from "../github.js";
+import type { GitHubIssue } from "../github";
 import {
   AFK_LABEL,
   HITL_LABEL,
   IMPLEMENTATION_LABEL,
   PRD_BRANCH_PREFIX,
   PRD_SANDBOX_PREFIX
-} from "./constants.js";
+} from "./constants";
 
 export interface ImplementationIssue {
   number: number;

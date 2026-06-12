@@ -1,5 +1,5 @@
-import type { CommandRunner } from "../github.js";
-import { SANDBOX_CODEX_EXEC_FLAGS } from "./constants.js";
+import type { CommandRunner } from "../github";
+import { SANDBOX_CODEX_EXEC_FLAGS } from "./constants";
 
 export interface SandboxInput {
   sandboxName: string;

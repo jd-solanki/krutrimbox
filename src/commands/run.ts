@@ -1,22 +1,15 @@
-#!/usr/bin/env node
-
 import { Command, Option } from "commander";
-import { runCodeFactory } from "./factory/index.js";
+import { runCodeFactory } from "../lib/factory/index";
 
+// Injection seam: the CLI layer only needs these two entry points, so tests can
+// pass a fake dispatch instead of the real CodeFactory orchestration.
 export interface CliDispatch {
   runExplicit(prdNumber: number): Promise<void> | void;
   runBatch(): Promise<void> | void;
 }
 
-export function createProgram(dispatch: CliDispatch = runCodeFactory): Command {
-  const program = new Command();
-
-  program
-    .name("code-factory")
-    .description("Run Code Factory orchestration for ready PRDs.");
-
-  program
-    .command("run")
+export function createRunCommand(dispatch: CliDispatch = runCodeFactory): Command {
+  return new Command("run")
     .description("Run Code Factory for one PRD or all ready PRDs.")
     .addOption(
       new Option("--prd <number>", "run one explicit PRD by issue number").argParser(
@@ -31,12 +24,6 @@ export function createProgram(dispatch: CliDispatch = runCodeFactory): Command {
 
       await dispatch.runBatch();
     });
-
-  return program;
-}
-
-export async function runCli(argv: string[] = process.argv): Promise<void> {
-  await createProgram().parseAsync(argv);
 }
 
 function parsePrdNumber(value: string): number {
@@ -47,12 +34,4 @@ function parsePrdNumber(value: string): number {
   }
 
   return prdNumber;
-}
-
-if (import.meta.url === `file://${process.argv[1]}`) {
-  runCli().catch((error: unknown) => {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(message);
-    process.exitCode = 1;
-  });
 }

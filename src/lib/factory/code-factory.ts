@@ -4,17 +4,17 @@ import {
   createGitHubCliClient,
   type GitHubClient,
   type GitHubIssue
-} from "../github.js";
-import { DEFAULT_SANDBOX_TEMPLATE, FACTORY_OWNER } from "./constants.js";
+} from "../github";
+import { DEFAULT_SANDBOX_TEMPLATE, FACTORY_OWNER } from "./constants";
 import {
   FactoryRun,
   type FactoryRunDependencies,
   type FactoryRunOutcome
-} from "./factory-run.js";
-import { FilePrdLockStore, type PrdLockStore } from "./lock-store.js";
-import { createFileRunLogFactory, type RunLogFactory } from "./run-log.js";
-import { CommandSandboxRunner, type SandboxRunner } from "./sandbox-runner.js";
-import { FileTemplateRenderer, type TemplateRenderer } from "./template-renderer.js";
+} from "./factory-run";
+import { FilePrdLockStore, type PrdLockStore } from "./lock-store";
+import { createFileRunLogFactory, type RunLogFactory } from "./run-log";
+import { CommandSandboxRunner, type SandboxRunner } from "./sandbox-runner";
+import { FileTemplateRenderer, type TemplateRenderer } from "./template-renderer";
 
 export interface CodeFactoryDependencies {
   github?: GitHubClient;

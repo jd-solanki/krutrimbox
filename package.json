@@ -1,25 +1,33 @@
 {
-  "name": "code-factory",
+  "name": "kutrimcode",
   "version": "0.0.0",
-  "private": true,
   "type": "module",
   "bin": {
-    "code-factory": "./dist/cli.js"
+    "kc": "./dist/index.js"
   },
+  "files": [
+    "dist",
+    "templates",
+    "prompts"
+  ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsdown",
+    "release": "bumpp",
     "sandbox:build-template": "docker build -f Dockerfile.sandbox -t code-factory-codex:pnpm .",
     "sandbox:load-template": "docker image save code-factory-codex:pnpm -o /tmp/code-factory-codex-pnpm.tar && sbx template load /tmp/code-factory-codex-pnpm.tar",
     "sandbox:prepare-template": "pnpm sandbox:build-template && pnpm sandbox:load-template",
-    "start": "node dist/cli.js",
+    "start": "node dist/index.js",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "commander": "^14.0.2"
+    "commander": "^14.0.2",
+    "update-notifier": "^7.3.1"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
+    "bumpp": "^10.2.3",
+    "tsdown": "^0.16.4",
     "typescript": "^5.9.3",
     "vitest": "^4.0.15"
   },

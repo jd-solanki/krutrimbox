@@ -1,7 +1,7 @@
-import type { GitHubClient, GitHubIssue } from "../github.js";
-import { formatEarlierIssues, formatLaterIssues } from "./format.js";
-import { PrdPullRequest } from "./prd-pull-request.js";
-import type { SandboxRunner } from "./sandbox-runner.js";
+import type { GitHubClient, GitHubIssue } from "../github";
+import { formatEarlierIssues, formatLaterIssues } from "./format";
+import { PrdPullRequest } from "./prd-pull-request";
+import type { SandboxRunner } from "./sandbox-runner";
 import {
   buildImplementationSequence,
   deterministicPrdBranch,
@@ -10,8 +10,8 @@ import {
   type ImplementationIssue,
   type ImplementationSequence,
   type ResolvedIssue
-} from "./sequence.js";
-import type { TemplateRenderer } from "./template-renderer.js";
+} from "./sequence";
+import type { TemplateRenderer } from "./template-renderer";
 
 // The terminal outcome of one Factory Run against a locked PRD. `skipped` is a
 // dispatch concern (no run ever started), so it is not a Factory Run outcome.

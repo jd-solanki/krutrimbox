@@ -3,11 +3,11 @@ import type {
   GitHubClient,
   GitHubIssue,
   GitHubPullRequest
-} from "../github.js";
-import { PRD_LABEL } from "./constants.js";
-import { formatImplementationChecklist } from "./format.js";
-import type { ImplementationSequence } from "./sequence.js";
-import type { TemplateRenderer } from "./template-renderer.js";
+} from "../github";
+import { PRD_LABEL } from "./constants";
+import { formatImplementationChecklist } from "./format";
+import type { ImplementationSequence } from "./sequence";
+import type { TemplateRenderer } from "./template-renderer";
 
 // The single pull request that accumulates a PRD's AFK Issue commits, identified
 // by its PRD Branch. Owns find-or-create, the deterministic PRD Pull Request

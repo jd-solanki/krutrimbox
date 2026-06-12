@@ -3,7 +3,7 @@ import {
   type ImplementationIssue,
   type ImplementationSequence,
   type ResolvedIssue
-} from "./sequence.js";
+} from "./sequence";
 
 export function formatImplementationChecklist(
   sequence: ImplementationSequence,
