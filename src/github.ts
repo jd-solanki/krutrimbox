@@ -1,7 +1,4 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-
-const execFileAsync = promisify(execFile);
+import { spawn } from "node:child_process";
 
 export const REQUIRED_LABELS = [
   {
@@ -59,7 +56,11 @@ export interface GitHubClient {
 }
 
 export interface CommandRunner {
-  run(command: string, args: string[]): Promise<string>;
+  run(command: string, args: string[], options?: CommandRunOptions): Promise<string>;
+}
+
+export interface CommandRunOptions {
+  streamOutput?: boolean;
 }
 
 export interface GitHubComment {
@@ -325,12 +326,52 @@ export class GitHubCliClient implements GitHubClient {
 }
 
 export class ExecFileCommandRunner implements CommandRunner {
-  public async run(command: string, args: string[]): Promise<string> {
-    const { stdout } = await execFileAsync(command, args, {
-      maxBuffer: 10 * 1024 * 1024
-    });
+  public async run(
+    command: string,
+    args: string[],
+    options: CommandRunOptions = {}
+  ): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const child = spawn(command, args, {
+        stdio: ["ignore", "pipe", "pipe"]
+      });
+      const stdout: Buffer[] = [];
+      const stderr: Buffer[] = [];
 
-    return stdout;
+      child.stdout.on("data", (chunk: Buffer) => {
+        stdout.push(chunk);
+
+        if (options.streamOutput) {
+          process.stdout.write(chunk);
+        }
+      });
+
+      child.stderr.on("data", (chunk: Buffer) => {
+        stderr.push(chunk);
+
+        if (options.streamOutput) {
+          process.stderr.write(chunk);
+        }
+      });
+
+      child.on("error", reject);
+      child.on("close", (code, signal) => {
+        const stdoutText = Buffer.concat(stdout).toString("utf8");
+        const stderrText = Buffer.concat(stderr).toString("utf8");
+
+        if (code === 0) {
+          resolve(stdoutText);
+          return;
+        }
+
+        const commandText = [command, ...args].join(" ");
+        const reason = signal ? `signal ${signal}` : `exit code ${code}`;
+        const error = new Error(
+          [`Command failed with ${reason}: ${commandText}`, stderrText].filter(Boolean).join("\n")
+        );
+        reject(error);
+      });
+    });
   }
 }
 

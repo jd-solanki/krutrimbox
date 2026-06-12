@@ -5,6 +5,7 @@ import {
   deterministicPrdBranch,
   deterministicPrdSandbox,
   parseBlockingIssueNumbers,
+  SANDBOX_CODEX_EXEC_FLAGS,
   type PrdLock,
   type PrdLockStore,
   type SandboxRunner,
@@ -78,6 +79,14 @@ describe("parseBlockingIssueNumbers", () => {
         "See #99 elsewhere.\n\n## Blocked by\n\n- #3\n- #7 and #3\n\n## Notes\n\n#12"
       )
     ).toEqual([3, 7]);
+  });
+});
+
+describe("SANDBOX_CODEX_EXEC_FLAGS", () => {
+  test("uses current non-interactive Codex exec options for isolated runners", () => {
+    expect(SANDBOX_CODEX_EXEC_FLAGS).toContain("--ephemeral");
+    expect(SANDBOX_CODEX_EXEC_FLAGS).toContain("--dangerously-bypass-approvals-and-sandbox");
+    expect(SANDBOX_CODEX_EXEC_FLAGS).not.toContain("--ask-for-approval");
   });
 });
 

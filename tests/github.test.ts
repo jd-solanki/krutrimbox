@@ -1,5 +1,5 @@
-import { describe, expect, test } from "vitest";
-import { GitHubCliClient, type CommandRunner } from "../src/github.js";
+import { afterEach, describe, expect, test, vi } from "vitest";
+import { ExecFileCommandRunner, GitHubCliClient, type CommandRunner } from "../src/github.js";
 
 class FixtureRunner implements CommandRunner {
   public readonly calls: Array<{ command: string; args: string[] }> = [];
@@ -21,6 +21,32 @@ class FixtureRunner implements CommandRunner {
     return response;
   }
 }
+
+describe("ExecFileCommandRunner", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test("streams child output while preserving captured stdout", async () => {
+    const stdoutWrite = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation(() => true);
+    const stderrWrite = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+    const runner = new ExecFileCommandRunner();
+
+    const output = await runner.run(
+      process.execPath,
+      ["-e", "process.stdout.write('hello'); process.stderr.write('warn');"],
+      { streamOutput: true }
+    );
+
+    expect(output).toBe("hello");
+    expect(stdoutWrite).toHaveBeenCalledWith(Buffer.from("hello"));
+    expect(stderrWrite).toHaveBeenCalledWith(Buffer.from("warn"));
+  });
+});
 
 describe("GitHubCliClient", () => {
   test("ensures required labels exist before discovery", async () => {

@@ -19,10 +19,7 @@ export const PRD_SANDBOX_PREFIX = "code-factory-prd-";
 export const DEFAULT_SANDBOX_TEMPLATE = "docker.io/library/code-factory-codex:pnpm";
 export const SANDBOX_CODEX_EXEC_FLAGS = [
   "--ephemeral",
-  "--ask-for-approval",
-  "never",
-  "--sandbox",
-  "danger-full-access"
+  "--dangerously-bypass-approvals-and-sandbox"
 ] as const;
 
 export interface CodeFactoryRunner {
@@ -768,11 +765,11 @@ class CommandSandboxRunner implements SandboxRunner {
   }
 
   public async runAfkIssue(input: SandboxAfkInput): Promise<void> {
-    await this.exec(input.sandboxName, this.codexExecCommand(input.prompt));
+    await this.exec(input.sandboxName, this.codexExecCommand(input.prompt), { streamOutput: true });
   }
 
   public async runFinalReview(input: SandboxFinalReviewInput): Promise<string> {
-    return this.exec(input.sandboxName, this.codexExecCommand(input.prompt));
+    return this.exec(input.sandboxName, this.codexExecCommand(input.prompt), { streamOutput: true });
   }
 
   public async removeSandbox(input: SandboxInput): Promise<void> {
@@ -798,20 +795,33 @@ class CommandSandboxRunner implements SandboxRunner {
     ]);
   }
 
-  private async exec(sandboxName: string, command: string[]): Promise<string> {
-    return this.runner.run("sbx", [
+  private async exec(
+    sandboxName: string,
+    command: string[],
+    options: SandboxExecOptions = {}
+  ): Promise<string> {
+    const args = [
       "exec",
       "--workdir",
-      this.workspacePath,
+      this.workspacePath
+    ];
+
+    args.push(
       sandboxName,
       "--",
       ...command
-    ]);
+    );
+
+    return this.runner.run("sbx", args, { streamOutput: options.streamOutput });
   }
 
   private codexExecCommand(prompt: string): string[] {
     return ["codex", "exec", ...SANDBOX_CODEX_EXEC_FLAGS, prompt];
   }
+}
+
+interface SandboxExecOptions {
+  streamOutput?: boolean;
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
