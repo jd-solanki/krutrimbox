@@ -55,9 +55,11 @@ export interface GitHubClient {
   requestPullRequestReview(pullRequestNumber: number, reviewer: string): Promise<void>;
 }
 
-export interface CommandRunner {
-  run(command: string, args: string[], options?: CommandRunOptions): Promise<string>;
-}
+export type CommandRunner = (
+  command: string,
+  args: string[],
+  options?: CommandRunOptions
+) => Promise<string>;
 
 export interface CommandRunOptions {
   streamOutput?: boolean;
@@ -83,145 +85,26 @@ export interface CreatePullRequestInput {
   labels: string[];
 }
 
-export class GitHubCliClient implements GitHubClient {
-  private repository: RepositoryInfo | null = null;
+export function createGitHubCliClient(
+  runner: CommandRunner = createExecFileCommandRunner()
+): GitHubClient {
+  let repository: RepositoryInfo | null = null;
 
-  public constructor(private readonly runner: CommandRunner = new ExecFileCommandRunner()) {}
-
-  public async ensureRequiredLabels(): Promise<void> {
-    const existingLabels = parseJson<Array<{ name: string }>>(
-      await this.runGh(["label", "list", "--limit", "200", "--json", "name"])
-    );
-    const existingNames = new Set(existingLabels.map((label) => label.name));
-
-    for (const label of REQUIRED_LABELS) {
-      if (existingNames.has(label.name)) {
-        continue;
-      }
-
-      await this.runGh([
-        "label",
-        "create",
-        label.name,
-        "--color",
-        label.color,
-        "--description",
-        label.description
-      ]);
-    }
+  function runGh(args: string[]): Promise<string> {
+    return runner("gh", args);
   }
 
-  public async getIssue(issueNumber: number): Promise<GitHubIssue> {
-    return parseIssue(
-      parseJson<RawGhIssue>(
-        await this.runGh([
-          "issue",
-          "view",
-          String(issueNumber),
-          "--json",
-          "number,title,body,state,author,labels"
-        ])
-      )
-    );
-  }
-
-  public async listReadyPrds(author: string): Promise<GitHubIssue[]> {
-    const issues = parseJson<RawGhIssue[]>(
-      await this.runGh([
-        "issue",
-        "list",
-        "--state",
-        "open",
-        "--author",
-        author,
-        "--label",
-        "PRD",
-        "--label",
-        "ready-for-agent",
-        "--limit",
-        "100",
-        "--json",
-        "number,title,body,state,author,labels"
-      ])
+  async function getRepository(): Promise<RepositoryInfo> {
+    repository ??= parseJson<RepositoryInfo>(
+      await runGh(["repo", "view", "--json", "owner,name"])
     );
 
-    return issues.map(parseIssue).sort((left, right) => left.number - right.number);
+    return repository;
   }
 
-  public async getAttachedSubIssues(prdNumber: number): Promise<GitHubIssue[]> {
-    const repo = await this.getRepository();
-    const response = parseJson<SubIssuesGraphqlResponse>(
-      await this.runGh([
-        "api",
-        "graphql",
-        "-f",
-        `query=${SUB_ISSUES_QUERY}`,
-        "-F",
-        `owner=${repo.owner.login}`,
-        "-F",
-        `repo=${repo.name}`,
-        "-F",
-        `number=${prdNumber}`
-      ])
-    );
-
-    return response.data.repository.issue.subIssues.nodes.map(parseGraphqlIssue);
-  }
-
-  public async listIssueComments(issueNumber: number): Promise<GitHubComment[]> {
-    const repo = await this.getRepository();
-    const comments = parseJson<RawComment[]>(
-      await this.runGh([
-        "api",
-        `repos/${repo.owner.login}/${repo.name}/issues/${issueNumber}/comments`
-      ])
-    );
-
-    return comments.map((comment) => ({
-      id: String(comment.id),
-      body: comment.body ?? ""
-    }));
-  }
-
-  public async createIssueComment(issueNumber: number, body: string): Promise<void> {
-    const repo = await this.getRepository();
-
-    await this.runGh([
-      "api",
-      `repos/${repo.owner.login}/${repo.name}/issues/${issueNumber}/comments`,
-      "-f",
-      `body=${body}`
-    ]);
-  }
-
-  public async updateIssueComment(commentId: string, body: string): Promise<void> {
-    const repo = await this.getRepository();
-
-    await this.runGh([
-      "api",
-      `repos/${repo.owner.login}/${repo.name}/issues/comments/${commentId}`,
-      "-X",
-      "PATCH",
-      "-f",
-      `body=${body}`
-    ]);
-  }
-
-  public async closeIssue(issueNumber: number): Promise<void> {
-    await this.runGh(["issue", "close", String(issueNumber)]);
-  }
-
-  public async getDefaultBranch(): Promise<string> {
-    const response = parseJson<{ defaultBranchRef: { name: string } }>(
-      await this.runGh(["repo", "view", "--json", "defaultBranchRef"])
-    );
-
-    return response.defaultBranchRef.name;
-  }
-
-  public async findPullRequestByHead(branchName: string): Promise<GitHubPullRequest | null> {
+  async function findPullRequestByHead(branchName: string): Promise<GitHubPullRequest | null> {
     const pullRequests = parseJson<RawPullRequest[]>(
-      await this.runGh([
+      await runGh([
         "pr",
         "list",
         "--state",
@@ -239,99 +122,218 @@ export class GitHubCliClient implements GitHubClient {
     return pullRequest ? parsePullRequest(pullRequest) : null;
   }
 
-  public async createDraftPullRequest(input: CreatePullRequestInput): Promise<GitHubPullRequest> {
-    const args = [
-      "pr",
-      "create",
-      "--draft",
-      "--title",
-      input.title,
-      "--body",
-      input.body,
-      "--base",
-      input.base,
-      "--head",
-      input.head
-    ];
+  return {
+    async ensureRequiredLabels(): Promise<void> {
+      const existingLabels = parseJson<Array<{ name: string }>>(
+        await runGh(["label", "list", "--limit", "200", "--json", "name"])
+      );
+      const existingNames = new Set(existingLabels.map((label) => label.name));
 
-    for (const label of input.labels) {
-      args.push("--label", label);
-    }
+      for (const label of REQUIRED_LABELS) {
+        if (existingNames.has(label.name)) {
+          continue;
+        }
 
-    await this.runGh(args);
-
-    const pullRequest = await this.findPullRequestByHead(input.head);
-
-    if (!pullRequest) {
-      throw new Error(`Created Pull Request for ${input.head}, but could not find it by head.`);
-    }
-
-    return pullRequest;
-  }
-
-  public async updatePullRequestBody(pullRequestNumber: number, body: string): Promise<void> {
-    await this.runGh(["pr", "edit", String(pullRequestNumber), "--body", body]);
-  }
-
-  public async getAuthenticatedUser(): Promise<string> {
-    const response = parseJson<{ login: string }>(await this.runGh(["api", "/user"]));
-    return response.login;
-  }
-
-  public async getPullRequestDiff(pullRequestNumber: number): Promise<string> {
-    return this.runGh(["pr", "diff", String(pullRequestNumber)]);
-  }
-
-  public async markPullRequestReadyForReview(pullRequestNumber: number): Promise<void> {
-    await this.runGh(["pr", "ready", String(pullRequestNumber)]);
-  }
-
-  public async requestPullRequestReview(pullRequestNumber: number, reviewer: string): Promise<void> {
-    await this.runGh(["pr", "edit", String(pullRequestNumber), "--add-reviewer", reviewer]);
-  }
-
-  public async setPullRequestLabels(pullRequestNumber: number, labels: string[]): Promise<void> {
-    const current = parsePullRequest(
-      parseJson<RawPullRequest>(
-        await this.runGh(["pr", "view", String(pullRequestNumber), "--json", "number,labels"])
-      )
-    );
-    const desired = new Set(labels);
-    const args = ["pr", "edit", String(pullRequestNumber)];
-
-    for (const label of labels) {
-      args.push("--add-label", label);
-    }
-
-    for (const label of current.labels) {
-      if (!desired.has(label.name)) {
-        args.push("--remove-label", label.name);
+        await runGh([
+          "label",
+          "create",
+          label.name,
+          "--color",
+          label.color,
+          "--description",
+          label.description
+        ]);
       }
+    },
+
+    async getIssue(issueNumber: number): Promise<GitHubIssue> {
+      return parseIssue(
+        parseJson<RawGhIssue>(
+          await runGh([
+            "issue",
+            "view",
+            String(issueNumber),
+            "--json",
+            "number,title,body,state,author,labels"
+          ])
+        )
+      );
+    },
+
+    async listReadyPrds(author: string): Promise<GitHubIssue[]> {
+      const issues = parseJson<RawGhIssue[]>(
+        await runGh([
+          "issue",
+          "list",
+          "--state",
+          "open",
+          "--author",
+          author,
+          "--label",
+          "PRD",
+          "--label",
+          "ready-for-agent",
+          "--limit",
+          "100",
+          "--json",
+          "number,title,body,state,author,labels"
+        ])
+      );
+
+      return issues.map(parseIssue).sort((left, right) => left.number - right.number);
+    },
+
+    async getAttachedSubIssues(prdNumber: number): Promise<GitHubIssue[]> {
+      const repo = await getRepository();
+      const response = parseJson<SubIssuesGraphqlResponse>(
+        await runGh([
+          "api",
+          "graphql",
+          "-f",
+          `query=${SUB_ISSUES_QUERY}`,
+          "-F",
+          `owner=${repo.owner.login}`,
+          "-F",
+          `repo=${repo.name}`,
+          "-F",
+          `number=${prdNumber}`
+        ])
+      );
+
+      return response.data.repository.issue.subIssues.nodes.map(parseGraphqlIssue);
+    },
+
+    async listIssueComments(issueNumber: number): Promise<GitHubComment[]> {
+      const repo = await getRepository();
+      const comments = parseJson<RawComment[]>(
+        await runGh([
+          "api",
+          `repos/${repo.owner.login}/${repo.name}/issues/${issueNumber}/comments`
+        ])
+      );
+
+      return comments.map((comment) => ({
+        id: String(comment.id),
+        body: comment.body ?? ""
+      }));
+    },
+
+    async createIssueComment(issueNumber: number, body: string): Promise<void> {
+      const repo = await getRepository();
+
+      await runGh([
+        "api",
+        `repos/${repo.owner.login}/${repo.name}/issues/${issueNumber}/comments`,
+        "-f",
+        `body=${body}`
+      ]);
+    },
+
+    async updateIssueComment(commentId: string, body: string): Promise<void> {
+      const repo = await getRepository();
+
+      await runGh([
+        "api",
+        `repos/${repo.owner.login}/${repo.name}/issues/comments/${commentId}`,
+        "-X",
+        "PATCH",
+        "-f",
+        `body=${body}`
+      ]);
+    },
+
+    async closeIssue(issueNumber: number): Promise<void> {
+      await runGh(["issue", "close", String(issueNumber)]);
+    },
+
+    async getDefaultBranch(): Promise<string> {
+      const response = parseJson<{ defaultBranchRef: { name: string } }>(
+        await runGh(["repo", "view", "--json", "defaultBranchRef"])
+      );
+
+      return response.defaultBranchRef.name;
+    },
+
+    findPullRequestByHead,
+
+    async createDraftPullRequest(input: CreatePullRequestInput): Promise<GitHubPullRequest> {
+      const args = [
+        "pr",
+        "create",
+        "--draft",
+        "--title",
+        input.title,
+        "--body",
+        input.body,
+        "--base",
+        input.base,
+        "--head",
+        input.head
+      ];
+
+      for (const label of input.labels) {
+        args.push("--label", label);
+      }
+
+      await runGh(args);
+
+      const pullRequest = await findPullRequestByHead(input.head);
+
+      if (!pullRequest) {
+        throw new Error(`Created Pull Request for ${input.head}, but could not find it by head.`);
+      }
+
+      return pullRequest;
+    },
+
+    async updatePullRequestBody(pullRequestNumber: number, body: string): Promise<void> {
+      await runGh(["pr", "edit", String(pullRequestNumber), "--body", body]);
+    },
+
+    async setPullRequestLabels(pullRequestNumber: number, labels: string[]): Promise<void> {
+      const current = parsePullRequest(
+        parseJson<RawPullRequest>(
+          await runGh(["pr", "view", String(pullRequestNumber), "--json", "number,labels"])
+        )
+      );
+      const desired = new Set(labels);
+      const args = ["pr", "edit", String(pullRequestNumber)];
+
+      for (const label of labels) {
+        args.push("--add-label", label);
+      }
+
+      for (const label of current.labels) {
+        if (!desired.has(label.name)) {
+          args.push("--remove-label", label.name);
+        }
+      }
+
+      await runGh(args);
+    },
+
+    async getAuthenticatedUser(): Promise<string> {
+      const response = parseJson<{ login: string }>(await runGh(["api", "/user"]));
+      return response.login;
+    },
+
+    async getPullRequestDiff(pullRequestNumber: number): Promise<string> {
+      return runGh(["pr", "diff", String(pullRequestNumber)]);
+    },
+
+    async markPullRequestReadyForReview(pullRequestNumber: number): Promise<void> {
+      await runGh(["pr", "ready", String(pullRequestNumber)]);
+    },
+
+    async requestPullRequestReview(pullRequestNumber: number, reviewer: string): Promise<void> {
+      await runGh(["pr", "edit", String(pullRequestNumber), "--add-reviewer", reviewer]);
     }
-
-    await this.runGh(args);
-  }
-
-  private async runGh(args: string[]): Promise<string> {
-    return this.runner.run("gh", args);
-  }
-
-  private async getRepository(): Promise<RepositoryInfo> {
-    this.repository ??= parseJson<RepositoryInfo>(
-      await this.runGh(["repo", "view", "--json", "owner,name"])
-    );
-
-    return this.repository;
-  }
+  };
 }
 
-export class ExecFileCommandRunner implements CommandRunner {
-  public async run(
-    command: string,
-    args: string[],
-    options: CommandRunOptions = {}
-  ): Promise<string> {
-    return new Promise((resolve, reject) => {
+export function createExecFileCommandRunner(): CommandRunner {
+  return (command, args, options = {}) =>
+    new Promise<string>((resolve, reject) => {
       const child = spawn(command, args, {
         stdio: ["ignore", "pipe", "pipe"]
       });
@@ -372,7 +374,6 @@ export class ExecFileCommandRunner implements CommandRunner {
         reject(error);
       });
     });
-  }
 }
 
 interface RawGhIssue {

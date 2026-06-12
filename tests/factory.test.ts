@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   buildImplementationSequence,
-  createCodeFactory,
+  CodeFactory,
   deterministicPrdBranch,
   deterministicPrdSandbox,
   FactoryRun,
@@ -12,7 +12,7 @@ import {
   type PrdLockStore,
   type SandboxRunner,
   type TemplateRenderer
-} from "../src/factory.js";
+} from "../src/factory/index.js";
 import type {
   CreatePullRequestInput,
   GitHubClient,
@@ -92,7 +92,7 @@ describe("SANDBOX_CODEX_EXEC_FLAGS", () => {
   });
 });
 
-describe("createCodeFactory", () => {
+describe("CodeFactory", () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -101,11 +101,11 @@ describe("createCodeFactory", () => {
     const github = new FakeGitHubClient({
       prds: [prdIssue({ author: "someone-else" })]
     });
-    const factory = createCodeFactory({
+    const factory = new CodeFactory({
       github,
       sandbox: new FakeSandboxRunner(),
-      lockStore: new FakeLockStore(),
-      templates: new FixtureTemplates()
+      lockStore: fakeLockStore(),
+      templates: fixtureTemplates
     });
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
@@ -121,12 +121,12 @@ describe("createCodeFactory", () => {
 
   test("skips an already locked PRD before reading sub-issues", async () => {
     const github = new FakeGitHubClient({ prds: [prdIssue()] });
-    const lockStore = new FakeLockStore({ locked: true });
-    const factory = createCodeFactory({
+    const lockStore = fakeLockStore({ locked: true });
+    const factory = new CodeFactory({
       github,
       sandbox: new FakeSandboxRunner(),
       lockStore,
-      templates: new FixtureTemplates()
+      templates: fixtureTemplates
     });
 
     await factory.runExplicit(1);
@@ -163,11 +163,11 @@ describe("createCodeFactory", () => {
       ])
     });
     const sandbox = new FakeSandboxRunner();
-    const factory = createCodeFactory({
+    const factory = new CodeFactory({
       github,
       sandbox,
-      lockStore: new FakeLockStore(),
-      templates: new FixtureTemplates()
+      lockStore: fakeLockStore(),
+      templates: fixtureTemplates
     });
 
     await factory.runExplicit(1);
@@ -204,11 +204,11 @@ describe("createCodeFactory", () => {
       ])
     });
     const sandbox = new FakeSandboxRunner();
-    const factory = createCodeFactory({
+    const factory = new CodeFactory({
       github,
       sandbox,
-      lockStore: new FakeLockStore(),
-      templates: new FixtureTemplates()
+      lockStore: fakeLockStore(),
+      templates: fixtureTemplates
     });
 
     await factory.runExplicit(1);
@@ -251,11 +251,11 @@ describe("createCodeFactory", () => {
       ])
     });
     const sandbox = new FakeSandboxRunner();
-    const factory = createCodeFactory({
+    const factory = new CodeFactory({
       github,
       sandbox,
-      lockStore: new FakeLockStore(),
-      templates: new FixtureTemplates()
+      lockStore: fakeLockStore(),
+      templates: fixtureTemplates
     });
 
     await factory.runExplicit(1);
@@ -318,11 +318,11 @@ describe("createCodeFactory", () => {
         ]
       ])
     });
-    const factory = createCodeFactory({
+    const factory = new CodeFactory({
       github,
       sandbox: new FakeSandboxRunner(),
-      lockStore: new FakeLockStore(),
-      templates: new FixtureTemplates()
+      lockStore: fakeLockStore(),
+      templates: fixtureTemplates
     });
 
     await factory.runExplicit(1);
@@ -350,11 +350,11 @@ describe("createCodeFactory", () => {
       ])
     });
     const sandbox = new FakeSandboxRunner();
-    const factory = createCodeFactory({
+    const factory = new CodeFactory({
       github,
       sandbox,
-      lockStore: new FakeLockStore(),
-      templates: new FixtureTemplates()
+      lockStore: fakeLockStore(),
+      templates: fixtureTemplates
     });
 
     await factory.runExplicit(1);
@@ -384,11 +384,11 @@ describe("createCodeFactory", () => {
         [10, [{ id: "200", body: "<!-- code-factory:final-review-prd-1 -->\nold review" }]]
       ])
     });
-    const factory = createCodeFactory({
+    const factory = new CodeFactory({
       github,
       sandbox: new FakeSandboxRunner(),
-      lockStore: new FakeLockStore(),
-      templates: new FixtureTemplates()
+      lockStore: fakeLockStore(),
+      templates: fixtureTemplates
     });
 
     await factory.runExplicit(1);
@@ -412,11 +412,11 @@ describe("createCodeFactory", () => {
       ])
     });
     github.getAuthenticatedUser.mockResolvedValue("factory-bot");
-    const factory = createCodeFactory({
+    const factory = new CodeFactory({
       github,
       sandbox: new FakeSandboxRunner(),
-      lockStore: new FakeLockStore(),
-      templates: new FixtureTemplates()
+      lockStore: fakeLockStore(),
+      templates: fixtureTemplates
     });
 
     await factory.runExplicit(1);
@@ -437,11 +437,11 @@ describe("createCodeFactory", () => {
       ])
     });
     github.getAuthenticatedUser.mockResolvedValue("jd-solanki");
-    const factory = createCodeFactory({
+    const factory = new CodeFactory({
       github,
       sandbox: new FakeSandboxRunner(),
-      lockStore: new FakeLockStore(),
-      templates: new FixtureTemplates()
+      lockStore: fakeLockStore(),
+      templates: fixtureTemplates
     });
 
     await factory.runExplicit(1);
@@ -462,11 +462,11 @@ describe("createCodeFactory", () => {
       ])
     });
     const sandbox = new FakeSandboxRunner();
-    const factory = createCodeFactory({
+    const factory = new CodeFactory({
       github,
       sandbox,
-      lockStore: new FakeLockStore(),
-      templates: new FixtureTemplates()
+      lockStore: fakeLockStore(),
+      templates: fixtureTemplates
     });
 
     await factory.runExplicit(1);
@@ -482,11 +482,11 @@ describe("createCodeFactory", () => {
         [1, [implementationIssue({ number: 3, state: "CLOSED", labels: ["PRD-sub-issue"] })]]
       ])
     });
-    const factory = createCodeFactory({
+    const factory = new CodeFactory({
       github,
       sandbox: new FakeSandboxRunner(),
-      lockStore: new FakeLockStore(),
-      templates: new FixtureTemplates()
+      lockStore: fakeLockStore(),
+      templates: fixtureTemplates
     });
 
     await factory.runExplicit(1);
@@ -503,11 +503,11 @@ describe("createCodeFactory", () => {
       ])
     });
     const sandbox = new FakeSandboxRunner();
-    const factory = createCodeFactory({
+    const factory = new CodeFactory({
       github,
       sandbox,
-      lockStore: new FakeLockStore(),
-      templates: new FixtureTemplates()
+      lockStore: fakeLockStore(),
+      templates: fixtureTemplates
     });
 
     await factory.runExplicit(1);
@@ -543,11 +543,11 @@ describe("createCodeFactory", () => {
         ]
       ])
     });
-    const factory = createCodeFactory({
+    const factory = new CodeFactory({
       github,
       sandbox: new FakeSandboxRunner(),
-      lockStore: new FakeLockStore(),
-      templates: new FixtureTemplates()
+      lockStore: fakeLockStore(),
+      templates: fixtureTemplates
     });
 
     await factory.runBatch();
@@ -568,7 +568,7 @@ describe("FactoryRun", () => {
   }
 
   function runDependencies(github: FakeGitHubClient, sandbox: FakeSandboxRunner) {
-    return { github, sandbox, templates: new FixtureTemplates(), logger: silentLogger() };
+    return { github, sandbox, templates: fixtureTemplates, logger: silentLogger() };
   }
 
   test("process() returns \"paused\" at the first HITL Issue without touching the sandbox", async () => {
@@ -645,7 +645,7 @@ describe("PrdPullRequest", () => {
   function prModule(github: FakeGitHubClient) {
     return new PrdPullRequest(
       github,
-      new FixtureTemplates(),
+      fixtureTemplates,
       { log: vi.fn() },
       prdIssue(),
       "code-factory/prd-1",
@@ -836,33 +836,21 @@ class FakeSandboxRunner implements SandboxRunner {
   });
 }
 
-class FakeLockStore implements PrdLockStore {
-  public readonly acquire = vi.fn(async (prdNumber: number) => {
-    if (this.locked) {
-      return null;
-    }
+function fakeLockStore({ locked = false }: { locked?: boolean } = {}): PrdLockStore {
+  return {
+    acquire: vi.fn(async () => {
+      if (locked) {
+        return null;
+      }
 
-    const lock: PrdLock = {
-      release: vi.fn(async () => {
-        this.releasedPrds.push(prdNumber);
-      })
-    };
-    return lock;
-  });
-  public readonly releasedPrds: number[] = [];
-
-  public constructor(private readonly options: { locked?: boolean } = {}) {}
-
-  private get locked(): boolean {
-    return this.options.locked ?? false;
-  }
+      const lock: PrdLock = { release: vi.fn(async () => undefined) };
+      return lock;
+    })
+  };
 }
 
-class FixtureTemplates implements TemplateRenderer {
-  public async render(
-    templatePath: string,
-    values: Record<string, string | number>
-  ): Promise<string> {
+const fixtureTemplates: TemplateRenderer = {
+  async render(templatePath, values) {
     const templates: Record<string, string> = {
       "templates/hitlpause-comment.md":
         "<!-- code-factory:hitl-prd-{{prd_number}}-issue-{{issue_number}} -->\n\n@{{prd_author}} Code Factory is paused for PRD #{{prd_number}}.\n\n- #{{issue_number}} - {{issue_title}}\n\nBranch: `{{prd_branch}}`\nSandbox: `{{prd_sandbox}}`",
@@ -885,7 +873,7 @@ class FixtureTemplates implements TemplateRenderer {
 
     return template.replace(/{{(\w+)}}/g, (_match, key: string) => String(values[key] ?? ""));
   }
-}
+};
 
 function prdIssue({
   number = 1,

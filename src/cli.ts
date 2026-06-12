@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { Command, Option } from "commander";
-import { runCodeFactory } from "./factory.js";
+import { runCodeFactory } from "./factory/index.js";
 
 export interface CliDispatch {
   runExplicit(prdNumber: number): Promise<void> | void;

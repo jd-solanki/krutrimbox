@@ -1,25 +1,25 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { ExecFileCommandRunner, GitHubCliClient, type CommandRunner } from "../src/github.js";
+import { createExecFileCommandRunner, createGitHubCliClient, type CommandRunner } from "../src/github.js";
 
-class FixtureRunner implements CommandRunner {
-  public readonly calls: Array<{ command: string; args: string[] }> = [];
+function fixtureRunner(responses: Map<string, string>) {
+  const calls: Array<{ command: string; args: string[] }> = [];
 
-  public constructor(private readonly responses: Map<string, string>) {}
-
-  public async run(command: string, args: string[]): Promise<string> {
-    this.calls.push({ command, args });
+  const run: CommandRunner = async (command, args) => {
+    calls.push({ command, args });
 
     const response =
       command === "gh" && args[0] === "api" && args[1] === "graphql"
-        ? this.responses.get("graphql")
-        : this.responses.get(commandKey(command, args));
+        ? responses.get("graphql")
+        : responses.get(commandKey(command, args));
 
     if (typeof response !== "string") {
       throw new Error(`No fixture response for ${command} ${args.join(" ")}`);
     }
 
     return response;
-  }
+  };
+
+  return Object.assign(run, { calls });
 }
 
 describe("ExecFileCommandRunner", () => {
@@ -34,9 +34,9 @@ describe("ExecFileCommandRunner", () => {
     const stderrWrite = vi
       .spyOn(process.stderr, "write")
       .mockImplementation(() => true);
-    const runner = new ExecFileCommandRunner();
+    const runner = createExecFileCommandRunner();
 
-    const output = await runner.run(
+    const output = await runner(
       process.execPath,
       ["-e", "process.stdout.write('hello'); process.stderr.write('warn');"],
       { streamOutput: true }
@@ -50,7 +50,7 @@ describe("ExecFileCommandRunner", () => {
 
 describe("GitHubCliClient", () => {
   test("ensures required labels exist before discovery", async () => {
-    const runner = new FixtureRunner(
+    const runner = fixtureRunner(
       new Map([
         [
           commandKey("gh", ["label", "list", "--limit", "200", "--json", "name"]),
@@ -70,7 +70,7 @@ describe("GitHubCliClient", () => {
         ]
       ])
     );
-    const client = new GitHubCliClient(runner);
+    const client = createGitHubCliClient(runner);
 
     await client.ensureRequiredLabels();
 
@@ -95,7 +95,7 @@ describe("GitHubCliClient", () => {
   });
 
   test("discovers Factory-Owned PRDs through gh issue list fixture data", async () => {
-    const runner = new FixtureRunner(
+    const runner = fixtureRunner(
       new Map([
         [
           commandKey("gh", [
@@ -121,7 +121,7 @@ describe("GitHubCliClient", () => {
         ]
       ])
     );
-    const client = new GitHubCliClient(runner);
+    const client = createGitHubCliClient(runner);
 
     const prds = await client.listReadyPrds("jd-solanki");
 
@@ -148,7 +148,7 @@ describe("GitHubCliClient", () => {
   });
 
   test("fetches attached sub-issues through gh api GraphQL fixture data", async () => {
-    const runner = new FixtureRunner(
+    const runner = fixtureRunner(
       new Map([
         [
           commandKey("gh", ["repo", "view", "--json", "owner,name"]),
@@ -182,7 +182,7 @@ describe("GitHubCliClient", () => {
         ]
       ])
     );
-    const client = new GitHubCliClient(runner);
+    const client = createGitHubCliClient(runner);
 
     const subIssues = await client.getAttachedSubIssues(1);
 
@@ -208,7 +208,7 @@ describe("GitHubCliClient", () => {
   });
 
   test("lists, creates, and updates issue comments through GitHub REST commands", async () => {
-    const runner = new FixtureRunner(
+    const runner = fixtureRunner(
       new Map([
         [
           commandKey("gh", ["repo", "view", "--json", "owner,name"]),
@@ -240,7 +240,7 @@ describe("GitHubCliClient", () => {
         ]
       ])
     );
-    const client = new GitHubCliClient(runner);
+    const client = createGitHubCliClient(runner);
 
     await expect(client.listIssueComments(4)).resolves.toEqual([
       { id: "123", body: "<!-- marker -->\nold" }
@@ -281,7 +281,7 @@ describe("GitHubCliClient", () => {
   });
 
   test("creates a draft PRD Pull Request and finds it by deterministic branch", async () => {
-    const runner = new FixtureRunner(
+    const runner = fixtureRunner(
       new Map([
         [
           commandKey("gh", [
@@ -318,7 +318,7 @@ describe("GitHubCliClient", () => {
         ]
       ])
     );
-    const client = new GitHubCliClient(runner);
+    const client = createGitHubCliClient(runner);
 
     await expect(
       client.createDraftPullRequest({
@@ -368,24 +368,24 @@ describe("GitHubCliClient", () => {
   });
 
   test("gets the authenticated GitHub user login", async () => {
-    const runner = new FixtureRunner(
+    const runner = fixtureRunner(
       new Map([
         [commandKey("gh", ["api", "/user"]), JSON.stringify({ login: "factory-bot" })]
       ])
     );
-    const client = new GitHubCliClient(runner);
+    const client = createGitHubCliClient(runner);
 
     await expect(client.getAuthenticatedUser()).resolves.toBe("factory-bot");
     expect(runner.calls[0]).toEqual({ command: "gh", args: ["api", "/user"] });
   });
 
   test("fetches the pull request diff", async () => {
-    const runner = new FixtureRunner(
+    const runner = fixtureRunner(
       new Map([
         [commandKey("gh", ["pr", "diff", "8"]), "--- a/foo\n+++ b/foo\n@@ -1 +1 @@\n-old\n+new"]
       ])
     );
-    const client = new GitHubCliClient(runner);
+    const client = createGitHubCliClient(runner);
 
     await expect(client.getPullRequestDiff(8)).resolves.toBe(
       "--- a/foo\n+++ b/foo\n@@ -1 +1 @@\n-old\n+new"
@@ -394,10 +394,10 @@ describe("GitHubCliClient", () => {
   });
 
   test("marks a pull request ready for review", async () => {
-    const runner = new FixtureRunner(
+    const runner = fixtureRunner(
       new Map([[commandKey("gh", ["pr", "ready", "8"]), ""]])
     );
-    const client = new GitHubCliClient(runner);
+    const client = createGitHubCliClient(runner);
 
     await client.markPullRequestReadyForReview(8);
 
@@ -405,12 +405,12 @@ describe("GitHubCliClient", () => {
   });
 
   test("requests review on a pull request from a specific reviewer", async () => {
-    const runner = new FixtureRunner(
+    const runner = fixtureRunner(
       new Map([
         [commandKey("gh", ["pr", "edit", "8", "--add-reviewer", "jd-solanki"]), ""]
       ])
     );
-    const client = new GitHubCliClient(runner);
+    const client = createGitHubCliClient(runner);
 
     await client.requestPullRequestReview(8, "jd-solanki");
 
@@ -421,7 +421,7 @@ describe("GitHubCliClient", () => {
   });
 
   test("updates a PRD Pull Request body and applies only the PRD label", async () => {
-    const runner = new FixtureRunner(
+    const runner = fixtureRunner(
       new Map([
         [
           commandKey("gh", ["pr", "edit", "8", "--body", "new body"]),
@@ -448,7 +448,7 @@ describe("GitHubCliClient", () => {
         ]
       ])
     );
-    const client = new GitHubCliClient(runner);
+    const client = createGitHubCliClient(runner);
 
     await client.updatePullRequestBody(8, "new body");
     await client.setPullRequestLabels(8, ["PRD"]);
