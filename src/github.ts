@@ -62,7 +62,9 @@ export type CommandRunner = (
 ) => Promise<string>;
 
 export interface CommandRunOptions {
-  streamOutput?: boolean;
+  // Destination for the child's stdout+stderr as it streams. When omitted the
+  // output is still captured for the return value but forwarded nowhere.
+  output?: NodeJS.WritableStream;
 }
 
 export interface GitHubComment {
@@ -342,18 +344,12 @@ export function createExecFileCommandRunner(): CommandRunner {
 
       child.stdout.on("data", (chunk: Buffer) => {
         stdout.push(chunk);
-
-        if (options.streamOutput) {
-          process.stdout.write(chunk);
-        }
+        options.output?.write(chunk);
       });
 
       child.stderr.on("data", (chunk: Buffer) => {
         stderr.push(chunk);
-
-        if (options.streamOutput) {
-          process.stderr.write(chunk);
-        }
+        options.output?.write(chunk);
       });
 
       child.on("error", reject);

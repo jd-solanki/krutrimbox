@@ -11,6 +11,7 @@ export interface SandboxBranchInput extends SandboxInput {
 
 export interface SandboxAfkInput extends SandboxBranchInput {
   prompt: string;
+  output?: NodeJS.WritableStream;
 }
 
 export interface SandboxCommitInput extends SandboxBranchInput {
@@ -19,10 +20,11 @@ export interface SandboxCommitInput extends SandboxBranchInput {
 
 export interface SandboxFinalReviewInput extends SandboxInput {
   prompt: string;
+  output?: NodeJS.WritableStream;
 }
 
 interface SandboxExecOptions {
-  streamOutput?: boolean;
+  output?: NodeJS.WritableStream;
 }
 
 // Drives one PRD Sandbox through `sbx`: create/reuse, branch checkout, the inner
@@ -57,11 +59,11 @@ export class CommandSandboxRunner {
   }
 
   public async runAfkIssue(input: SandboxAfkInput): Promise<void> {
-    await this.exec(input.sandboxName, this.codexExecCommand(input.prompt), { streamOutput: true });
+    await this.exec(input.sandboxName, this.codexExecCommand(input.prompt), { output: input.output });
   }
 
   public async runFinalReview(input: SandboxFinalReviewInput): Promise<string> {
-    return this.exec(input.sandboxName, this.codexExecCommand(input.prompt), { streamOutput: true });
+    return this.exec(input.sandboxName, this.codexExecCommand(input.prompt), { output: input.output });
   }
 
   public async removeSandbox(input: SandboxInput): Promise<void> {
@@ -89,7 +91,7 @@ export class CommandSandboxRunner {
     const args = ["exec", "--workdir", this.workspacePath];
     args.push(sandboxName, "--", ...command);
 
-    return this.runner("sbx", args, { streamOutput: options.streamOutput });
+    return this.runner("sbx", args, { output: options.output });
   }
 
   private codexExecCommand(prompt: string): string[] {

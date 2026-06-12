@@ -25,6 +25,9 @@ export interface FactoryRunDependencies {
   sandbox: SandboxRunner;
   templates: TemplateRenderer;
   logger: Pick<Console, "log">;
+  // Where the sandbox/agent output stream is sent for this run. Omitted in tests
+  // and when no per-run log file is in use.
+  output?: NodeJS.WritableStream;
 }
 
 // Per-Implementation-Issue outcome used to drive the sequence walk. Distinct
@@ -42,6 +45,7 @@ export class FactoryRun {
   private readonly sandbox: SandboxRunner;
   private readonly templates: TemplateRenderer;
   private readonly logger: Pick<Console, "log">;
+  private readonly output?: NodeJS.WritableStream;
   public readonly branchName: string;
   public readonly sandboxName: string;
   private readonly prdPullRequest: PrdPullRequest;
@@ -56,6 +60,7 @@ export class FactoryRun {
     this.sandbox = dependencies.sandbox;
     this.templates = dependencies.templates;
     this.logger = dependencies.logger;
+    this.output = dependencies.output;
     this.branchName = deterministicPrdBranch(prd.number);
     this.sandboxName = deterministicPrdSandbox(prd.number);
     this.prdPullRequest = new PrdPullRequest(
@@ -152,7 +157,8 @@ export class FactoryRun {
       await this.sandbox.runAfkIssue({
         sandboxName: this.sandboxName,
         branchName: this.branchName,
-        prompt: await this.buildAfkPrompt(issue, priorIssues, laterIssues)
+        prompt: await this.buildAfkPrompt(issue, priorIssues, laterIssues),
+        output: this.output
       });
       await this.sandbox.commitAndPush({
         sandboxName: this.sandboxName,
@@ -245,7 +251,11 @@ export class FactoryRun {
     const prompt = await this.buildFinalReviewPrompt(sequence, diff);
 
     await this.sandbox.ensureSandbox({ sandboxName: this.sandboxName });
-    const reviewBody = await this.sandbox.runFinalReview({ sandboxName: this.sandboxName, prompt });
+    const reviewBody = await this.sandbox.runFinalReview({
+      sandboxName: this.sandboxName,
+      prompt,
+      output: this.output
+    });
 
     const commentBody = await this.templates.render("templates/final-review-comment.md", {
       prd_number: prd.number,

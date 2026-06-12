@@ -12,6 +12,7 @@ import {
   type FactoryRunOutcome
 } from "./factory-run.js";
 import { FilePrdLockStore, type PrdLockStore } from "./lock-store.js";
+import { createFileRunLogFactory, type RunLogFactory } from "./run-log.js";
 import { CommandSandboxRunner, type SandboxRunner } from "./sandbox-runner.js";
 import { FileTemplateRenderer, type TemplateRenderer } from "./template-renderer.js";
 
@@ -21,6 +22,7 @@ export interface CodeFactoryDependencies {
   lockStore?: PrdLockStore;
   templates?: TemplateRenderer;
   logger?: Pick<Console, "log">;
+  openRunLog?: RunLogFactory;
   cwd?: string;
   sandboxTemplate?: string;
 }
@@ -36,6 +38,7 @@ export class CodeFactory {
   private readonly github: GitHubClient;
   private readonly lockStore: PrdLockStore;
   private readonly logger: Pick<Console, "log">;
+  private readonly openRunLog: RunLogFactory;
   private readonly runDependencies: FactoryRunDependencies;
 
   public constructor(githubOrDependencies: GitHubClient | CodeFactoryDependencies = {}) {
@@ -48,6 +51,7 @@ export class CodeFactory {
     this.github = dependencies.github ?? createGitHubCliClient();
     this.lockStore = dependencies.lockStore ?? new FilePrdLockStore(cwd);
     this.logger = dependencies.logger ?? console;
+    this.openRunLog = dependencies.openRunLog ?? createFileRunLogFactory(cwd, this.logger);
 
     const sandbox =
       dependencies.sandbox
@@ -110,9 +114,18 @@ export class CodeFactory {
       return "skipped";
     }
 
+    const runLog = this.openRunLog(prd.number);
+    if (runLog.filePath) {
+      this.logger.log(`Code Factory: writing PRD #${prd.number} logs to ${runLog.filePath}.`);
+    }
+
     try {
-      return await new FactoryRun(this.runDependencies, prd).process();
+      return await new FactoryRun(
+        { ...this.runDependencies, logger: runLog, output: runLog.stream },
+        prd
+      ).process();
     } finally {
+      await runLog.close();
       await lock.release();
     }
   }

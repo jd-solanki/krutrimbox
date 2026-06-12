@@ -1,3 +1,6 @@
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   buildImplementationSequence,
@@ -20,6 +23,18 @@ import type {
   GitHubIssue,
   GitHubPullRequest
 } from "../src/github.js";
+
+// Replace the file-backed run log with a silent, in-memory sink so CodeFactory
+// tests never touch `.code-factory/logs`. `filePath: null` also suppresses the
+// "writing logs to ..." line, keeping the console-log assertions unaffected.
+vi.mock("../src/factory/run-log.js", () => ({
+  createFileRunLogFactory: () => () => ({
+    stream: { write: () => true },
+    filePath: null,
+    log: () => undefined,
+    close: () => Promise.resolve()
+  })
+}));
 
 describe("buildImplementationSequence", () => {
   test("validates, orders, and skips resolved Implementation Issues", () => {
@@ -944,4 +959,74 @@ function implementationIssue({
 test("deterministic PRD branch and sandbox names stay stable", () => {
   expect(deterministicPrdBranch(42)).toBe("code-factory/prd-42");
   expect(deterministicPrdSandbox(42)).toBe("code-factory-prd-42");
+});
+
+// End-to-end check that a real Factory Run lands both its status lines and the
+// streamed sandbox/agent bytes in a per-PRD log file, without needing gh/sbx/
+// codex. Uses the real file-backed run log (via importActual, bypassing the
+// module mock above) pointed at a temp directory.
+describe("run logging end-to-end", () => {
+  test("writes status lines and streamed sandbox output to a per-PRD log file", async () => {
+    const { createFileRunLogFactory } =
+      await vi.importActual<typeof import("../src/factory/run-log.js")>("../src/factory/run-log.js");
+
+    const github = new FakeGitHubClient({
+      prds: [prdIssue({ body: "Full parent PRD body" })],
+      subIssuesByPrd: new Map([
+        [
+          1,
+          [
+            implementationIssue({
+              number: 4,
+              title: "Factory loop",
+              body: "## Parent\n\nParent PRD: #1\n\nCurrent issue body",
+              labels: ["PRD-sub-issue", "ready-for-agent"]
+            })
+          ]
+        ]
+      ])
+    });
+
+    // Sandbox stand-in: the real run streams Codex output here; we emit a marker
+    // line so the assertion can prove raw bytes reach the file.
+    const sandbox: SandboxRunner = {
+      ensureSandbox: async () => undefined,
+      checkoutBranch: async () => undefined,
+      runAfkIssue: async (input) => {
+        input.output?.write("[codex] implementing the issue\n");
+      },
+      commitAndPush: async () => undefined,
+      runFinalReview: async (input) => {
+        input.output?.write("[codex] running the final review\n");
+        return "## Code Factory Review\n\n### Findings\n\nNo findings.";
+      },
+      removeSandbox: async () => undefined
+    };
+
+    const workdir = await mkdtemp(join(tmpdir(), "code-factory-logs-"));
+    try {
+      const factory = new CodeFactory({
+        github,
+        sandbox,
+        lockStore: fakeLockStore(),
+        templates: fixtureTemplates,
+        // Silent terminal so the run is quiet; the file still receives everything.
+        openRunLog: createFileRunLogFactory(workdir, { log: () => undefined })
+      });
+
+      await factory.runExplicit(1);
+
+      const logsDir = join(workdir, ".code-factory", "logs");
+      const files = await readdir(logsDir);
+      expect(files).toHaveLength(1);
+      expect(files[0]).toMatch(/^code-factory-prd-1--[\d_-]+\.log$/);
+
+      const content = await readFile(join(logsDir, files[0]), "utf8");
+      expect(content).toContain("[codex] implementing the issue");
+      expect(content).toContain("[codex] running the final review");
+      expect(content).toContain("Code Factory: completed AFK Issue #4.");
+    } finally {
+      await rm(workdir, { recursive: true, force: true });
+    }
+  });
 });

@@ -1,3 +1,4 @@
+import { Writable } from "node:stream";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { createExecFileCommandRunner, createGitHubCliClient, type CommandRunner } from "../src/github.js";
 
@@ -27,24 +28,26 @@ describe("ExecFileCommandRunner", () => {
     vi.restoreAllMocks();
   });
 
-  test("streams child output while preserving captured stdout", async () => {
-    const stdoutWrite = vi
-      .spyOn(process.stdout, "write")
-      .mockImplementation(() => true);
-    const stderrWrite = vi
-      .spyOn(process.stderr, "write")
-      .mockImplementation(() => true);
+  test("streams child output to the sink while preserving captured stdout", async () => {
+    const chunks: Buffer[] = [];
+    const sink = new Writable({
+      write(chunk, _encoding, callback) {
+        chunks.push(Buffer.from(chunk));
+        callback();
+      }
+    });
     const runner = createExecFileCommandRunner();
 
     const output = await runner(
       process.execPath,
       ["-e", "process.stdout.write('hello'); process.stderr.write('warn');"],
-      { streamOutput: true }
+      { output: sink }
     );
 
+    const streamed = Buffer.concat(chunks).toString("utf8");
     expect(output).toBe("hello");
-    expect(stdoutWrite).toHaveBeenCalledWith(Buffer.from("hello"));
-    expect(stderrWrite).toHaveBeenCalledWith(Buffer.from("warn"));
+    expect(streamed).toContain("hello");
+    expect(streamed).toContain("warn");
   });
 });
 

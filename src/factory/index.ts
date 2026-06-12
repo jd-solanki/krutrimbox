@@ -9,5 +9,6 @@ export * from "./prd-pull-request.js";
 export * from "./factory-run.js";
 export * from "./template-renderer.js";
 export * from "./lock-store.js";
+export * from "./run-log.js";
 export * from "./sandbox-runner.js";
 export * from "./code-factory.js";
