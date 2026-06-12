@@ -1,15 +1,23 @@
-import { readFile } from "node:fs/promises";
-import path from "node:path";
+import { PROMPTS } from "./prompts";
+import { TEMPLATES } from "./templates";
 
-// Renders templates from files under `cwd`, substituting `{{key}}` placeholders.
-export class FileTemplateRenderer {
-  public constructor(private readonly cwd: string) {}
+// All bundled templates and prompts, keyed by their historical file paths so
+// callers keep using `render("templates/pr-body.md", ...)` unchanged.
+const BUNDLED: Record<string, string> = { ...TEMPLATES, ...PROMPTS };
 
+// Renders bundled templates by substituting `{{key}}` placeholders. The content
+// is compiled into the package, so rendering never touches the filesystem and
+// works no matter what directory the CLI is invoked from.
+export class BundledTemplateRenderer {
   public async render(
     templatePath: string,
     values: Record<string, string | number>
   ): Promise<string> {
-    const template = await readFile(path.join(this.cwd, templatePath), "utf8");
+    const template = BUNDLED[templatePath];
+
+    if (template === undefined) {
+      throw new Error(`Unknown template: ${templatePath}`);
+    }
 
     return template.replace(/{{(\w+)}}/g, (_match, key: string) => {
       const value = values[key];
@@ -18,5 +26,5 @@ export class FileTemplateRenderer {
   }
 }
 
-// Injection seam: the public surface of FileTemplateRenderer, so fakes need no separate contract.
-export type TemplateRenderer = Pick<FileTemplateRenderer, "render">;
+// Injection seam: the public surface of BundledTemplateRenderer, so fakes need no separate contract.
+export type TemplateRenderer = Pick<BundledTemplateRenderer, "render">;

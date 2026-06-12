@@ -6,9 +6,7 @@
     "kc": "./dist/index.js"
   },
   "files": [
-    "dist",
-    "templates",
-    "prompts"
+    "dist"
   ],
   "scripts": {
     "build": "tsdown",

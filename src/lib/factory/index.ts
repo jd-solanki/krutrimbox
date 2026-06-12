@@ -7,6 +7,8 @@ export * from "./sequence";
 export * from "./format";
 export * from "./prd-pull-request";
 export * from "./factory-run";
+export * from "./templates";
+export * from "./prompts";
 export * from "./template-renderer";
 export * from "./lock-store";
 export * from "./run-log";

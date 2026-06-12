@@ -14,7 +14,7 @@ import {
 import { FilePrdLockStore, type PrdLockStore } from "./lock-store";
 import { createFileRunLogFactory, type RunLogFactory } from "./run-log";
 import { CommandSandboxRunner, type SandboxRunner } from "./sandbox-runner";
-import { FileTemplateRenderer, type TemplateRenderer } from "./template-renderer";
+import { BundledTemplateRenderer, type TemplateRenderer } from "./template-renderer";
 
 export interface CodeFactoryDependencies {
   github?: GitHubClient;
@@ -60,7 +60,7 @@ export class CodeFactory {
         cwd,
         dependencies.sandboxTemplate ?? process.env.CODE_FACTORY_SANDBOX_TEMPLATE ?? DEFAULT_SANDBOX_TEMPLATE
       );
-    const templates = dependencies.templates ?? new FileTemplateRenderer(cwd);
+    const templates = dependencies.templates ?? new BundledTemplateRenderer();
 
     this.runDependencies = { github: this.github, sandbox, templates, logger: this.logger };
   }

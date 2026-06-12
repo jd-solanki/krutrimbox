@@ -8,7 +8,7 @@ This README is written for a new machine setup. It assumes you are comfortable c
 
 Code Factory uses three layers:
 
-1. Your host machine runs the `code-factory` Node.js CLI.
+1. Your host machine runs the `kc` Node.js CLI (published as the `kutrimcode` package).
 2. Docker Sandboxes creates an isolated PRD Sandbox for agent work.
 3. Codex runs inside that sandbox to implement one AFK issue at a time.
 
@@ -207,6 +207,13 @@ Run batch mode for all eligible ready PRDs:
 
 ```sh
 pnpm start run
+```
+
+Once the package is installed globally (`npm i -g kutrimcode`), the same commands are available through the `kc` binary from any repository:
+
+```sh
+kc run --prd 1
+kc run
 ```
 
 Code Factory currently processes only Factory-Owned PRDs authored by `jd-solanki`.
