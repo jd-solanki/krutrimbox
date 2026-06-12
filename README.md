@@ -65,7 +65,7 @@ pnpm typecheck
 pnpm test
 ```
 
-## Authenticate GitHub
+## Authenticate GitHub For Host And Sandboxes
 
 Code Factory shells out to `gh` for GitHub state and mutations. Make sure `gh` is logged in and points at the right account:
 
@@ -80,6 +80,18 @@ gh auth login
 ```
 
 The account must be able to read issues, create/edit pull requests, push branches, comment on issues/PRs, and close implementation issues in the target repository.
+
+Docker Sandboxes do not automatically inherit your host GitHub CLI login. Store the host `gh` token as Docker's built-in `github` sandbox secret so `gh` and HTTPS GitHub requests can authenticate inside newly created sandboxes:
+
+```sh
+echo "$(gh auth token)" | sbx secret set -g github
+```
+
+The `-g` flag stores the secret globally for future sandboxes. Existing sandboxes do not receive newly created or changed global secrets; recreate them after setting the secret, or scope the secret to a specific running sandbox:
+
+```sh
+echo "$(gh auth token)" | sbx secret set code-factory-prd-1 github
+```
 
 ## Configure Docker Sandboxes Network Policy
 
@@ -154,10 +166,12 @@ sbx create --clone \
   "$(pwd)"
 ```
 
-Check that the repository, Codex, and pnpm work inside it:
+Check that the repository, GitHub CLI, Codex, and pnpm work inside it:
 
 ```sh
 sbx exec -w "$(pwd)" code-factory-smoke -- git status --short --branch
+sbx exec -w "$(pwd)" code-factory-smoke -- gh auth status
+sbx exec -w "$(pwd)" code-factory-smoke -- gh issue list --limit 1
 sbx exec -w "$(pwd)" code-factory-smoke -- codex --version
 sbx exec -w "$(pwd)" code-factory-smoke -- pnpm --version
 ```
@@ -165,6 +179,7 @@ sbx exec -w "$(pwd)" code-factory-smoke -- pnpm --version
 You should see:
 
 - A valid Git branch/status.
+- An authenticated `gh` session that can read repository issues.
 - A Codex CLI version.
 - `10.23.0` for pnpm.
 
@@ -196,17 +211,24 @@ pnpm start run
 
 Code Factory currently processes only Factory-Owned PRDs authored by `jd-solanki`.
 
-## Existing Sandboxes After Template Changes
+## Existing Sandboxes After Auth Or Template Changes
 
-Existing sandboxes keep the template they were created from. If you created a PRD Sandbox before preparing the `pnpm` template, that old sandbox will not automatically gain `pnpm`.
+Existing sandboxes keep the template and global secrets they were created with. If you created a PRD Sandbox before preparing the `pnpm` template or before setting the global `github` secret, that old sandbox will not automatically gain the missing tool or credential.
+
+List existing sandboxes:
+
+```sh
+sbx ls
+```
 
 Check an existing PRD Sandbox:
 
 ```sh
 sbx exec -w "$(pwd)" code-factory-prd-1 -- pnpm --version
+sbx exec -w "$(pwd)" code-factory-prd-1 -- gh auth status
 ```
 
-If it says `pnpm` is not found, inspect for uncommitted work first:
+If `pnpm` is not found or `gh` is not authenticated, inspect for uncommitted work first:
 
 ```sh
 sbx exec -w "$(pwd)" code-factory-prd-1 -- git status --short --branch
@@ -218,7 +240,7 @@ If there is no work to preserve, remove the old sandbox:
 sbx rm --force code-factory-prd-1
 ```
 
-The next factory run will recreate it with the configured template.
+The next factory run will recreate it with the configured template and current global secrets.
 
 ## Why Commands Use `-w "$(pwd)"`
 
@@ -243,7 +265,7 @@ Without `-w`, `sbx exec` can start in a default directory that is not a Git repo
 Code Factory launches sandboxed Codex sessions with explicit non-interactive flags:
 
 ```sh
-codex exec --ephemeral --ask-for-approval never --sandbox danger-full-access "<prompt>"
+codex exec --ephemeral --dangerously-bypass-approvals-and-sandbox "<prompt>"
 ```
 
 This is intentional. The Codex process is already running inside a Docker Sandbox private clone, so Docker Sandboxes is the outer isolation boundary. The inner Codex process must not pause for approval prompts because no human is attached to the AFK Issue session.
@@ -306,7 +328,7 @@ sbx template ls
 
 ### `gh` cannot connect or is not authenticated
 
-Check GitHub CLI authentication:
+First check host GitHub CLI authentication:
 
 ```sh
 gh auth status
@@ -316,6 +338,25 @@ If needed:
 
 ```sh
 gh auth login
+```
+
+Then store the host token for future Docker Sandboxes:
+
+```sh
+echo "$(gh auth token)" | sbx secret set -g github
+```
+
+If the PRD Sandbox already exists, either remove it after confirming there is no work to preserve:
+
+```sh
+sbx exec -w "$(pwd)" code-factory-prd-<number> -- git status --short --branch
+sbx rm --force code-factory-prd-<number>
+```
+
+Or apply the secret directly to that running sandbox:
+
+```sh
+echo "$(gh auth token)" | sbx secret set code-factory-prd-<number> github
 ```
 
 ### A sandbox is left behind after a failure

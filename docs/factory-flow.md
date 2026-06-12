@@ -38,7 +38,7 @@ The outer Code Factory passes the absolute repository path to `sbx create` and u
 
 GitHub mutation commands run from the host through the outer Code Factory's authenticated `gh` session. The Sandboxed Agent may use read-only `gh` commands for inspection, and sandbox git commands mutate only the PRD Sandbox private clone.
 
-For the MVP, sandbox GitHub authentication is assumed to come from the local Docker Sandbox/Codex environment setup. If sandbox `git push` or read-only `gh` inspection fails because credentials are unavailable, the Code Factory treats it as an environment error and stops the current PRD.
+For sandbox `gh` access and HTTPS GitHub operations, operators must store the host GitHub CLI token as Docker Sandboxes' built-in `github` secret, as documented in the README. Existing sandboxes created before the secret is configured must be recreated or given a sandbox-scoped `github` secret. If sandbox `git push` or read-only `gh` inspection fails because credentials are unavailable, the Code Factory treats it as an environment error and stops the current PRD.
 
 The MVP does not use an `in-progress` issue label. Strict sequential execution under the PRD Lock prevents the Code Factory from starting the next AFK Issue until the current AFK Issue reaches Sandbox Success and is closed.
 
@@ -72,7 +72,7 @@ The MVP treats a successful `codex exec` process exit as the Sandboxed Agent's c
 
 Each AFK Issue gets a fresh Codex context window. The Factory Run may reuse the PRD Branch for code continuity, but it must not resume a previous Codex conversation between Implementation Issues.
 
-Sandboxed Codex sessions are launched with explicit non-interactive settings: `--ephemeral --ask-for-approval never --sandbox danger-full-access`. Docker Sandbox clone mode provides the outer isolation boundary; the inner Codex process must not pause for approvals because no human is attached to the AFK Issue session.
+Sandboxed Codex sessions are launched with explicit non-interactive settings: `--ephemeral --dangerously-bypass-approvals-and-sandbox`. Docker Sandbox clone mode provides the outer isolation boundary; the inner Codex process must not pause for approvals because no human is attached to the AFK Issue session.
 
 Only the outer Code Factory owns GitHub orchestration state and git commit/push operations. The Sandboxed Agent implements the AFK Issue and reports completion, and may use Read-Only GitHub Access for inspection, but must not create commits, push branches, close issues, create or edit the PRD Pull Request, change labels, post comments, or change parent PRD state.
 
