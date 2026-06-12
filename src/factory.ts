@@ -99,12 +99,25 @@ interface SandboxFinalReviewInput extends SandboxInput {
   prompt: string;
 }
 
-type PrdProcessOutcome = "completed" | "issue-completed" | "paused" | "issue-error" | "skipped";
+// The terminal outcome of one Factory Run against a locked PRD. `skipped` is a
+// dispatch concern (no run ever started), so it is not a Factory Run outcome.
+export type FactoryRunOutcome = "completed" | "paused" | "issue-error";
 
-interface PrdContext {
+// Per-Implementation-Issue outcome used to drive the sequence walk. Distinct
+// from FactoryRunOutcome: an Implementation Issue completes or errors; the run
+// as a whole completes, pauses, or stops on an issue error.
+type IssueOutcome = "completed" | "error";
+
+// What dispatching one PRD produces: a Factory Run outcome, or `skipped` when
+// the PRD is not open or is already locked and no run took place.
+type DispatchOutcome = FactoryRunOutcome | "skipped";
+
+// The seams a Factory Run drives. The PRD Lock is deliberately absent: a
+// FactoryRun exists only while the Code Factory holds its lock, so locking is a
+// dispatch concern above the run, not a dependency of the run itself.
+export interface FactoryRunDependencies {
   github: GitHubClient;
   sandbox: SandboxRunner;
-  lockStore: PrdLockStore;
   templates: TemplateRenderer;
   logger: Pick<Console, "log">;
 }
@@ -117,47 +130,74 @@ export function createCodeFactory(
     : githubOrDependencies;
   const cwd = path.resolve(dependencies.cwd ?? process.cwd());
   const commandRunner = new ExecFileCommandRunner();
-  const context: PrdContext = {
-    github: dependencies.github ?? new GitHubCliClient(),
-    sandbox: dependencies.sandbox
-      ?? new CommandSandboxRunner(
-        commandRunner,
-        cwd,
-        dependencies.sandboxTemplate ?? process.env.CODE_FACTORY_SANDBOX_TEMPLATE ?? DEFAULT_SANDBOX_TEMPLATE
-      ),
-    lockStore: dependencies.lockStore ?? new FilePrdLockStore(cwd),
-    templates: dependencies.templates ?? new FileTemplateRenderer(cwd),
-    logger: dependencies.logger ?? console
-  };
+  const github = dependencies.github ?? new GitHubCliClient();
+  const sandbox =
+    dependencies.sandbox
+    ?? new CommandSandboxRunner(
+      commandRunner,
+      cwd,
+      dependencies.sandboxTemplate ?? process.env.CODE_FACTORY_SANDBOX_TEMPLATE ?? DEFAULT_SANDBOX_TEMPLATE
+    );
+  const lockStore = dependencies.lockStore ?? new FilePrdLockStore(cwd);
+  const templates = dependencies.templates ?? new FileTemplateRenderer(cwd);
+  const logger = dependencies.logger ?? console;
+  const runDependencies: FactoryRunDependencies = { github, sandbox, templates, logger };
+
+  // The dispatch seam: discovery hands a PRD here, and dispatch guards it (open
+  // state + PRD Lock) before a Factory Run ever exists. Holding the lock across
+  // `process()` keeps the run's invariant intact: a FactoryRun ⇒ we own its
+  // PRD Branch and PRD Sandbox.
+  async function dispatch(prd: GitHubIssue): Promise<DispatchOutcome> {
+    if (prd.state !== "OPEN") {
+      logger.log(`Code Factory: skipping PRD #${prd.number}; PRD is ${prd.state}.`);
+      return "skipped";
+    }
+
+    const lock = await lockStore.acquire(prd.number);
+
+    if (!lock) {
+      logger.log(`Code Factory: skipping PRD #${prd.number}; PRD is already locked.`);
+      return "skipped";
+    }
+
+    try {
+      return await new FactoryRun(runDependencies, prd).process();
+    } finally {
+      await lock.release();
+    }
+  }
 
   return {
     async runExplicit(prdNumber: number): Promise<void> {
-      await context.github.ensureRequiredLabels();
+      await github.ensureRequiredLabels();
 
-      const prd = await context.github.getIssue(prdNumber);
+      const prd = await github.getIssue(prdNumber);
 
       if (!isFactoryOwnedPrd(prd)) {
-        context.logger.log(
+        logger.log(
           `Code Factory: skipping PRD #${prd.number}; author ${prd.author.login} is not ${FACTORY_OWNER}.`
         );
         return;
       }
 
-      context.logger.log(`Code Factory: starting Explicit Run for PRD #${prd.number}.`);
-      context.logger.log(`Code Factory: processing only Factory-Owned PRDs by ${FACTORY_OWNER}.`);
-      await processPrd(context, prd);
+      logger.log(`Code Factory: starting Explicit Run for PRD #${prd.number}.`);
+      logger.log(`Code Factory: processing only Factory-Owned PRDs by ${FACTORY_OWNER}.`);
+      await dispatch(prd);
     },
 
     async runBatch(): Promise<void> {
-      context.logger.log("Code Factory: starting Batch Run for ready PRDs.");
-      await context.github.ensureRequiredLabels();
-      context.logger.log(`Code Factory: discovering Factory-Owned PRDs by ${FACTORY_OWNER}.`);
+      logger.log("Code Factory: starting Batch Run for ready PRDs.");
+      await github.ensureRequiredLabels();
+      logger.log(`Code Factory: discovering Factory-Owned PRDs by ${FACTORY_OWNER}.`);
 
-      const prds = await context.github.listReadyPrds(FACTORY_OWNER);
+      const prds = await github.listReadyPrds(FACTORY_OWNER);
+      const outcomes: DispatchOutcome[] = [];
 
       for (const prd of prds) {
-        await processPrd(context, prd);
+        outcomes.push(await dispatch(prd));
       }
+
+      logBatchSummary(logger, outcomes);
     }
   };
 }
@@ -232,372 +272,315 @@ export function parseBlockingIssueNumbers(body: string): number[] {
   return [...numbers].sort((left, right) => left - right);
 }
 
-async function processPrd(context: PrdContext, prd: GitHubIssue): Promise<PrdProcessOutcome> {
-  if (prd.state !== "OPEN") {
-    context.logger.log(`Code Factory: skipping PRD #${prd.number}; PRD is ${prd.state}.`);
-    return "skipped";
+// One execution attempt by the Code Factory against a single locked PRD. The
+// PRD Branch and PRD Sandbox names are derived once and held as invariants;
+// `closedIssueNumbers` and `processedIssues` are intra-run bookkeeping rebuilt
+// fresh every run (ADR-0002), never persisted. Single-use: call `process()`
+// once.
+export class FactoryRun {
+  private readonly github: GitHubClient;
+  private readonly sandbox: SandboxRunner;
+  private readonly templates: TemplateRenderer;
+  private readonly logger: Pick<Console, "log">;
+  public readonly branchName: string;
+  public readonly sandboxName: string;
+  private readonly closedIssueNumbers = new Set<number>();
+  private readonly processedIssues: ResolvedIssue[] = [];
+
+  public constructor(
+    dependencies: FactoryRunDependencies,
+    private readonly prd: GitHubIssue
+  ) {
+    this.github = dependencies.github;
+    this.sandbox = dependencies.sandbox;
+    this.templates = dependencies.templates;
+    this.logger = dependencies.logger;
+    this.branchName = deterministicPrdBranch(prd.number);
+    this.sandboxName = deterministicPrdSandbox(prd.number);
   }
 
-  const lock = await context.lockStore.acquire(prd.number);
+  public async process(): Promise<FactoryRunOutcome> {
+    const { prd } = this;
+    this.logger.log(`Code Factory: building Implementation Sequence for PRD #${prd.number}.`);
 
-  if (!lock) {
-    context.logger.log(`Code Factory: skipping PRD #${prd.number}; PRD is already locked.`);
-    return "skipped";
-  }
+    const subIssues = await this.github.getAttachedSubIssues(prd.number);
+    const sequence = buildImplementationSequence(prd.number, subIssues);
 
-  try {
-    return await processLockedPrd(context, prd);
-  } finally {
-    await lock.release();
-  }
-}
-
-async function processLockedPrd(context: PrdContext, prd: GitHubIssue): Promise<PrdProcessOutcome> {
-  const branchName = deterministicPrdBranch(prd.number);
-  const sandboxName = deterministicPrdSandbox(prd.number);
-
-  context.logger.log(`Code Factory: building Implementation Sequence for PRD #${prd.number}.`);
-
-  const subIssues = await context.github.getAttachedSubIssues(prd.number);
-  const sequence = buildImplementationSequence(prd.number, subIssues);
-  const closedIssueNumbers = new Set(sequence.resolvedIssues.map((issue) => issue.number));
-
-  for (const issue of sequence.resolvedIssues) {
-    context.logger.log(`Code Factory: skipping Resolved Issue #${issue.number}.`);
-  }
-
-  if (sequence.openIssues.length === 0) {
-    context.logger.log(`Code Factory: PRD #${prd.number} has no open Implementation Issues.`);
-
-    if (sequence.resolvedIssues.length > 0) {
-      await runFinalReviewPhase(context, prd, sequence, branchName, sandboxName);
+    for (const issue of sequence.resolvedIssues) {
+      this.closedIssueNumbers.add(issue.number);
+      this.logger.log(`Code Factory: skipping Resolved Issue #${issue.number}.`);
     }
+
+    if (sequence.openIssues.length === 0) {
+      this.logger.log(`Code Factory: PRD #${prd.number} has no open Implementation Issues.`);
+
+      if (sequence.resolvedIssues.length > 0) {
+        await this.routeFinalReview(sequence);
+      }
+
+      return "completed";
+    }
+
+    const orderedIssues = sequence.openIssues
+      .map((issue) => `#${issue.number} (${issue.kind})`)
+      .join(", ");
+    this.logger.log(`Code Factory: Implementation Sequence for PRD #${prd.number}: ${orderedIssues}.`);
+
+    for (const issue of sequence.openIssues) {
+      if (issue.kind === "hitl") {
+        await this.pauseAtHitl(issue);
+        this.logger.log(`Code Factory: paused PRD #${prd.number} at HITL Issue #${issue.number}.`);
+        return "paused";
+      }
+
+      const priorIssues = [...sequence.resolvedIssues, ...this.processedIssues];
+      const laterIssues = sequence.openIssues.filter((candidate) => candidate.number > issue.number);
+      const outcome = await this.processAfkIssue(issue, sequence, priorIssues, laterIssues);
+
+      if (outcome === "error") {
+        return "issue-error";
+      }
+
+      this.closedIssueNumbers.add(issue.number);
+      this.processedIssues.push({
+        number: issue.number,
+        title: issue.title,
+        state: "CLOSED",
+        labels: issue.labels
+      });
+    }
+
+    const allResolvedSequence: ImplementationSequence = {
+      openIssues: [],
+      resolvedIssues: [...sequence.resolvedIssues, ...this.processedIssues]
+    };
+    await this.routeFinalReview(allResolvedSequence);
 
     return "completed";
   }
 
-  const orderedIssues = sequence.openIssues
-    .map((issue) => `#${issue.number} (${issue.kind})`)
-    .join(", ");
-  context.logger.log(`Code Factory: Implementation Sequence for PRD #${prd.number}: ${orderedIssues}.`);
+  private async processAfkIssue(
+    issue: ImplementationIssue,
+    sequence: ImplementationSequence,
+    priorIssues: ResolvedIssue[],
+    laterIssues: ImplementationIssue[]
+  ): Promise<IssueOutcome> {
+    const { prd } = this;
 
-  const processedIssues: ResolvedIssue[] = [];
+    try {
+      const unresolvedBlockers = await this.findUnresolvedBlockers(issue);
 
-  for (const issue of sequence.openIssues) {
-    if (issue.kind === "hitl") {
-      await postHitlPauseComment(context, prd, issue, branchName, sandboxName);
-      context.logger.log(`Code Factory: paused PRD #${prd.number} at HITL Issue #${issue.number}.`);
-      return "paused";
+      if (unresolvedBlockers.length > 0) {
+        await this.postAfkErrorComment(issue, unresolvedBlockers);
+        this.logger.log(
+          `Code Factory: stopped PRD #${prd.number}; AFK Issue #${issue.number} has unresolved blockers.`
+        );
+        return "error";
+      }
+
+      await this.sandbox.ensureSandbox({ sandboxName: this.sandboxName });
+      await this.sandbox.checkoutBranch({ sandboxName: this.sandboxName, branchName: this.branchName });
+      await this.sandbox.runAfkIssue({
+        sandboxName: this.sandboxName,
+        branchName: this.branchName,
+        prompt: await this.buildAfkPrompt(issue, priorIssues, laterIssues)
+      });
+      await this.sandbox.commitAndPush({
+        sandboxName: this.sandboxName,
+        branchName: this.branchName,
+        issueNumber: issue.number
+      });
+
+      const closedAfterCurrent = new Set(this.closedIssueNumbers);
+      closedAfterCurrent.add(issue.number);
+      await this.createOrUpdatePrdPullRequest(sequence, closedAfterCurrent);
+      await this.github.closeIssue(issue.number);
+      this.logger.log(`Code Factory: completed AFK Issue #${issue.number}.`);
+
+      return "completed";
+    } catch (error) {
+      await this.postAfkErrorComment(issue, [formatError(error)]);
+      this.logger.log(`Code Factory: stopped PRD #${prd.number}; AFK Issue #${issue.number} failed.`);
+      return "error";
+    }
+  }
+
+  private async findUnresolvedBlockers(issue: ImplementationIssue): Promise<string[]> {
+    const blockerNumbers = parseBlockingIssueNumbers(issue.body);
+    const unresolved: string[] = [];
+
+    for (const blockerNumber of blockerNumbers) {
+      const blocker = await this.github.getIssue(blockerNumber);
+
+      if (blocker.state !== "CLOSED") {
+        unresolved.push(`#${blocker.number} - ${blocker.title} (${blocker.state})`);
+      }
     }
 
-    const priorIssues = [...sequence.resolvedIssues, ...processedIssues];
-    const laterIssues = sequence.openIssues.filter((candidate) => candidate.number > issue.number);
-    const outcome = await processAfkIssue(context, {
-      prd,
-      issue,
-      sequence,
-      priorIssues,
-      laterIssues,
-      branchName,
-      sandboxName,
-      closedIssueNumbers
-    });
+    return unresolved;
+  }
 
-    if (outcome !== "issue-completed") {
-      return outcome;
-    }
-
-    closedIssueNumbers.add(issue.number);
-    processedIssues.push({
-      number: issue.number,
-      title: issue.title,
-      state: "CLOSED",
-      labels: issue.labels
+  private async buildAfkPrompt(
+    issue: ImplementationIssue,
+    priorIssues: ResolvedIssue[],
+    laterIssues: ImplementationIssue[]
+  ): Promise<string> {
+    return this.templates.render("prompts/afk-issue.md", {
+      prd_branch: this.branchName,
+      prd_body: this.prd.body,
+      issue_body: issue.body,
+      earlier_issues: formatEarlierIssues(priorIssues),
+      later_issues: formatLaterIssues(laterIssues)
     });
   }
 
-  const allResolvedSequence: ImplementationSequence = {
-    openIssues: [],
-    resolvedIssues: [...sequence.resolvedIssues, ...processedIssues]
-  };
-  await runFinalReviewPhase(context, prd, allResolvedSequence, branchName, sandboxName);
+  private async pauseAtHitl(issue: ImplementationIssue): Promise<void> {
+    const body = await this.templates.render("templates/hitlpause-comment.md", {
+      prd_number: this.prd.number,
+      prd_author: this.prd.author.login,
+      issue_number: issue.number,
+      issue_title: issue.title,
+      prd_branch: this.branchName,
+      prd_sandbox: this.sandboxName
+    });
 
-  return "completed";
-}
-
-async function processAfkIssue(
-  context: PrdContext,
-  input: {
-    prd: GitHubIssue;
-    issue: ImplementationIssue;
-    sequence: ImplementationSequence;
-    priorIssues: ResolvedIssue[];
-    laterIssues: ImplementationIssue[];
-    branchName: string;
-    sandboxName: string;
-    closedIssueNumbers: Set<number>;
+    await this.upsertComment(this.prd.number, hitlMarker(this.prd.number, issue.number), body);
   }
-): Promise<PrdProcessOutcome> {
-  const { prd, issue, sequence, priorIssues, laterIssues, branchName, sandboxName } = input;
 
-  try {
-    const unresolvedBlockers = await findUnresolvedBlockers(context.github, issue);
+  private async postAfkErrorComment(issue: ImplementationIssue, errors: string[]): Promise<void> {
+    const body = await this.templates.render("templates/afk-error-comment.md", {
+      prd_number: this.prd.number,
+      issue_number: issue.number,
+      error_summary: errors.join("\n"),
+      prd_branch: this.branchName,
+      prd_sandbox: this.sandboxName
+    });
 
-    if (unresolvedBlockers.length > 0) {
-      await postAfkErrorComment(context, prd, issue, branchName, sandboxName, unresolvedBlockers);
-      context.logger.log(
-        `Code Factory: stopped PRD #${prd.number}; AFK Issue #${issue.number} has unresolved blockers.`
+    await this.upsertComment(issue.number, afkErrorMarker(issue.number), body);
+  }
+
+  private async routeFinalReview(sequence: ImplementationSequence): Promise<void> {
+    const { prd } = this;
+    const pullRequest = await this.github.findPullRequestByHead(this.branchName);
+
+    if (!pullRequest) {
+      this.logger.log(
+        `Code Factory: no PRD Pull Request found for PRD #${prd.number}; skipping final review.`
       );
-      return "issue-error";
+      return;
     }
 
-    await context.sandbox.ensureSandbox({ sandboxName });
-    await context.sandbox.checkoutBranch({ sandboxName, branchName });
-    await context.sandbox.runAfkIssue({
-      sandboxName,
-      branchName,
-      prompt: await buildAfkPrompt(context, prd, issue, priorIssues, laterIssues, branchName)
+    this.logger.log(`Code Factory: running final review for PRD #${prd.number}.`);
+
+    const diff = await this.github.getPullRequestDiff(pullRequest.number);
+    const prompt = await this.buildFinalReviewPrompt(sequence, diff);
+
+    await this.sandbox.ensureSandbox({ sandboxName: this.sandboxName });
+    const reviewBody = await this.sandbox.runFinalReview({ sandboxName: this.sandboxName, prompt });
+
+    const commentBody = await this.templates.render("templates/final-review-comment.md", {
+      prd_number: prd.number,
+      review_body: reviewBody
     });
-    await context.sandbox.commitAndPush({
-      sandboxName,
-      branchName,
-      issueNumber: issue.number
-    });
 
-    const closedAfterCurrent = new Set(input.closedIssueNumbers);
-    closedAfterCurrent.add(issue.number);
-    await createOrUpdatePrdPullRequest(context, {
-      prd,
-      sequence,
-      branchName,
-      sandboxName,
-      closedIssueNumbers: closedAfterCurrent
-    });
-    await context.github.closeIssue(issue.number);
-    context.logger.log(`Code Factory: completed AFK Issue #${issue.number}.`);
+    await this.upsertComment(pullRequest.number, finalReviewMarker(prd.number), commentBody);
 
-    return "issue-completed";
-  } catch (error) {
-    await postAfkErrorComment(context, prd, issue, branchName, sandboxName, [
-      formatError(error)
-    ]);
-    context.logger.log(`Code Factory: stopped PRD #${prd.number}; AFK Issue #${issue.number} failed.`);
-    return "issue-error";
-  }
-}
+    await this.github.markPullRequestReadyForReview(pullRequest.number);
+    this.logger.log(
+      `Code Factory: marked PRD Pull Request #${pullRequest.number} ready for review.`
+    );
 
-async function findUnresolvedBlockers(
-  github: GitHubClient,
-  issue: ImplementationIssue
-): Promise<string[]> {
-  const blockerNumbers = parseBlockingIssueNumbers(issue.body);
-  const unresolved: string[] = [];
+    const prAuthor = await this.github.getAuthenticatedUser();
+    const prdAuthor = prd.author.login;
 
-  for (const blockerNumber of blockerNumbers) {
-    const blocker = await github.getIssue(blockerNumber);
-
-    if (blocker.state !== "CLOSED") {
-      unresolved.push(`#${blocker.number} - ${blocker.title} (${blocker.state})`);
+    if (prdAuthor !== prAuthor) {
+      await this.github.requestPullRequestReview(pullRequest.number, prdAuthor);
+      this.logger.log(
+        `Code Factory: requested review from ${prdAuthor} for PRD Pull Request #${pullRequest.number}.`
+      );
+    } else {
+      const tagBody = `@${prdAuthor} the Code Factory has completed all Implementation Issues for PRD #${prd.number}. Please review the PR.`;
+      await this.github.createIssueComment(pullRequest.number, tagBody);
+      this.logger.log(
+        `Code Factory: tagged ${prdAuthor} in PRD Pull Request #${pullRequest.number} (self-review).`
+      );
     }
+
+    await this.sandbox.removeSandbox({ sandboxName: this.sandboxName });
+    this.logger.log(`Code Factory: removed PRD Sandbox ${this.sandboxName}.`);
   }
 
-  return unresolved;
-}
-
-async function buildAfkPrompt(
-  context: PrdContext,
-  prd: GitHubIssue,
-  issue: ImplementationIssue,
-  priorIssues: ResolvedIssue[],
-  laterIssues: ImplementationIssue[],
-  branchName: string
-): Promise<string> {
-  return context.templates.render("prompts/afk-issue.md", {
-    prd_branch: branchName,
-    prd_body: prd.body,
-    issue_body: issue.body,
-    earlier_issues: formatEarlierIssues(priorIssues),
-    later_issues: formatLaterIssues(laterIssues)
-  });
-}
-
-async function postHitlPauseComment(
-  context: PrdContext,
-  prd: GitHubIssue,
-  issue: ImplementationIssue,
-  branchName: string,
-  sandboxName: string
-): Promise<void> {
-  const body = await context.templates.render("templates/hitlpause-comment.md", {
-    prd_number: prd.number,
-    prd_author: prd.author.login,
-    issue_number: issue.number,
-    issue_title: issue.title,
-    prd_branch: branchName,
-    prd_sandbox: sandboxName
-  });
-
-  await upsertIssueComment(context.github, prd.number, hitlMarker(prd.number, issue.number), body);
-}
-
-async function postAfkErrorComment(
-  context: PrdContext,
-  prd: GitHubIssue,
-  issue: ImplementationIssue,
-  branchName: string,
-  sandboxName: string,
-  errors: string[]
-): Promise<void> {
-  const body = await context.templates.render("templates/afk-error-comment.md", {
-    prd_number: prd.number,
-    issue_number: issue.number,
-    error_summary: errors.join("\n"),
-    prd_branch: branchName,
-    prd_sandbox: sandboxName
-  });
-
-  await upsertIssueComment(context.github, issue.number, afkErrorMarker(issue.number), body);
-}
-
-async function runFinalReviewPhase(
-  context: PrdContext,
-  prd: GitHubIssue,
-  sequence: ImplementationSequence,
-  branchName: string,
-  sandboxName: string
-): Promise<void> {
-  const pullRequest = await context.github.findPullRequestByHead(branchName);
-
-  if (!pullRequest) {
-    context.logger.log(
-      `Code Factory: no PRD Pull Request found for PRD #${prd.number}; skipping final review.`
-    );
-    return;
+  private async buildFinalReviewPrompt(
+    sequence: ImplementationSequence,
+    diff: string
+  ): Promise<string> {
+    return this.templates.render("prompts/final-review.md", {
+      prd_body: this.prd.body,
+      implementation_issues: formatEarlierIssues(sequence.resolvedIssues),
+      pr_diff: diff
+    });
   }
 
-  context.logger.log(`Code Factory: running final review for PRD #${prd.number}.`);
+  private async createOrUpdatePrdPullRequest(
+    sequence: ImplementationSequence,
+    closedIssueNumbers: Set<number>
+  ): Promise<void> {
+    const body = await this.renderPrdPullRequestBody(sequence, closedIssueNumbers);
+    const existingPullRequest = await this.github.findPullRequestByHead(this.branchName);
 
-  const diff = await context.github.getPullRequestDiff(pullRequest.number);
-  const prompt = await buildFinalReviewPrompt(context, prd, sequence, diff);
+    if (existingPullRequest) {
+      await this.github.updatePullRequestBody(existingPullRequest.number, body);
+      await this.github.setPullRequestLabels(existingPullRequest.number, [PRD_LABEL]);
+      return;
+    }
 
-  await context.sandbox.ensureSandbox({ sandboxName });
-  const reviewBody = await context.sandbox.runFinalReview({ sandboxName, prompt });
+    const pullRequest = await this.github.createDraftPullRequest({
+      title: `Code Factory PRD #${this.prd.number}: ${this.prd.title}`,
+      body,
+      head: this.branchName,
+      base: await this.github.getDefaultBranch(),
+      labels: [PRD_LABEL]
+    } satisfies CreatePullRequestInput);
+    await this.github.setPullRequestLabels(pullRequest.number, [PRD_LABEL]);
+  }
 
-  const commentBody = await context.templates.render("templates/final-review-comment.md", {
-    prd_number: prd.number,
-    review_body: reviewBody
-  });
+  private async renderPrdPullRequestBody(
+    sequence: ImplementationSequence,
+    closedIssueNumbers: Set<number>
+  ): Promise<string> {
+    return this.templates.render("templates/pr-body.md", {
+      prd_number: this.prd.number,
+      prd_branch: this.branchName,
+      prd_sandbox: this.sandboxName,
+      implementation_issue_checklist: formatImplementationChecklist(sequence, closedIssueNumbers)
+    });
+  }
 
-  await upsertIssueComment(
-    context.github,
-    pullRequest.number,
-    finalReviewMarker(prd.number),
-    commentBody
+  private async upsertComment(issueNumber: number, marker: string, body: string): Promise<void> {
+    const comments = await this.github.listIssueComments(issueNumber);
+    const existing = comments.find((comment) => comment.body.includes(marker));
+
+    if (existing) {
+      await this.github.updateIssueComment(existing.id, body);
+      return;
+    }
+
+    await this.github.createIssueComment(issueNumber, body);
+  }
+}
+
+function logBatchSummary(logger: Pick<Console, "log">, outcomes: DispatchOutcome[]): void {
+  const tally = { completed: 0, paused: 0, "issue-error": 0, skipped: 0 };
+
+  for (const outcome of outcomes) {
+    tally[outcome] += 1;
+  }
+
+  logger.log(
+    `Code Factory: Batch Run finished; processed ${outcomes.length} PRD(s): `
+    + `${tally.completed} completed, ${tally.paused} paused, `
+    + `${tally["issue-error"]} errored, ${tally.skipped} skipped.`
   );
-
-  await context.github.markPullRequestReadyForReview(pullRequest.number);
-  context.logger.log(
-    `Code Factory: marked PRD Pull Request #${pullRequest.number} ready for review.`
-  );
-
-  const prAuthor = await context.github.getAuthenticatedUser();
-  const prdAuthor = prd.author.login;
-
-  if (prdAuthor !== prAuthor) {
-    await context.github.requestPullRequestReview(pullRequest.number, prdAuthor);
-    context.logger.log(
-      `Code Factory: requested review from ${prdAuthor} for PRD Pull Request #${pullRequest.number}.`
-    );
-  } else {
-    const tagBody = `@${prdAuthor} the Code Factory has completed all Implementation Issues for PRD #${prd.number}. Please review the PR.`;
-    await context.github.createIssueComment(pullRequest.number, tagBody);
-    context.logger.log(
-      `Code Factory: tagged ${prdAuthor} in PRD Pull Request #${pullRequest.number} (self-review).`
-    );
-  }
-
-  await context.sandbox.removeSandbox({ sandboxName });
-  context.logger.log(`Code Factory: removed PRD Sandbox ${sandboxName}.`);
-}
-
-async function buildFinalReviewPrompt(
-  context: PrdContext,
-  prd: GitHubIssue,
-  sequence: ImplementationSequence,
-  diff: string
-): Promise<string> {
-  return context.templates.render("prompts/final-review.md", {
-    prd_body: prd.body,
-    implementation_issues: formatEarlierIssues(sequence.resolvedIssues),
-    pr_diff: diff
-  });
-}
-
-async function createOrUpdatePrdPullRequest(
-  context: PrdContext,
-  input: {
-    prd: GitHubIssue;
-    sequence: ImplementationSequence;
-    branchName: string;
-    sandboxName: string;
-    closedIssueNumbers: Set<number>;
-  }
-): Promise<void> {
-  const body = await renderPrdPullRequestBody(context, input);
-  const existingPullRequest = await context.github.findPullRequestByHead(input.branchName);
-
-  if (existingPullRequest) {
-    await context.github.updatePullRequestBody(existingPullRequest.number, body);
-    await context.github.setPullRequestLabels(existingPullRequest.number, [PRD_LABEL]);
-    return;
-  }
-
-  const pullRequest = await context.github.createDraftPullRequest({
-    title: `Code Factory PRD #${input.prd.number}: ${input.prd.title}`,
-    body,
-    head: input.branchName,
-    base: await context.github.getDefaultBranch(),
-    labels: [PRD_LABEL]
-  } satisfies CreatePullRequestInput);
-  await context.github.setPullRequestLabels(pullRequest.number, [PRD_LABEL]);
-}
-
-async function renderPrdPullRequestBody(
-  context: PrdContext,
-  input: {
-    prd: GitHubIssue;
-    sequence: ImplementationSequence;
-    branchName: string;
-    sandboxName: string;
-    closedIssueNumbers: Set<number>;
-  }
-): Promise<string> {
-  return context.templates.render("templates/pr-body.md", {
-    prd_number: input.prd.number,
-    prd_branch: input.branchName,
-    prd_sandbox: input.sandboxName,
-    implementation_issue_checklist: formatImplementationChecklist(
-      input.sequence,
-      input.closedIssueNumbers
-    )
-  });
-}
-
-async function upsertIssueComment(
-  github: GitHubClient,
-  issueNumber: number,
-  marker: string,
-  body: string
-): Promise<void> {
-  const comments = await github.listIssueComments(issueNumber);
-  const existing = comments.find((comment) => comment.body.includes(marker));
-
-  if (existing) {
-    await github.updateIssueComment(existing.id, body);
-    return;
-  }
-
-  await github.createIssueComment(issueNumber, body);
 }
 
 function formatImplementationChecklist(

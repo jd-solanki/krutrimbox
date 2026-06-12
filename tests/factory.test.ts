@@ -4,6 +4,7 @@ import {
   createCodeFactory,
   deterministicPrdBranch,
   deterministicPrdSandbox,
+  FactoryRun,
   parseBlockingIssueNumbers,
   SANDBOX_CODEX_EXEC_FLAGS,
   type PrdLock,
@@ -557,6 +558,81 @@ describe("createCodeFactory", () => {
       expect.stringContaining("Code Factory is paused for PRD #1.")
     );
     expect(github.closeIssue).toHaveBeenCalledWith(5);
+  });
+});
+
+describe("FactoryRun", () => {
+  function silentLogger() {
+    return { log: vi.fn() };
+  }
+
+  function runDependencies(github: FakeGitHubClient, sandbox: FakeSandboxRunner) {
+    return { github, sandbox, templates: new FixtureTemplates(), logger: silentLogger() };
+  }
+
+  test("process() returns \"paused\" at the first HITL Issue without touching the sandbox", async () => {
+    const github = new FakeGitHubClient({
+      prds: [prdIssue()],
+      subIssuesByPrd: new Map([
+        [1, [implementationIssue({ number: 4, labels: ["PRD-sub-issue", "ready-for-human"] })]]
+      ])
+    });
+    const sandbox = new FakeSandboxRunner();
+    const run = new FactoryRun(runDependencies(github, sandbox), prdIssue());
+
+    await expect(run.process()).resolves.toBe("paused");
+    expect(sandbox.ensureSandbox).not.toHaveBeenCalled();
+  });
+
+  test("process() returns \"issue-error\" when an AFK Issue has an unresolved blocker", async () => {
+    const github = new FakeGitHubClient({
+      prds: [prdIssue()],
+      issues: [blockerIssue({ number: 3, title: "Discover PRDs", state: "OPEN" })],
+      subIssuesByPrd: new Map([
+        [
+          1,
+          [
+            implementationIssue({
+              number: 4,
+              body: "## Blocked by\n\n- #3",
+              labels: ["PRD-sub-issue", "ready-for-agent"]
+            })
+          ]
+        ]
+      ])
+    });
+    const sandbox = new FakeSandboxRunner();
+    const run = new FactoryRun(runDependencies(github, sandbox), prdIssue());
+
+    await expect(run.process()).resolves.toBe("issue-error");
+    expect(github.closeIssue).not.toHaveBeenCalled();
+    expect(sandbox.ensureSandbox).not.toHaveBeenCalled();
+  });
+
+  test("process() returns \"completed\" when every Implementation Issue is already resolved", async () => {
+    const github = new FakeGitHubClient({
+      prds: [prdIssue()],
+      pullRequests: [{ number: 10, labels: [{ name: "PRD" }] }],
+      subIssuesByPrd: new Map([
+        [1, [implementationIssue({ number: 3, state: "CLOSED", labels: ["PRD-sub-issue"] })]]
+      ])
+    });
+    const sandbox = new FakeSandboxRunner();
+    const run = new FactoryRun(runDependencies(github, sandbox), prdIssue());
+
+    await expect(run.process()).resolves.toBe("completed");
+    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: "code-factory-prd-1" });
+  });
+
+  test("exposes the deterministic PRD Branch and PRD Sandbox as run invariants", () => {
+    const github = new FakeGitHubClient({ prds: [prdIssue({ number: 7 })] });
+    const run = new FactoryRun(
+      runDependencies(github, new FakeSandboxRunner()),
+      prdIssue({ number: 7 })
+    );
+
+    expect(run.branchName).toBe("code-factory/prd-7");
+    expect(run.sandboxName).toBe("code-factory-prd-7");
   });
 });
 
