@@ -83,7 +83,8 @@ export class CodeFactory {
     await this.github.ensureRequiredLabels();
     this.logger.log(`Code Factory: discovering Factory-Owned PRDs by ${FACTORY_OWNER}.`);
 
-    const prds = await this.github.listReadyPrds(FACTORY_OWNER);
+    const prds = [...await this.github.listReadyPrds(FACTORY_OWNER)]
+      .sort((left, right) => left.number - right.number);
     const outcomes: DispatchOutcome[] = [];
 
     for (const prd of prds) {
