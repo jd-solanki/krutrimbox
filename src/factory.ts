@@ -724,10 +724,10 @@ class CommandSandboxRunner implements SandboxRunner {
   public constructor(private readonly runner: CommandRunner) {}
 
   public async ensureSandbox(input: SandboxInput): Promise<void> {
-    try {
-      await this.runner.run("sbx", ["inspect", input.sandboxName]);
-    } catch {
-      await this.runner.run("sbx", ["clone", "--name", input.sandboxName, "."]);
+    const output = await this.runner.run("sbx", ["ls", "--json"]);
+    const { sandboxes } = JSON.parse(output) as { sandboxes: Array<{ name: string }> };
+    if (!sandboxes.some(s => s.name === input.sandboxName)) {
+      await this.runner.run("sbx", ["create", "--clone", "--name", input.sandboxName, "codex", "."]);
     }
   }
 
