@@ -292,7 +292,7 @@ describe("GitHubCliClient", () => {
             "create",
             "--draft",
             "--title",
-            "Code Factory PRD #1: PRD",
+            "krutrimbox PRD #1: PRD",
             "--body",
             "body",
             "--base",
@@ -325,7 +325,7 @@ describe("GitHubCliClient", () => {
 
     await expect(
       client.createDraftPullRequest({
-        title: "Code Factory PRD #1: PRD",
+        title: "krutrimbox PRD #1: PRD",
         body: "body",
         base: "main",
         head: "krutrimbox/prd-1",
@@ -341,7 +341,7 @@ describe("GitHubCliClient", () => {
           "create",
           "--draft",
           "--title",
-          "Code Factory PRD #1: PRD",
+          "krutrimbox PRD #1: PRD",
           "--body",
           "body",
           "--base",

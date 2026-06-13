@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   buildImplementationSequence,
-  CodeFactory,
+  Krutrimbox,
   deterministicPrdBranch,
   deterministicPrdSandbox,
   FactoryRun,
@@ -24,7 +24,7 @@ import type {
   GitHubPullRequest
 } from "../src/lib/github";
 
-// Replace the file-backed run log with a silent, in-memory sink so CodeFactory
+// Replace the file-backed run log with a silent, in-memory sink so Krutrimbox
 // tests never touch `.krutrimbox/logs`. `filePath: null` also suppresses the
 // "writing logs to ..." line, keeping the console-log assertions unaffected.
 vi.mock("../src/lib/factory/run-log", () => ({
@@ -107,7 +107,7 @@ describe("SANDBOX_CODEX_EXEC_FLAGS", () => {
   });
 });
 
-describe("CodeFactory", () => {
+describe("Krutrimbox", () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -116,7 +116,7 @@ describe("CodeFactory", () => {
     const github = new FakeGitHubClient({
       prds: [prdIssue({ author: "someone-else" })]
     });
-    const factory = new CodeFactory({
+    const factory = new Krutrimbox({
       github,
       sandbox: new FakeSandboxRunner(),
       lockStore: fakeLockStore(),
@@ -130,14 +130,14 @@ describe("CodeFactory", () => {
     expect(github.getIssue).toHaveBeenCalledWith(1);
     expect(github.getAttachedSubIssues).not.toHaveBeenCalled();
     expect(log).toHaveBeenCalledWith(
-      "Code Factory: skipping PRD #1; author someone-else is not jd-solanki."
+      "krutrimbox: skipping PRD #1; author someone-else is not jd-solanki."
     );
   });
 
   test("skips an already locked PRD before reading sub-issues", async () => {
     const github = new FakeGitHubClient({ prds: [prdIssue()] });
     const lockStore = fakeLockStore({ locked: true });
-    const factory = new CodeFactory({
+    const factory = new Krutrimbox({
       github,
       sandbox: new FakeSandboxRunner(),
       lockStore,
@@ -178,7 +178,7 @@ describe("CodeFactory", () => {
       ])
     });
     const sandbox = new FakeSandboxRunner();
-    const factory = new CodeFactory({
+    const factory = new Krutrimbox({
       github,
       sandbox,
       lockStore: fakeLockStore(),
@@ -189,7 +189,7 @@ describe("CodeFactory", () => {
 
     expect(github.updateIssueComment).toHaveBeenCalledWith(
       "100",
-      expect.stringContaining("@jd-solanki Code Factory is paused for PRD #1.")
+      expect.stringContaining("@jd-solanki krutrimbox is paused for PRD #1.")
     );
     expect(github.createIssueComment).not.toHaveBeenCalled();
     expect(sandbox.ensureSandbox).not.toHaveBeenCalled();
@@ -219,7 +219,7 @@ describe("CodeFactory", () => {
       ])
     });
     const sandbox = new FakeSandboxRunner();
-    const factory = new CodeFactory({
+    const factory = new Krutrimbox({
       github,
       sandbox,
       lockStore: fakeLockStore(),
@@ -266,7 +266,7 @@ describe("CodeFactory", () => {
       ])
     });
     const sandbox = new FakeSandboxRunner();
-    const factory = new CodeFactory({
+    const factory = new Krutrimbox({
       github,
       sandbox,
       lockStore: fakeLockStore(),
@@ -303,7 +303,7 @@ describe("CodeFactory", () => {
       "Do not create commits or push branches."
     );
     expect(github.createDraftPullRequest).toHaveBeenCalledWith({
-      title: "Code Factory PRD #1: PRD: Code Factory MVP",
+      title: "krutrimbox PRD #1: PRD: krutrimbox MVP",
       body: expect.stringContaining("- [x] #4 - Factory loop"),
       head: "krutrimbox/prd-1",
       base: "main",
@@ -333,7 +333,7 @@ describe("CodeFactory", () => {
         ]
       ])
     });
-    const factory = new CodeFactory({
+    const factory = new Krutrimbox({
       github,
       sandbox: new FakeSandboxRunner(),
       lockStore: fakeLockStore(),
@@ -365,7 +365,7 @@ describe("CodeFactory", () => {
       ])
     });
     const sandbox = new FakeSandboxRunner();
-    const factory = new CodeFactory({
+    const factory = new Krutrimbox({
       github,
       sandbox,
       lockStore: fakeLockStore(),
@@ -399,7 +399,7 @@ describe("CodeFactory", () => {
         [10, [{ id: "200", body: "<!-- krutrimbox:final-review-prd-1 -->\nold review" }]]
       ])
     });
-    const factory = new CodeFactory({
+    const factory = new Krutrimbox({
       github,
       sandbox: new FakeSandboxRunner(),
       lockStore: fakeLockStore(),
@@ -427,7 +427,7 @@ describe("CodeFactory", () => {
       ])
     });
     github.getAuthenticatedUser.mockResolvedValue("factory-bot");
-    const factory = new CodeFactory({
+    const factory = new Krutrimbox({
       github,
       sandbox: new FakeSandboxRunner(),
       lockStore: fakeLockStore(),
@@ -452,7 +452,7 @@ describe("CodeFactory", () => {
       ])
     });
     github.getAuthenticatedUser.mockResolvedValue("jd-solanki");
-    const factory = new CodeFactory({
+    const factory = new Krutrimbox({
       github,
       sandbox: new FakeSandboxRunner(),
       lockStore: fakeLockStore(),
@@ -477,7 +477,7 @@ describe("CodeFactory", () => {
       ])
     });
     const sandbox = new FakeSandboxRunner();
-    const factory = new CodeFactory({
+    const factory = new Krutrimbox({
       github,
       sandbox,
       lockStore: fakeLockStore(),
@@ -497,7 +497,7 @@ describe("CodeFactory", () => {
         [1, [implementationIssue({ number: 3, state: "CLOSED", labels: ["PRD-sub-issue"] })]]
       ])
     });
-    const factory = new CodeFactory({
+    const factory = new Krutrimbox({
       github,
       sandbox: new FakeSandboxRunner(),
       lockStore: fakeLockStore(),
@@ -518,7 +518,7 @@ describe("CodeFactory", () => {
       ])
     });
     const sandbox = new FakeSandboxRunner();
-    const factory = new CodeFactory({
+    const factory = new Krutrimbox({
       github,
       sandbox,
       lockStore: fakeLockStore(),
@@ -558,7 +558,7 @@ describe("CodeFactory", () => {
         ]
       ])
     });
-    const factory = new CodeFactory({
+    const factory = new Krutrimbox({
       github,
       sandbox: new FakeSandboxRunner(),
       lockStore: fakeLockStore(),
@@ -571,13 +571,13 @@ describe("CodeFactory", () => {
     expect(github.getAttachedSubIssues).toHaveBeenCalledWith(2);
     expect(github.createIssueComment).toHaveBeenCalledWith(
       1,
-      expect.stringContaining("Code Factory is paused for PRD #1.")
+      expect.stringContaining("krutrimbox is paused for PRD #1.")
     );
     expect(github.closeIssue).toHaveBeenCalledWith(5);
   });
 });
 
-describe("CodeFactory MVP smoke", () => {
+describe("Krutrimbox MVP smoke", () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -620,7 +620,7 @@ describe("CodeFactory MVP smoke", () => {
     });
     const sandbox = new FakeSandboxRunner();
     const lockStore = recordingLockStore();
-    const factory = new CodeFactory({
+    const factory = new Krutrimbox({
       github,
       sandbox,
       lockStore,
@@ -658,7 +658,7 @@ describe("CodeFactory MVP smoke", () => {
     expect(sandbox.commitAndPush.mock.calls.map(([input]) => input.issueNumber)).toEqual([4, 6]);
     expect(github.closeIssue.mock.calls.map(([issueNumber]) => issueNumber)).toEqual([4, 6]);
     expect(github.createDraftPullRequest).toHaveBeenCalledWith({
-      title: "Code Factory PRD #1: PRD: Code Factory MVP",
+      title: "krutrimbox PRD #1: PRD: krutrimbox MVP",
       body: expect.stringContaining("Closes #1"),
       head: "krutrimbox/prd-1",
       base: "main",
@@ -671,7 +671,7 @@ describe("CodeFactory MVP smoke", () => {
     expect(String(sandbox.runFinalReview.mock.calls[0]?.[0].prompt)).toContain("--- a/foo");
     expect(github.updateIssueComment).toHaveBeenCalledWith(
       "existing-final-review",
-      expect.stringContaining("## Code Factory Review")
+      expect.stringContaining("## krutrimbox Review")
     );
     expect(github.markPullRequestReadyForReview).toHaveBeenCalledWith(10);
     expect(github.requestPullRequestReview).toHaveBeenCalledWith(10, "jd-solanki");
@@ -732,7 +732,7 @@ describe("CodeFactory MVP smoke", () => {
     });
     const sandbox = new FakeSandboxRunner();
     const lockStore = recordingLockStore({ lockedPrds: new Set([9]) });
-    const factory = new CodeFactory({
+    const factory = new Krutrimbox({
       github,
       sandbox,
       lockStore,
@@ -748,11 +748,11 @@ describe("CodeFactory MVP smoke", () => {
     expect(github.getAttachedSubIssues.mock.calls.map(([prdNumber]) => prdNumber)).toEqual([3, 5]);
     expect(github.updateIssueComment).toHaveBeenCalledWith(
       "existing-hitl",
-      expect.stringContaining("Code Factory is paused for PRD #3.")
+      expect.stringContaining("krutrimbox is paused for PRD #3.")
     );
     expect(github.createIssueComment).not.toHaveBeenCalledWith(
       3,
-      expect.stringContaining("Code Factory is paused for PRD #3.")
+      expect.stringContaining("krutrimbox is paused for PRD #3.")
     );
     expect(sandbox.commitAndPush).toHaveBeenCalledWith({
       sandboxName: "krutrimbox-prd-5",
@@ -865,7 +865,7 @@ describe("PrdPullRequest", () => {
     await prModule(github).ensureReflectsSequence(sequence, new Set([3]));
 
     expect(github.createDraftPullRequest).toHaveBeenCalledWith({
-      title: "Code Factory PRD #1: PRD: Code Factory MVP",
+      title: "krutrimbox PRD #1: PRD: krutrimbox MVP",
       body: expect.stringContaining("- [x] #3 - Bootstrap"),
       head: "krutrimbox/prd-1",
       base: "main",
@@ -1035,7 +1035,7 @@ class FakeSandboxRunner implements SandboxRunner {
   );
   public readonly runFinalReview = vi.fn(async (input: { sandboxName: string; prompt: string }) => {
     this.calls.push({ name: "runFinalReview", input });
-    return "## Code Factory Review\n\n### Findings\n\nNo findings.";
+    return "## krutrimbox Review\n\n### Findings\n\nNo findings.";
   });
   public readonly removeSandbox = vi.fn(async (input: { sandboxName: string }) => {
     this.calls.push({ name: "removeSandbox", input });
@@ -1082,11 +1082,11 @@ const fixtureTemplates: TemplateRenderer = {
   async render(templatePath, values) {
     const templates: Record<string, string> = {
       "templates/hitlpause-comment.md":
-        "<!-- krutrimbox:hitl-prd-{{prd_number}}-issue-{{issue_number}} -->\n\n@{{prd_author}} Code Factory is paused for PRD #{{prd_number}}.\n\n- #{{issue_number}} - {{issue_title}}\n\nBranch: `{{prd_branch}}`\nSandbox: `{{prd_sandbox}}`",
+        "<!-- krutrimbox:hitl-prd-{{prd_number}}-issue-{{issue_number}} -->\n\n@{{prd_author}} krutrimbox is paused for PRD #{{prd_number}}.\n\n- #{{issue_number}} - {{issue_title}}\n\nBranch: `{{prd_branch}}`\nSandbox: `{{prd_sandbox}}`",
       "templates/afk-error-comment.md":
         "<!-- krutrimbox:afk-error-issue-{{issue_number}} -->\n\n{{error_summary}}\n\nPRD: #{{prd_number}}\nBranch: `{{prd_branch}}`\nSandbox: `{{prd_sandbox}}`",
       "templates/pr-body.md":
-        "## Parent PRD\n\nCloses #{{prd_number}}\n\n## Implementation Issues\n\n{{implementation_issue_checklist}}\n\n## Code Factory\n\nBranch: `{{prd_branch}}`\nSandbox: `{{prd_sandbox}}`",
+        "## Parent PRD\n\nCloses #{{prd_number}}\n\n## Implementation Issues\n\n{{implementation_issue_checklist}}\n\n## krutrimbox\n\nBranch: `{{prd_branch}}`\nSandbox: `{{prd_sandbox}}`",
       "prompts/afk-issue.md":
         "Do not create commits or push branches.\nWork on `{{prd_branch}}`.\n\n## Parent PRD\n{{prd_body}}\n\n## Current AFK Issue\n{{issue_body}}\n\n## Earlier Implementation Issues\n{{earlier_issues}}\n\n## Later Implementation Issues\n{{later_issues}}",
       "templates/final-review-comment.md":
@@ -1115,7 +1115,7 @@ function prdIssue({
 } = {}): GitHubIssue {
   return {
     number,
-    title: "PRD: Code Factory MVP",
+    title: "PRD: krutrimbox MVP",
     body,
     state: "OPEN",
     author: { login: author },
@@ -1212,14 +1212,14 @@ describe("run logging end-to-end", () => {
       commitAndPush: async () => undefined,
       runFinalReview: async (input) => {
         input.output?.write("[codex] running the final review\n");
-        return "## Code Factory Review\n\n### Findings\n\nNo findings.";
+        return "## krutrimbox Review\n\n### Findings\n\nNo findings.";
       },
       removeSandbox: async () => undefined
     };
 
     const workdir = await mkdtemp(join(tmpdir(), "krutrimbox-logs-"));
     try {
-      const factory = new CodeFactory({
+      const factory = new Krutrimbox({
         github,
         sandbox,
         lockStore: fakeLockStore(),
@@ -1238,7 +1238,7 @@ describe("run logging end-to-end", () => {
       const content = await readFile(join(logsDir, files[0]), "utf8");
       expect(content).toContain("[codex] implementing the issue");
       expect(content).toContain("[codex] running the final review");
-      expect(content).toContain("Code Factory: completed AFK Issue #4.");
+      expect(content).toContain("krutrimbox: completed AFK Issue #4.");
     } finally {
       await rm(workdir, { recursive: true, force: true });
     }

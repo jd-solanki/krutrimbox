@@ -1,4 +1,4 @@
-// Code Factory comment/body templates, inlined as string constants so the
+// krutrimbox comment/body templates, inlined as string constants so the
 // published bundle carries them instead of reading files relative to the
 // orchestrated repo's cwd. `{{key}}` placeholders are filled by the
 // BundledTemplateRenderer. Keyed by their historical file paths.
@@ -12,22 +12,22 @@ Closes #{{prd_number}}
 
 {{implementation_issue_checklist}}
 
-## Code Factory
+## krutrimbox
 
 Branch: \`{{prd_branch}}\`
 Sandbox: \`{{prd_sandbox}}\`
 
-Generated and maintained by Code Factory.
+Generated and maintained by krutrimbox.
 `,
   "templates/hitlpause-comment.md": `<!-- krutrimbox:hitl-prd-{{prd_number}}-issue-{{issue_number}} -->
 
-@{{prd_author}} Code Factory is paused for PRD #{{prd_number}}.
+@{{prd_author}} krutrimbox is paused for PRD #{{prd_number}}.
 
 The next required issue is HITL:
 
 - #{{issue_number}} - {{issue_title}}
 
-Please resolve the HITL issue and close it, then rerun Code Factory for this PRD.
+Please resolve the HITL issue and close it, then rerun krutrimbox for this PRD.
 
 \`\`\`sh
 kb run --prd {{prd_number}}
@@ -35,7 +35,7 @@ kb run --prd {{prd_number}}
 `,
   "templates/afk-error-comment.md": `<!-- krutrimbox:afk-error-issue-{{issue_number}} -->
 
-Code Factory could not complete this AFK issue.
+krutrimbox could not complete this AFK issue.
 
 Reason:
 

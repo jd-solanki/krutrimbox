@@ -18,7 +18,7 @@ import type { TemplateRenderer } from "./template-renderer";
 export type FactoryRunOutcome = "completed" | "paused" | "issue-error";
 
 // The seams a Factory Run drives. The PRD Lock is deliberately absent: a
-// FactoryRun exists only while the Code Factory holds its lock, so locking is a
+// FactoryRun exists only while krutrimbox holds its lock, so locking is a
 // dispatch concern above the run, not a dependency of the run itself.
 export interface FactoryRunDependencies {
   github: GitHubClient;
@@ -35,7 +35,7 @@ export interface FactoryRunDependencies {
 // as a whole completes, pauses, or stops on an issue error.
 type IssueOutcome = "completed" | "error";
 
-// One execution attempt by the Code Factory against a single locked PRD. The
+// One execution attempt by krutrimbox against a single locked PRD. The
 // PRD Branch and PRD Sandbox names are derived once and held as invariants;
 // `closedIssueNumbers` and `processedIssues` are intra-run bookkeeping rebuilt
 // fresh every run (ADR-0002), never persisted. Single-use: call `process()`
@@ -75,18 +75,18 @@ export class FactoryRun {
 
   public async process(): Promise<FactoryRunOutcome> {
     const { prd } = this;
-    this.logger.log(`Code Factory: building Implementation Sequence for PRD #${prd.number}.`);
+    this.logger.log(`krutrimbox: building Implementation Sequence for PRD #${prd.number}.`);
 
     const subIssues = await this.github.getAttachedSubIssues(prd.number);
     const sequence = buildImplementationSequence(prd.number, subIssues);
 
     for (const issue of sequence.resolvedIssues) {
       this.closedIssueNumbers.add(issue.number);
-      this.logger.log(`Code Factory: skipping Resolved Issue #${issue.number}.`);
+      this.logger.log(`krutrimbox: skipping Resolved Issue #${issue.number}.`);
     }
 
     if (sequence.openIssues.length === 0) {
-      this.logger.log(`Code Factory: PRD #${prd.number} has no open Implementation Issues.`);
+      this.logger.log(`krutrimbox: PRD #${prd.number} has no open Implementation Issues.`);
 
       if (sequence.resolvedIssues.length > 0) {
         await this.routeFinalReview(sequence);
@@ -98,12 +98,12 @@ export class FactoryRun {
     const orderedIssues = sequence.openIssues
       .map((issue) => `#${issue.number} (${issue.kind})`)
       .join(", ");
-    this.logger.log(`Code Factory: Implementation Sequence for PRD #${prd.number}: ${orderedIssues}.`);
+    this.logger.log(`krutrimbox: Implementation Sequence for PRD #${prd.number}: ${orderedIssues}.`);
 
     for (const issue of sequence.openIssues) {
       if (issue.kind === "hitl") {
         await this.pauseAtHitl(issue);
-        this.logger.log(`Code Factory: paused PRD #${prd.number} at HITL Issue #${issue.number}.`);
+        this.logger.log(`krutrimbox: paused PRD #${prd.number} at HITL Issue #${issue.number}.`);
         return "paused";
       }
 
@@ -147,7 +147,7 @@ export class FactoryRun {
       if (unresolvedBlockers.length > 0) {
         await this.postAfkErrorComment(issue, unresolvedBlockers);
         this.logger.log(
-          `Code Factory: stopped PRD #${prd.number}; AFK Issue #${issue.number} has unresolved blockers.`
+          `krutrimbox: stopped PRD #${prd.number}; AFK Issue #${issue.number} has unresolved blockers.`
         );
         return "error";
       }
@@ -170,12 +170,12 @@ export class FactoryRun {
       closedAfterCurrent.add(issue.number);
       await this.prdPullRequest.ensureReflectsSequence(sequence, closedAfterCurrent);
       await this.github.closeIssue(issue.number);
-      this.logger.log(`Code Factory: completed AFK Issue #${issue.number}.`);
+      this.logger.log(`krutrimbox: completed AFK Issue #${issue.number}.`);
 
       return "completed";
     } catch (error) {
       await this.postAfkErrorComment(issue, [formatError(error)]);
-      this.logger.log(`Code Factory: stopped PRD #${prd.number}; AFK Issue #${issue.number} failed.`);
+      this.logger.log(`krutrimbox: stopped PRD #${prd.number}; AFK Issue #${issue.number} failed.`);
       return "error";
     }
   }
@@ -240,12 +240,12 @@ export class FactoryRun {
 
     if (!pr) {
       this.logger.log(
-        `Code Factory: no PRD Pull Request found for PRD #${prd.number}; skipping final review.`
+        `krutrimbox: no PRD Pull Request found for PRD #${prd.number}; skipping final review.`
       );
       return;
     }
 
-    this.logger.log(`Code Factory: running final review for PRD #${prd.number}.`);
+    this.logger.log(`krutrimbox: running final review for PRD #${prd.number}.`);
 
     const diff = await this.prdPullRequest.diff(pr.number);
     const prompt = await this.buildFinalReviewPrompt(sequence, diff);
@@ -266,7 +266,7 @@ export class FactoryRun {
     await this.prdPullRequest.routeForReview(pr.number, prd.author.login);
 
     await this.sandbox.removeSandbox({ sandboxName: this.sandboxName });
-    this.logger.log(`Code Factory: removed PRD Sandbox ${this.sandboxName}.`);
+    this.logger.log(`krutrimbox: removed PRD Sandbox ${this.sandboxName}.`);
   }
 
   private async buildFinalReviewPrompt(

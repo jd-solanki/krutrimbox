@@ -13,7 +13,7 @@ export interface RunLog {
   close(): Promise<void>;
 }
 
-// Builds the RunLog for a given PRD. Injected into CodeFactory so tests can swap
+// Builds the RunLog for a given PRD. Injected into Krutrimbox so tests can swap
 // in a silent sink instead of touching the filesystem.
 export type RunLogFactory = (prdNumber: number) => RunLog;
 
@@ -31,7 +31,7 @@ export function createFileRunLogFactory(
 
     const filePath = path.join(dir, `${deterministicPrdSandbox(prdNumber)}--${timestamp()}.log`);
     const stream = createWriteStream(filePath, { flags: "a" });
-    stream.on("error", (error) => terminal.log(`Code Factory: log file ${filePath} error: ${String(error)}`));
+    stream.on("error", (error) => terminal.log(`krutrimbox: log file ${filePath} error: ${String(error)}`));
 
     return {
       stream,

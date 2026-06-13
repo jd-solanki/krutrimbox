@@ -1,22 +1,22 @@
-# Code Factory
+# Krutrimbox
 
-Code Factory is a local orchestrator for GitHub PRDs and their ordered implementation issues. It finds a ready PRD, walks its implementation sequence, delegates AFK work to fresh Codex sessions inside Docker Sandboxes, pauses for human work when needed, and keeps the outer process in charge of GitHub state, commits, pushes, and pull requests.
+Krutrimbox is a code factory which is a local orchestrator for GitHub PRDs and their ordered implementation issues. It finds a ready PRD, walks its implementation sequence, delegates AFK work to fresh Codex sessions inside Docker Sandboxes, pauses for human work when needed, and keeps the outer process in charge of GitHub state, commits, pushes, and pull requests.
 
 This README is written for a new machine setup. It assumes you are comfortable copying terminal commands, but not necessarily familiar with Docker Sandboxes yet.
 
 ## What You Are Setting Up
 
-Code Factory uses three layers:
+krutrimbox uses three layers:
 
 1. Your host machine runs the `kb` Node.js CLI from the `krutrimbox` package.
 2. Docker Sandboxes creates an isolated PRD Sandbox for agent work.
 3. Codex runs inside that sandbox to implement one AFK issue at a time.
 
-The sandbox is intentionally separate from your host working tree. In Docker Sandboxes clone mode, the sandbox gets its own private Git clone. That keeps agent changes away from your current local branch until the outer Code Factory commits and pushes them.
+The sandbox is intentionally separate from your host working tree. In Docker Sandboxes clone mode, the sandbox gets its own private Git clone. That keeps agent changes away from your current local branch until the outer krutrimbox commits and pushes them.
 
 ## Prerequisites
 
-Install these before running Code Factory:
+Install these before running krutrimbox:
 
 - Git
 - GitHub CLI, `gh`
@@ -67,7 +67,7 @@ pnpm test
 
 ## Authenticate GitHub For Host And Sandboxes
 
-Code Factory shells out to `gh` for GitHub state and mutations. Make sure `gh` is logged in and points at the right account:
+krutrimbox shells out to `gh` for GitHub state and mutations. Make sure `gh` is logged in and points at the right account:
 
 ```sh
 gh auth status
@@ -120,7 +120,7 @@ You can inspect network policy activity with:
 sbx policy log
 ```
 
-## Prepare The Code Factory Sandbox Template
+## Prepare krutrimbox Sandbox Template
 
 Docker's stock Codex sandbox image includes Codex and Node.js tooling, but this repository expects `pnpm` to be available directly inside the sandbox. We use a custom Docker Sandboxes template so every fresh PRD Sandbox has the same toolchain.
 
@@ -189,7 +189,7 @@ Remove the smoke sandbox:
 sbx rm --force krutrimbox-smoke
 ```
 
-## Run Code Factory
+## Run krutrimbox
 
 Run one explicit PRD:
 
@@ -216,7 +216,7 @@ kb run --prd 1
 kb run
 ```
 
-Code Factory currently processes only Factory-Owned PRDs authored by `jd-solanki`.
+krutrimbox currently processes only Factory-Owned PRDs authored by `jd-solanki`.
 
 ## Existing Sandboxes After Auth Or Template Changes
 
@@ -265,11 +265,11 @@ This may fail:
 sbx exec krutrimbox-prd-1 -- git status --short --branch
 ```
 
-Without `-w`, `sbx exec` can start in a default directory that is not a Git repository. Code Factory handles this internally by resolving the host repository path and passing it to `sbx exec --workdir`.
+Without `-w`, `sbx exec` can start in a default directory that is not a Git repository. krutrimbox handles this internally by resolving the host repository path and passing it to `sbx exec --workdir`.
 
 ## How Inner Codex Runs Are Authorized
 
-Code Factory launches sandboxed Codex sessions with explicit non-interactive flags:
+krutrimbox launches sandboxed Codex sessions with explicit non-interactive flags:
 
 ```sh
 codex exec --ephemeral --dangerously-bypass-approvals-and-sandbox "<prompt>"
@@ -368,7 +368,7 @@ echo "$(gh auth token)" | sbx secret set krutrimbox-prd-<number> github
 
 ### A sandbox is left behind after a failure
 
-Code Factory intentionally keeps PRD Sandboxes after HITL pauses and failures so you can inspect them.
+krutrimbox intentionally keeps PRD Sandboxes after HITL pauses and failures so you can inspect them.
 
 List sandboxes:
 
@@ -393,4 +393,4 @@ sbx rm --force krutrimbox-prd-<number>
 - Main flow: `docs/factory-flow.md`
 - Sandbox template setup: `docs/sandbox-template.md`
 - Rationale for the custom template: `docs/adr/0012-use-custom-codex-sandbox-template.md`
-- Docker Sandboxes template docs: https://docs.docker.com/ai/sandboxes/customize/templates/
+- Docker Sandboxes template docs: <https://docs.docker.com/ai/sandboxes/customize/templates/>

@@ -1,6 +1,6 @@
 # Sandbox Template Setup
 
-Code Factory PRD Sandboxes use Docker Sandboxes clone mode and a custom Codex template image.
+krutrimbox PRD Sandboxes use Docker Sandboxes clone mode and a custom Codex template image.
 
 ## Why this exists
 

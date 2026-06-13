@@ -1,16 +1,16 @@
 import { Command, Option } from "commander";
-import { runCodeFactory } from "../lib/factory/index";
+import { runKrutrimbox } from "../lib/factory/index";
 
 // Injection seam: the CLI layer only needs these two entry points, so tests can
-// pass a fake dispatch instead of the real CodeFactory orchestration.
+// pass a fake dispatch instead of the real Krutrimbox orchestration.
 export interface CliDispatch {
   runExplicit(prdNumber: number): Promise<void> | void;
   runBatch(): Promise<void> | void;
 }
 
-export function createRunCommand(dispatch: CliDispatch = runCodeFactory): Command {
+export function createRunCommand(dispatch: CliDispatch = runKrutrimbox): Command {
   return new Command("run")
-    .description("Run Code Factory for one PRD or all ready PRDs.")
+    .description("Run krutrimbox for one PRD or all ready PRDs.")
     .addOption(
       new Option("--prd <number>", "run one explicit PRD by issue number").argParser(
         parsePrdNumber

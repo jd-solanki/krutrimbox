@@ -6,7 +6,7 @@
 export const PROMPTS: Record<string, string> = {
   "prompts/afk-issue.md": `# AFK Issue Implementation
 
-You are a Sandboxed Agent implementing exactly one AFK Issue for the Code Factory.
+You are a Sandboxed Agent implementing exactly one AFK Issue for krutrimbox.
 
 ## Non-Negotiable Boundaries
 
@@ -26,7 +26,7 @@ Before implementation, verify that every Blocking Issue listed for the current A
 
 - Work on the PRD Branch: \`{{prd_branch}}\`.
 - Leave the completed file changes in the working tree.
-- The outer Code Factory will create the commit and push the PRD Branch.
+- The outer krutrimbox will create the commit and push the PRD Branch.
 
 ## Parent PRD
 
@@ -46,11 +46,11 @@ Before implementation, verify that every Blocking Issue listed for the current A
 
 ## Completion Response
 
-When finished, report what changed and any important notes for the outer Code Factory.
+When finished, report what changed and any important notes for the outer krutrimbox.
 `,
-  "prompts/final-review.md": `# Code Factory Final Review
+  "prompts/final-review.md": `# krutrimbox Final Review
 
-You are reviewing the completed PRD Pull Request for the Code Factory.
+You are reviewing the completed PRD Pull Request for krutrimbox.
 
 ## Review Boundaries
 
@@ -76,7 +76,7 @@ Look for:
 Use this structure:
 
 \`\`\`md
-## Code Factory Review
+## krutrimbox Review
 
 ### Findings
 

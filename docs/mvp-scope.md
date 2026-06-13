@@ -1,11 +1,11 @@
 # MVP Scope
 
-The MVP proves the Code Factory orchestration loop before tightening agent verification.
+The MVP proves krutrimbox orchestration loop before tightening agent verification.
 
 ## In Scope
 
-- Run the Code Factory against an explicit PRD number when the PRD is authored by `jd-solanki`.
-- Run the Code Factory in Batch Run mode to discover open PRDs authored by `jd-solanki` and labeled `PRD` and `ready-for-agent`, then process them sequentially in issue-number order.
+- Run krutrimbox against an explicit PRD number when the PRD is authored by `jd-solanki`.
+- Run krutrimbox in Batch Run mode to discover open PRDs authored by `jd-solanki` and labeled `PRD` and `ready-for-agent`, then process them sequentially in issue-number order.
 - Provide `kb run --prd <number>` for Explicit Runs and `kb run` for Batch Runs.
 - Assume the CLI is run from the target repository root.
 - Use Docker Sandbox clone mode so PRD Branch checkout, file changes, commits, and pushes happen inside the PRD Sandbox rather than the host working tree.

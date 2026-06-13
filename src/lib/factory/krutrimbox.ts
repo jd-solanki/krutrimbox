@@ -16,7 +16,7 @@ import { createFileRunLogFactory, type RunLogFactory } from "./run-log";
 import { CommandSandboxRunner, type SandboxRunner } from "./sandbox-runner";
 import { BundledTemplateRenderer, type TemplateRenderer } from "./template-renderer";
 
-export interface CodeFactoryDependencies {
+export interface KrutrimboxDependencies {
   github?: GitHubClient;
   sandbox?: SandboxRunner;
   lockStore?: PrdLockStore;
@@ -34,14 +34,14 @@ type DispatchOutcome = FactoryRunOutcome | "skipped";
 // The top-level orchestrator: discovers Factory-Owned PRDs and dispatches each
 // one. Dependencies are injected for tests; in production the constructor wires
 // the file/command-backed implementations from `cwd`.
-export class CodeFactory {
+export class Krutrimbox {
   private readonly github: GitHubClient;
   private readonly lockStore: PrdLockStore;
   private readonly logger: Pick<Console, "log">;
   private readonly openRunLog: RunLogFactory;
   private readonly runDependencies: FactoryRunDependencies;
 
-  public constructor(githubOrDependencies: GitHubClient | CodeFactoryDependencies = {}) {
+  public constructor(githubOrDependencies: GitHubClient | KrutrimboxDependencies = {}) {
     const dependencies = isGitHubClient(githubOrDependencies)
       ? { github: githubOrDependencies }
       : githubOrDependencies;
@@ -72,20 +72,20 @@ export class CodeFactory {
 
     if (!isFactoryOwnedPrd(prd)) {
       this.logger.log(
-        `Code Factory: skipping PRD #${prd.number}; author ${prd.author.login} is not ${FACTORY_OWNER}.`
+        `krutrimbox: skipping PRD #${prd.number}; author ${prd.author.login} is not ${FACTORY_OWNER}.`
       );
       return;
     }
 
-    this.logger.log(`Code Factory: starting Explicit Run for PRD #${prd.number}.`);
-    this.logger.log(`Code Factory: processing only Factory-Owned PRDs by ${FACTORY_OWNER}.`);
+    this.logger.log(`krutrimbox: starting Explicit Run for PRD #${prd.number}.`);
+    this.logger.log(`krutrimbox: processing only Factory-Owned PRDs by ${FACTORY_OWNER}.`);
     await this.dispatch(prd);
   }
 
   public async runBatch(): Promise<void> {
-    this.logger.log("Code Factory: starting Batch Run for ready PRDs.");
+    this.logger.log("krutrimbox: starting Batch Run for ready PRDs.");
     await this.github.ensureRequiredLabels();
-    this.logger.log(`Code Factory: discovering Factory-Owned PRDs by ${FACTORY_OWNER}.`);
+    this.logger.log(`krutrimbox: discovering Factory-Owned PRDs by ${FACTORY_OWNER}.`);
 
     const prds = [...await this.github.listReadyPrds(FACTORY_OWNER)]
       .sort((left, right) => left.number - right.number);
@@ -104,20 +104,20 @@ export class CodeFactory {
   // PRD Branch and PRD Sandbox.
   private async dispatch(prd: GitHubIssue): Promise<DispatchOutcome> {
     if (prd.state !== "OPEN") {
-      this.logger.log(`Code Factory: skipping PRD #${prd.number}; PRD is ${prd.state}.`);
+      this.logger.log(`krutrimbox: skipping PRD #${prd.number}; PRD is ${prd.state}.`);
       return "skipped";
     }
 
     const lock = await this.lockStore.acquire(prd.number);
 
     if (!lock) {
-      this.logger.log(`Code Factory: skipping PRD #${prd.number}; PRD is already locked.`);
+      this.logger.log(`krutrimbox: skipping PRD #${prd.number}; PRD is already locked.`);
       return "skipped";
     }
 
     const runLog = this.openRunLog(prd.number);
     if (runLog.filePath) {
-      this.logger.log(`Code Factory: writing PRD #${prd.number} logs to ${runLog.filePath}.`);
+      this.logger.log(`krutrimbox: writing PRD #${prd.number} logs to ${runLog.filePath}.`);
     }
 
     try {
@@ -139,7 +139,7 @@ export class CodeFactory {
     }
 
     this.logger.log(
-      `Code Factory: Batch Run finished; processed ${outcomes.length} PRD(s): `
+      `krutrimbox: Batch Run finished; processed ${outcomes.length} PRD(s): `
       + `${tally.completed} completed, ${tally.paused} paused, `
       + `${tally["issue-error"]} errored, ${tally.skipped} skipped.`
     );
@@ -150,8 +150,8 @@ function isFactoryOwnedPrd(prd: GitHubIssue): boolean {
   return prd.author.login === FACTORY_OWNER;
 }
 
-function isGitHubClient(value: GitHubClient | CodeFactoryDependencies): value is GitHubClient {
+function isGitHubClient(value: GitHubClient | KrutrimboxDependencies): value is GitHubClient {
   return "ensureRequiredLabels" in value && "getIssue" in value;
 }
 
-export const runCodeFactory = new CodeFactory();
+export const runKrutrimbox = new Krutrimbox();

@@ -12,7 +12,7 @@ export function createProgram(dispatch?: CliDispatch): Command {
 
   program
     .name("kb")
-    .description("Run Code Factory orchestration for ready PRDs.")
+    .description("Run krutrimbox orchestration for ready PRDs.")
     .version(packageJson.version);
 
   program.addCommand(createRunCommand(dispatch));

@@ -76,7 +76,7 @@ export class CommandSandboxRunner {
       "git",
       "commit",
       "-m",
-      "chore: code factory implementation",
+      "chore: krutrimbox implementation",
       "-m",
       `Refs #${input.issueNumber}`
     ]);

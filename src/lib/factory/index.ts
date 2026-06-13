@@ -1,5 +1,5 @@
-// Public barrel for the Code Factory. The orchestration is split into focused
-// modules that relate by composition: CodeFactory builds a FactoryRun per locked
+// Public barrel for krutrimbox. The orchestration is split into focused
+// modules that relate by composition: Krutrimbox builds a FactoryRun per locked
 // PRD, which composes a PrdPullRequest and the sandbox / lock / template classes
 // behind their injection seams (the Pick<Class, ...> types each module exports).
 export * from "./constants";

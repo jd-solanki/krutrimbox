@@ -47,7 +47,7 @@ export class PrdPullRequest {
     }
 
     const created = await this.github.createDraftPullRequest({
-      title: `Code Factory PRD #${this.prd.number}: ${this.prd.title}`,
+      title: `krutrimbox PRD #${this.prd.number}: ${this.prd.title}`,
       body,
       head: this.branchName,
       base: await this.github.getDefaultBranch(),
@@ -59,7 +59,7 @@ export class PrdPullRequest {
   public async routeForReview(pullRequestNumber: number, prdAuthor: string): Promise<void> {
     await this.github.markPullRequestReadyForReview(pullRequestNumber);
     this.logger.log(
-      `Code Factory: marked PRD Pull Request #${pullRequestNumber} ready for review.`
+      `krutrimbox: marked PRD Pull Request #${pullRequestNumber} ready for review.`
     );
 
     const prAuthor = await this.github.getAuthenticatedUser();
@@ -67,15 +67,15 @@ export class PrdPullRequest {
     if (prdAuthor !== prAuthor) {
       await this.github.requestPullRequestReview(pullRequestNumber, prdAuthor);
       this.logger.log(
-        `Code Factory: requested review from ${prdAuthor} for PRD Pull Request #${pullRequestNumber}.`
+        `krutrimbox: requested review from ${prdAuthor} for PRD Pull Request #${pullRequestNumber}.`
       );
       return;
     }
 
-    const tagBody = `@${prdAuthor} the Code Factory has completed all Implementation Issues for PRD #${this.prd.number}. Please review the PR.`;
+    const tagBody = `@${prdAuthor} krutrimbox has completed all Implementation Issues for PRD #${this.prd.number}. Please review the PR.`;
     await this.github.createIssueComment(pullRequestNumber, tagBody);
     this.logger.log(
-      `Code Factory: tagged ${prdAuthor} in PRD Pull Request #${pullRequestNumber} (self-review).`
+      `krutrimbox: tagged ${prdAuthor} in PRD Pull Request #${pullRequestNumber} (self-review).`
     );
   }
 

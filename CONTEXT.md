@@ -1,19 +1,19 @@
-# Code Factory
+# Krutrimbox
 
-Code Factory is the context for turning approved PRDs and their ordered implementation issues into coordinated agent work, human handoffs, and final review routing.
+Krutrimbox is a code factory that turns approved PRDs and their ordered implementation issues into coordinated agent work, human handoffs, and final review routing.
 
 ## Language
 
-**Code Factory**:
+**krutrimbox**:
 A GitHub-driven orchestrator that finds ready PRDs, walks their ordered sub-issues, delegates AFK issues to fresh isolated agent sessions, pauses on HITL issues, and coordinates review handoffs.
-_Avoid_: autonomous code factory, factory, coding agent
+_Avoid_: autonomous krutrimbox, factory, coding agent
 
 **Sandboxed Agent**:
 The fresh Codex session delegated to implement one AFK Issue inside the PRD Sandbox. It changes code and reports completion, but does not own GitHub issue state.
 _Avoid_: worker, implementer, inner agent
 
 **Read-Only GitHub Access**:
-Permission for a Sandboxed Agent to inspect GitHub state with non-mutating GitHub CLI commands while leaving issue, pull request, and label mutations to the Code Factory.
+Permission for a Sandboxed Agent to inspect GitHub state with non-mutating GitHub CLI commands while leaving issue, pull request, and label mutations to krutrimbox.
 _Avoid_: GitHub access, gh permissions, live state
 
 **PRD**:
@@ -21,7 +21,7 @@ A GitHub issue containing an approved product and implementation plan plus its o
 _Avoid_: spec, plan, parent ticket
 
 **Factory Run**:
-One execution attempt by the Code Factory against a PRD using the current state of its implementation issues. A PRD can have multiple Factory Runs when human input pauses progress and later unblocks the next actionable issue.
+One execution attempt by krutrimbox against a PRD using the current state of its implementation issues. A PRD can have multiple Factory Runs when human input pauses progress and later unblocks the next actionable issue.
 _Avoid_: trigger, retry, loop
 
 **Explicit Run**:
@@ -33,11 +33,11 @@ A Factory Run mode that discovers open PRDs labeled `PRD` and `ready-for-agent` 
 _Avoid_: sweep, queue run, all run
 
 **Implementation Issue**:
-A PRD sub-issue, linked to its PRD through GitHub's native sub-issue relationship, that represents one ordered slice of work for a PRD. An Implementation Issue is either agent-ready or requires human input before the Code Factory can continue.
+A PRD sub-issue, linked to its PRD through GitHub's native sub-issue relationship, that represents one ordered slice of work for a PRD. An Implementation Issue is either agent-ready or requires human input before krutrimbox can continue.
 _Avoid_: task, ticket, child issue
 
 **Implementation Sequence**:
-The ordered set of Implementation Issues that the Code Factory evaluates and completes for a PRD.
+The ordered set of Implementation Issues that krutrimbox evaluates and completes for a PRD.
 _Avoid_: issue list, checklist, queue
 
 **Blocking Issue**:
@@ -49,11 +49,11 @@ An Implementation Issue labeled `ready-for-agent`, meaning it is ready for an ag
 _Avoid_: autonomous issue, agent issue, ready issue
 
 **HITL Issue**:
-An Implementation Issue labeled `ready-for-human`, meaning the Code Factory must pause until a human provides the required input or completes the required human work.
+An Implementation Issue labeled `ready-for-human`, meaning krutrimbox must pause until a human provides the required input or completes the required human work.
 _Avoid_: human issue, blocked issue, manual issue
 
 **Resolved Issue**:
-An Implementation Issue that is closed in GitHub. The Code Factory treats closed Implementation Issues as already handled when a later Factory Run resumes a PRD.
+An Implementation Issue that is closed in GitHub. krutrimbox treats closed Implementation Issues as already handled when a later Factory Run resumes a PRD.
 _Avoid_: done issue, completed task, skipped issue
 
 **Issue Reference Footer**:
@@ -69,11 +69,11 @@ The single pull request for a PRD Branch that accumulates all AFK Issue commits 
 _Avoid_: implementation PR, issue PR, factory PR
 
 **PRD Pull Request Body**:
-The deterministic pull request description generated and maintained by the Code Factory from current PRD and Implementation Issue state.
+The deterministic pull request description generated and maintained by krutrimbox from current PRD and Implementation Issue state.
 _Avoid_: PR notes, agent summary, pull request description
 
 **Authenticated GitHub User**:
-The GitHub account used by the Code Factory to create branches, commits, pull requests, comments, and issue state changes.
+The GitHub account used by krutrimbox to create branches, commits, pull requests, comments, and issue state changes.
 _Avoid_: bot, service account, actor
 
 **PR Author**:
@@ -85,11 +85,11 @@ The human GitHub user who created the parent PRD issue and owns acceptance of th
 _Avoid_: reporter, requester, owner
 
 **Factory-Owned PRD**:
-A PRD authored by `jd-solanki`, making it eligible for Code Factory processing.
+A PRD authored by `jd-solanki`, making it eligible for krutrimbox processing.
 _Avoid_: eligible PRD, owned issue, my PRD
 
 **Final Reviewer**:
-The human reviewer selected for the completed PRD Pull Request after the Code Factory posts its review.
+The human reviewer selected for the completed PRD Pull Request after krutrimbox posts its review.
 _Avoid_: PR author, approver, maintainer
 
 **Sandbox Success**:
@@ -97,11 +97,11 @@ The condition where a sandboxed agent session exits successfully after implement
 _Avoid_: agent done, run passed, implementation complete
 
 **PRD Sandbox**:
-The Docker sandbox used by the Code Factory while delivering one PRD. It may be reused across AFK Issues for code and dependency continuity, while Codex sessions inside it remain fresh per issue.
+The Docker sandbox used by krutrimbox while delivering one PRD. It may be reused across AFK Issues for code and dependency continuity, while Codex sessions inside it remain fresh per issue.
 _Avoid_: container, VM, issue sandbox
 
-**Code Factory Sandbox Template**:
-The custom Docker Sandboxes template image used for PRD Sandboxes. It extends Docker's Codex sandbox template with repository-required tools, currently `pnpm`, so fresh Sandboxed Agent sessions have the same package-manager surface the Code Factory expects.
+**krutrimbox Sandbox Template**:
+The custom Docker Sandboxes template image used for PRD Sandboxes. It extends Docker's Codex sandbox template with repository-required tools, currently `pnpm`, so fresh Sandboxed Agent sessions have the same package-manager surface krutrimbox expects.
 _Avoid_: Dockerfile, base image, custom container
 
 **Sandbox Template Store**:
@@ -117,5 +117,5 @@ A local lock that prevents more than one Factory Run from processing the same PR
 _Avoid_: mutex, concurrency guard, run lock
 
 **Factory Comment Marker**:
-A hidden HTML marker in a Code Factory comment that lets later Factory Runs update or skip the same comment instead of posting duplicates.
+A hidden HTML marker in a krutrimbox comment that lets later Factory Runs update or skip the same comment instead of posting duplicates.
 _Avoid_: comment tag, marker, dedupe token
