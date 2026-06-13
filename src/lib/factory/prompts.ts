@@ -25,6 +25,8 @@ Before implementation, verify that every Blocking Issue listed for the current A
 ## Git Requirements
 
 - Work on the PRD Branch: \`{{prd_branch}}\`.
+- Before changing files, inspect the current branch and working tree state with git.
+- If earlier failed attempts already left work for this same AFK Issue, understand and continue that work instead of starting over or overwriting it.
 - Leave the completed file changes in the working tree.
 - The outer krutrimbox will create the commit and push the PRD Branch.
 

@@ -55,7 +55,37 @@ export class CommandSandboxRunner {
   }
 
   public async checkoutBranch(input: SandboxBranchInput): Promise<void> {
-    await this.exec(input.sandboxName, ["git", "checkout", "-B", input.branchName]);
+    const localBranch = await this.exec(input.sandboxName, [
+      "git",
+      "branch",
+      "--list",
+      input.branchName
+    ]);
+    const remoteBranch = await this.exec(input.sandboxName, [
+      "git",
+      "ls-remote",
+      "--heads",
+      "origin",
+      input.branchName
+    ]);
+
+    if (localBranch.trim()) {
+      await this.exec(input.sandboxName, ["git", "checkout", input.branchName]);
+    } else {
+      await this.exec(input.sandboxName, ["git", "checkout", "-B", input.branchName]);
+    }
+
+    if (remoteBranch.trim()) {
+      await this.exec(input.sandboxName, [
+        "git",
+        "pull",
+        "--no-rebase",
+        "--autostash",
+        "--no-edit",
+        "origin",
+        input.branchName
+      ]);
+    }
   }
 
   public async runAfkIssue(input: SandboxAfkInput): Promise<void> {
