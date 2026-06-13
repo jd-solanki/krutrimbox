@@ -4,7 +4,10 @@
 // BundledTemplateRenderer. Keyed by their historical file paths.
 
 export const TEMPLATES: Record<string, string> = {
-  "templates/pr-body.md": `## Parent PRD
+  "templates/pr-body.md": `> [!NOTE]  
+>  Generated and maintained by krutrimbox.
+
+## Parent PRD
 
 Closes #{{prd_number}}
 
@@ -12,12 +15,10 @@ Closes #{{prd_number}}
 
 {{implementation_issue_checklist}}
 
-## krutrimbox
+## Krutrimbox
 
 Branch: \`{{prd_branch}}\`
 Sandbox: \`{{prd_sandbox}}\`
-
-Generated and maintained by krutrimbox.
 `,
   "templates/hitlpause-comment.md": `<!-- krutrimbox:hitl-prd-{{prd_number}}-issue-{{issue_number}} -->
 
