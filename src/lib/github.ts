@@ -97,6 +97,9 @@ export function createGitHubCliClient(
   }
 
   async function getRepository(): Promise<RepositoryInfo> {
+    // Resolve once and pass `--repo` explicitly on issue commands: after a repo
+    // rename, gh's implicit issue context can follow stale git remote metadata
+    // even when `gh repo view` resolves the canonical repository.
     repository ??= parseJson<RepositoryInfo>(
       await runGh(["repo", "view", "--json", "owner,name"])
     );
@@ -149,12 +152,16 @@ export function createGitHubCliClient(
     },
 
     async getIssue(issueNumber: number): Promise<GitHubIssue> {
+      const repo = await getRepository();
+
       return parseIssue(
         parseJson<RawGhIssue>(
           await runGh([
             "issue",
             "view",
             String(issueNumber),
+            "--repo",
+            formatRepository(repo),
             "--json",
             "number,title,body,state,author,labels"
           ])
@@ -163,10 +170,13 @@ export function createGitHubCliClient(
     },
 
     async listReadyPrds(author: string): Promise<GitHubIssue[]> {
+      const repo = await getRepository();
       const issues = parseJson<RawGhIssue[]>(
         await runGh([
           "issue",
           "list",
+          "--repo",
+          formatRepository(repo),
           "--state",
           "open",
           "--author",
@@ -182,7 +192,9 @@ export function createGitHubCliClient(
         ])
       );
 
-      return issues.map(parseIssue).sort((left, right) => left.number - right.number);
+      return issues
+        .map(parseIssue)
+        .sort((left, right) => left.number - right.number);
     },
 
     async getAttachedSubIssues(prdNumber: number): Promise<GitHubIssue[]> {
@@ -496,6 +508,10 @@ function parsePullRequest(pullRequest: RawPullRequest): GitHubPullRequest {
     number: pullRequest.number,
     labels: pullRequest.labels.map((label) => ({ name: label.name }))
   };
+}
+
+function formatRepository(repo: RepositoryInfo): string {
+  return `${repo.owner.login}/${repo.name}`;
 }
 
 function parseJson<T>(value: string): T {

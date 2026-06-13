@@ -101,9 +101,15 @@ describe("GitHubCliClient", () => {
     const runner = fixtureRunner(
       new Map([
         [
+          commandKey("gh", ["repo", "view", "--json", "owner,name"]),
+          JSON.stringify({ owner: { login: "jd-solanki" }, name: "krutrimbox" })
+        ],
+        [
           commandKey("gh", [
             "issue",
             "list",
+            "--repo",
+            "jd-solanki/krutrimbox",
             "--state",
             "open",
             "--author",
@@ -131,9 +137,15 @@ describe("GitHubCliClient", () => {
     expect(prds.map((issue) => issue.number)).toEqual([3, 9]);
     expect(runner.calls[0]).toEqual({
       command: "gh",
+      args: ["repo", "view", "--json", "owner,name"]
+    });
+    expect(runner.calls[1]).toEqual({
+      command: "gh",
       args: [
         "issue",
         "list",
+        "--repo",
+        "jd-solanki/krutrimbox",
         "--state",
         "open",
         "--author",
