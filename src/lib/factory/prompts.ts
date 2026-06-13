@@ -78,7 +78,7 @@ Look for:
 Use this structure:
 
 \`\`\`md
-## krutrimbox Review
+## Krutrimbox Review
 
 ### Findings
 
