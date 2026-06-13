@@ -19,7 +19,7 @@ Sandbox: \`{{prd_sandbox}}\`
 
 Generated and maintained by Code Factory.
 `,
-  "templates/hitlpause-comment.md": `<!-- code-factory:hitl-prd-{{prd_number}}-issue-{{issue_number}} -->
+  "templates/hitlpause-comment.md": `<!-- krutrimbox:hitl-prd-{{prd_number}}-issue-{{issue_number}} -->
 
 @{{prd_author}} Code Factory is paused for PRD #{{prd_number}}.
 
@@ -30,10 +30,10 @@ The next required issue is HITL:
 Please resolve the HITL issue and close it, then rerun Code Factory for this PRD.
 
 \`\`\`sh
-kc run --prd {{prd_number}}
+kb run --prd {{prd_number}}
 \`\`\`
 `,
-  "templates/afk-error-comment.md": `<!-- code-factory:afk-error-issue-{{issue_number}} -->
+  "templates/afk-error-comment.md": `<!-- krutrimbox:afk-error-issue-{{issue_number}} -->
 
 Code Factory could not complete this AFK issue.
 
@@ -52,7 +52,7 @@ Factory context:
 The issue remains open. Inspect the sandbox if needed, then rerun:
 
 \`\`\`sh
-kc run --prd {{prd_number}}
+kb run --prd {{prd_number}}
 \`\`\`
 
 Cleanup, if you decide the sandbox is no longer needed:
@@ -61,7 +61,7 @@ Cleanup, if you decide the sandbox is no longer needed:
 sbx rm {{prd_sandbox}}
 \`\`\`
 `,
-  "templates/final-review-comment.md": `<!-- code-factory:final-review-prd-{{prd_number}} -->
+  "templates/final-review-comment.md": `<!-- krutrimbox:final-review-prd-{{prd_number}} -->
 
 {{review_body}}
 `,

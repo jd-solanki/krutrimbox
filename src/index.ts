@@ -11,7 +11,7 @@ export function createProgram(dispatch?: CliDispatch): Command {
   const program = new Command();
 
   program
-    .name("kc")
+    .name("kb")
     .description("Run Code Factory orchestration for ready PRDs.")
     .version(packageJson.version);
 

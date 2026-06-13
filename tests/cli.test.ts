@@ -8,12 +8,12 @@ function createTestDispatch(): CliDispatch {
   };
 }
 
-describe("code-factory CLI", () => {
+describe("krutrimbox CLI", () => {
   test("dispatches an Explicit Run with a numeric PRD number", async () => {
     const dispatch = createTestDispatch();
     const program = createProgram(dispatch);
 
-    await program.parseAsync(["node", "code-factory", "run", "--prd", "42"]);
+    await program.parseAsync(["node", "kb", "run", "--prd", "42"]);
 
     expect(dispatch.runExplicit).toHaveBeenCalledWith(42);
     expect(dispatch.runBatch).not.toHaveBeenCalled();
@@ -23,7 +23,7 @@ describe("code-factory CLI", () => {
     const dispatch = createTestDispatch();
     const program = createProgram(dispatch);
 
-    await program.parseAsync(["node", "code-factory", "run"]);
+    await program.parseAsync(["node", "kb", "run"]);
 
     expect(dispatch.runBatch).toHaveBeenCalledOnce();
     expect(dispatch.runExplicit).not.toHaveBeenCalled();

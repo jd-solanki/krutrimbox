@@ -18,7 +18,7 @@ export interface RunLog {
 export type RunLogFactory = (prdNumber: number) => RunLog;
 
 // Production factory: each run writes to
-// `.code-factory/logs/code-factory-prd-<num>--<stamp>.log`, appending so a
+// `.krutrimbox/logs/krutrimbox-prd-<num>--<stamp>.log`, appending so a
 // retried run extends its file rather than truncating. Status lines are also
 // forwarded to `terminal` so progress still shows while noise stays in the file.
 export function createFileRunLogFactory(
@@ -26,7 +26,7 @@ export function createFileRunLogFactory(
   terminal: Pick<Console, "log"> = console
 ): RunLogFactory {
   return (prdNumber) => {
-    const dir = path.join(cwd, ".code-factory", "logs");
+    const dir = path.join(cwd, ".krutrimbox", "logs");
     mkdirSync(dir, { recursive: true });
 
     const filePath = path.join(dir, `${deterministicPrdSandbox(prdNumber)}--${timestamp()}.log`);

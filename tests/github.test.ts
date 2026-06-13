@@ -155,7 +155,7 @@ describe("GitHubCliClient", () => {
       new Map([
         [
           commandKey("gh", ["repo", "view", "--json", "owner,name"]),
-          JSON.stringify({ owner: { login: "jd-solanki" }, name: "code-factory" })
+          JSON.stringify({ owner: { login: "jd-solanki" }, name: "krutrimbox" })
         ],
         [
           "graphql",
@@ -204,7 +204,7 @@ describe("GitHubCliClient", () => {
       "-F",
       "owner=jd-solanki",
       "-F",
-      "repo=code-factory",
+      "repo=krutrimbox",
       "-F",
       "number=1"
     ]);
@@ -215,16 +215,16 @@ describe("GitHubCliClient", () => {
       new Map([
         [
           commandKey("gh", ["repo", "view", "--json", "owner,name"]),
-          JSON.stringify({ owner: { login: "jd-solanki" }, name: "code-factory" })
+          JSON.stringify({ owner: { login: "jd-solanki" }, name: "krutrimbox" })
         ],
         [
-          commandKey("gh", ["api", "repos/jd-solanki/code-factory/issues/4/comments"]),
+          commandKey("gh", ["api", "repos/jd-solanki/krutrimbox/issues/4/comments"]),
           JSON.stringify([{ id: 123, body: "<!-- marker -->\nold" }])
         ],
         [
           commandKey("gh", [
             "api",
-            "repos/jd-solanki/code-factory/issues/4/comments",
+            "repos/jd-solanki/krutrimbox/issues/4/comments",
             "-f",
             "body=new comment"
           ]),
@@ -233,7 +233,7 @@ describe("GitHubCliClient", () => {
         [
           commandKey("gh", [
             "api",
-            "repos/jd-solanki/code-factory/issues/comments/123",
+            "repos/jd-solanki/krutrimbox/issues/comments/123",
             "-X",
             "PATCH",
             "-f",
@@ -258,13 +258,13 @@ describe("GitHubCliClient", () => {
       },
       {
         command: "gh",
-        args: ["api", "repos/jd-solanki/code-factory/issues/4/comments"]
+        args: ["api", "repos/jd-solanki/krutrimbox/issues/4/comments"]
       },
       {
         command: "gh",
         args: [
           "api",
-          "repos/jd-solanki/code-factory/issues/4/comments",
+          "repos/jd-solanki/krutrimbox/issues/4/comments",
           "-f",
           "body=new comment"
         ]
@@ -273,7 +273,7 @@ describe("GitHubCliClient", () => {
         command: "gh",
         args: [
           "api",
-          "repos/jd-solanki/code-factory/issues/comments/123",
+          "repos/jd-solanki/krutrimbox/issues/comments/123",
           "-X",
           "PATCH",
           "-f",
@@ -298,11 +298,11 @@ describe("GitHubCliClient", () => {
             "--base",
             "main",
             "--head",
-            "code-factory/prd-1",
+            "krutrimbox/prd-1",
             "--label",
             "PRD"
           ]),
-          "https://github.com/jd-solanki/code-factory/pull/8\n"
+          "https://github.com/jd-solanki/krutrimbox/pull/8\n"
         ],
         [
           commandKey("gh", [
@@ -311,7 +311,7 @@ describe("GitHubCliClient", () => {
             "--state",
             "all",
             "--head",
-            "code-factory/prd-1",
+            "krutrimbox/prd-1",
             "--limit",
             "10",
             "--json",
@@ -328,7 +328,7 @@ describe("GitHubCliClient", () => {
         title: "Code Factory PRD #1: PRD",
         body: "body",
         base: "main",
-        head: "code-factory/prd-1",
+        head: "krutrimbox/prd-1",
         labels: ["PRD"]
       })
     ).resolves.toEqual({ number: 8, labels: [{ name: "PRD" }] });
@@ -347,7 +347,7 @@ describe("GitHubCliClient", () => {
           "--base",
           "main",
           "--head",
-          "code-factory/prd-1",
+          "krutrimbox/prd-1",
           "--label",
           "PRD"
         ]
@@ -360,7 +360,7 @@ describe("GitHubCliClient", () => {
           "--state",
           "all",
           "--head",
-          "code-factory/prd-1",
+          "krutrimbox/prd-1",
           "--limit",
           "10",
           "--json",

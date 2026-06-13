@@ -30,7 +30,7 @@ If a PRD is already locked, the Code Factory skips it and continues.
 
 The Code Factory uses Docker Sandbox clone mode for PRD Sandboxes. The host repository is the launch/source repository, but PRD Branch checkout, file changes, commits, and pushes happen inside the PRD Sandbox private clone rather than the host working tree.
 
-PRD Sandboxes are created from the Code Factory Sandbox Template, currently `docker.io/library/code-factory-codex:pnpm`, so Sandboxed Agents have repository-required tooling such as `pnpm` available before implementation starts. See `docs/sandbox-template.md` for machine setup and template loading instructions.
+PRD Sandboxes are created from the Code Factory Sandbox Template, currently `docker.io/library/krutrimbox-codex:pnpm`, so Sandboxed Agents have repository-required tooling such as `pnpm` available before implementation starts. See `docs/sandbox-template.md` for machine setup and template loading instructions.
 
 The outer TypeScript Code Factory runs implementation git commands inside the PRD Sandbox, not on the host. This includes branch checkout, staging, committing, and pushing.
 
@@ -80,7 +80,7 @@ The Code Factory maintains a deterministic PRD Pull Request Body from current Gi
 
 The PRD Pull Request is created as a draft and remains draft while any Implementation Issue remains open.
 
-The PRD Branch name is deterministic: `code-factory/prd-<prd-number>`.
+The PRD Branch name is deterministic: `krutrimbox/prd-<prd-number>`.
 
 The PRD Pull Request title uses a fixed Code Factory format: `Code Factory PRD #<prd-number>: <prd-title>`.
 
@@ -132,4 +132,4 @@ The Code Factory never merges the PRD Branch into the default branch. A human pe
 
 ## Sandbox Cleanup
 
-The Factory Run uses a deterministic PRD Sandbox name derived from the PRD issue number: `code-factory-prd-<prd-number>`. When the PRD completes and final review routing is done, the Code Factory removes the PRD Sandbox automatically. When the Factory Run exits for HITL or an error, it keeps the PRD Sandbox for debugging and includes the cleanup command in the relevant comment or log.
+The Factory Run uses a deterministic PRD Sandbox name derived from the PRD issue number: `krutrimbox-prd-<prd-number>`. When the PRD completes and final review routing is done, the Code Factory removes the PRD Sandbox automatically. When the Factory Run exits for HITL or an error, it keeps the PRD Sandbox for debugging and includes the cleanup command in the relevant comment or log.

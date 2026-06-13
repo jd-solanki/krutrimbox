@@ -6,7 +6,7 @@ The MVP proves the Code Factory orchestration loop before tightening agent verif
 
 - Run the Code Factory against an explicit PRD number when the PRD is authored by `jd-solanki`.
 - Run the Code Factory in Batch Run mode to discover open PRDs authored by `jd-solanki` and labeled `PRD` and `ready-for-agent`, then process them sequentially in issue-number order.
-- Provide `code-factory run --prd <number>` for Explicit Runs and `code-factory run` for Batch Runs.
+- Provide `kb run --prd <number>` for Explicit Runs and `kb run` for Batch Runs.
 - Assume the CLI is run from the target repository root.
 - Use Docker Sandbox clone mode so PRD Branch checkout, file changes, commits, and pushes happen inside the PRD Sandbox rather than the host working tree.
 - Use GitHub CLI as the GitHub integration layer. Missing required external commands fail naturally through command execution.

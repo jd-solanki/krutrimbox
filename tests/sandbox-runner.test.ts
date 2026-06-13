@@ -9,14 +9,14 @@ describe("CommandSandboxRunner", () => {
       calls.push({ command, args });
       return "";
     };
-    const sandbox = new CommandSandboxRunner(runner, "/workspace/code-factory", "template");
+    const sandbox = new CommandSandboxRunner(runner, "/workspace/krutrimbox", "template");
 
-    await sandbox.removeSandbox({ sandboxName: "code-factory-prd-1" });
+    await sandbox.removeSandbox({ sandboxName: "krutrimbox-prd-1" });
 
     expect(calls).toEqual([
       {
         command: "sbx",
-        args: ["rm", "--force", "code-factory-prd-1"]
+        args: ["rm", "--force", "krutrimbox-prd-1"]
       }
     ]);
   });

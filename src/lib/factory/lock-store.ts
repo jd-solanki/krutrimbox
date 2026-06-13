@@ -5,13 +5,13 @@ export type PrdLock = {
   release(): Promise<void>;
 };
 
-// Acquires PRD Locks as exclusive lock directories under `.code-factory/locks`.
+// Acquires PRD Locks as exclusive lock directories under `.krutrimbox/locks`.
 // `acquire` returns null when the lock already exists (another run holds it).
 export class FilePrdLockStore {
   public constructor(private readonly cwd: string) {}
 
   public async acquire(prdNumber: number): Promise<PrdLock | null> {
-    const locksDir = path.join(this.cwd, ".code-factory", "locks");
+    const locksDir = path.join(this.cwd, ".krutrimbox", "locks");
     const lockDir = path.join(locksDir, `prd-${prdNumber}.lock`);
 
     await mkdir(locksDir, { recursive: true });

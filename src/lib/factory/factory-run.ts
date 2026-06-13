@@ -294,15 +294,15 @@ export class FactoryRun {
 }
 
 function hitlMarker(prdNumber: number, issueNumber: number): string {
-  return `<!-- code-factory:hitl-prd-${prdNumber}-issue-${issueNumber} -->`;
+  return `<!-- krutrimbox:hitl-prd-${prdNumber}-issue-${issueNumber} -->`;
 }
 
 function afkErrorMarker(issueNumber: number): string {
-  return `<!-- code-factory:afk-error-issue-${issueNumber} -->`;
+  return `<!-- krutrimbox:afk-error-issue-${issueNumber} -->`;
 }
 
 function finalReviewMarker(prdNumber: number): string {
-  return `<!-- code-factory:final-review-prd-${prdNumber} -->`;
+  return `<!-- krutrimbox:final-review-prd-${prdNumber} -->`;
 }
 
 function formatError(error: unknown): string {

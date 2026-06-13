@@ -25,7 +25,7 @@ import type {
 } from "../src/lib/github";
 
 // Replace the file-backed run log with a silent, in-memory sink so CodeFactory
-// tests never touch `.code-factory/logs`. `filePath: null` also suppresses the
+// tests never touch `.krutrimbox/logs`. `filePath: null` also suppresses the
 // "writing logs to ..." line, keeping the console-log assertions unaffected.
 vi.mock("../src/lib/factory/run-log", () => ({
   createFileRunLogFactory: () => () => ({
@@ -171,7 +171,7 @@ describe("CodeFactory", () => {
           [
             {
               id: "100",
-              body: "<!-- code-factory:hitl-prd-1-issue-4 -->\nold body"
+              body: "<!-- krutrimbox:hitl-prd-1-issue-4 -->\nold body"
             }
           ]
         ]
@@ -288,10 +288,10 @@ describe("CodeFactory", () => {
       "runFinalReview",
       "removeSandbox"
     ]);
-    expect(sandbox.calls[0].input).toEqual({ sandboxName: "code-factory-prd-1" });
+    expect(sandbox.calls[0].input).toEqual({ sandboxName: "krutrimbox-prd-1" });
     expect(sandbox.calls[1].input).toEqual({
-      sandboxName: "code-factory-prd-1",
-      branchName: "code-factory/prd-1"
+      sandboxName: "krutrimbox-prd-1",
+      branchName: "krutrimbox/prd-1"
     });
     expect(String(sandbox.calls[2].input.prompt)).toContain("Full parent PRD body");
     expect(String(sandbox.calls[2].input.prompt)).toContain("Current issue body");
@@ -305,7 +305,7 @@ describe("CodeFactory", () => {
     expect(github.createDraftPullRequest).toHaveBeenCalledWith({
       title: "Code Factory PRD #1: PRD: Code Factory MVP",
       body: expect.stringContaining("- [x] #4 - Factory loop"),
-      head: "code-factory/prd-1",
+      head: "krutrimbox/prd-1",
       base: "main",
       labels: ["PRD"]
     });
@@ -345,7 +345,7 @@ describe("CodeFactory", () => {
     expect(github.createDraftPullRequest).not.toHaveBeenCalled();
     expect(github.updatePullRequestBody).toHaveBeenCalledWith(
       12,
-      expect.stringContaining("Branch: `code-factory/prd-1`")
+      expect.stringContaining("Branch: `krutrimbox/prd-1`")
     );
     expect(github.setPullRequestLabels).toHaveBeenCalledWith(12, ["PRD"]);
   });
@@ -385,7 +385,7 @@ describe("CodeFactory", () => {
     expect(String(reviewCall?.input.prompt)).toContain("- #4 - Factory loop (CLOSED)");
     expect(github.markPullRequestReadyForReview).toHaveBeenCalledWith(10);
     expect(github.requestPullRequestReview).toHaveBeenCalledWith(10, "jd-solanki");
-    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: "code-factory-prd-1" });
+    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: "krutrimbox-prd-1" });
   });
 
   test("updates an existing final review comment idempotently", async () => {
@@ -396,7 +396,7 @@ describe("CodeFactory", () => {
         [1, [implementationIssue({ number: 3, title: "Bootstrap", state: "CLOSED", labels: ["PRD-sub-issue"] })]]
       ]),
       comments: new Map([
-        [10, [{ id: "200", body: "<!-- code-factory:final-review-prd-1 -->\nold review" }]]
+        [10, [{ id: "200", body: "<!-- krutrimbox:final-review-prd-1 -->\nold review" }]]
       ])
     });
     const factory = new CodeFactory({
@@ -410,11 +410,11 @@ describe("CodeFactory", () => {
 
     expect(github.updateIssueComment).toHaveBeenCalledWith(
       "200",
-      expect.stringContaining("<!-- code-factory:final-review-prd-1 -->")
+      expect.stringContaining("<!-- krutrimbox:final-review-prd-1 -->")
     );
     expect(github.createIssueComment).not.toHaveBeenCalledWith(
       10,
-      expect.stringContaining("<!-- code-factory:final-review-prd-1 -->")
+      expect.stringContaining("<!-- krutrimbox:final-review-prd-1 -->")
     );
   });
 
@@ -486,7 +486,7 @@ describe("CodeFactory", () => {
 
     await factory.runExplicit(1);
 
-    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: "code-factory-prd-1" });
+    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: "krutrimbox-prd-1" });
   });
 
   test("never merges the PRD Pull Request during final review routing", async () => {
@@ -615,7 +615,7 @@ describe("CodeFactory MVP smoke", () => {
         ]
       ]),
       comments: new Map([
-        [10, [{ id: "existing-final-review", body: "<!-- code-factory:final-review-prd-1 -->\nold" }]]
+        [10, [{ id: "existing-final-review", body: "<!-- krutrimbox:final-review-prd-1 -->\nold" }]]
       ])
     });
     const sandbox = new FakeSandboxRunner();
@@ -648,8 +648,8 @@ describe("CodeFactory MVP smoke", () => {
     expect(sandbox.runAfkIssue).toHaveBeenCalledTimes(2);
     expect(sandbox.calls.filter((call) => call.name.toLowerCase().includes("resume"))).toEqual([]);
     expect(sandbox.runAfkIssue.mock.calls.map(([input]) => input.branchName)).toEqual([
-      "code-factory/prd-1",
-      "code-factory/prd-1"
+      "krutrimbox/prd-1",
+      "krutrimbox/prd-1"
     ]);
     expect(String(sandbox.runAfkIssue.mock.calls[0]?.[0].prompt)).toContain("Full parent PRD smoke fixture");
     expect(String(sandbox.runAfkIssue.mock.calls[0]?.[0].prompt)).toContain("- #6 - Final review (afk, blocked by #4)");
@@ -660,7 +660,7 @@ describe("CodeFactory MVP smoke", () => {
     expect(github.createDraftPullRequest).toHaveBeenCalledWith({
       title: "Code Factory PRD #1: PRD: Code Factory MVP",
       body: expect.stringContaining("Closes #1"),
-      head: "code-factory/prd-1",
+      head: "krutrimbox/prd-1",
       base: "main",
       labels: ["PRD"]
     });
@@ -675,7 +675,7 @@ describe("CodeFactory MVP smoke", () => {
     );
     expect(github.markPullRequestReadyForReview).toHaveBeenCalledWith(10);
     expect(github.requestPullRequestReview).toHaveBeenCalledWith(10, "jd-solanki");
-    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: "code-factory-prd-1" });
+    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: "krutrimbox-prd-1" });
 
     const firstCommitOrder = sandbox.commitAndPush.mock.invocationCallOrder[0];
     const firstCloseOrder = github.closeIssue.mock.invocationCallOrder[0];
@@ -727,7 +727,7 @@ describe("CodeFactory MVP smoke", () => {
         ]
       ]),
       comments: new Map([
-        [3, [{ id: "existing-hitl", body: "<!-- code-factory:hitl-prd-3-issue-30 -->\nold" }]]
+        [3, [{ id: "existing-hitl", body: "<!-- krutrimbox:hitl-prd-3-issue-30 -->\nold" }]]
       ])
     });
     const sandbox = new FakeSandboxRunner();
@@ -755,8 +755,8 @@ describe("CodeFactory MVP smoke", () => {
       expect.stringContaining("Code Factory is paused for PRD #3.")
     );
     expect(sandbox.commitAndPush).toHaveBeenCalledWith({
-      sandboxName: "code-factory-prd-5",
-      branchName: "code-factory/prd-5",
+      sandboxName: "krutrimbox-prd-5",
+      branchName: "krutrimbox/prd-5",
       issueNumber: 50
     });
     expect(github.closeIssue).toHaveBeenCalledWith(50);
@@ -828,7 +828,7 @@ describe("FactoryRun", () => {
     const run = new FactoryRun(runDependencies(github, sandbox), prdIssue());
 
     await expect(run.process()).resolves.toBe("completed");
-    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: "code-factory-prd-1" });
+    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: "krutrimbox-prd-1" });
   });
 
   test("exposes the deterministic PRD Branch and PRD Sandbox as run invariants", () => {
@@ -838,8 +838,8 @@ describe("FactoryRun", () => {
       prdIssue({ number: 7 })
     );
 
-    expect(run.branchName).toBe("code-factory/prd-7");
-    expect(run.sandboxName).toBe("code-factory-prd-7");
+    expect(run.branchName).toBe("krutrimbox/prd-7");
+    expect(run.sandboxName).toBe("krutrimbox-prd-7");
   });
 });
 
@@ -854,8 +854,8 @@ describe("PrdPullRequest", () => {
       fixtureTemplates,
       { log: vi.fn() },
       prdIssue(),
-      "code-factory/prd-1",
-      "code-factory-prd-1"
+      "krutrimbox/prd-1",
+      "krutrimbox-prd-1"
     );
   }
 
@@ -867,7 +867,7 @@ describe("PrdPullRequest", () => {
     expect(github.createDraftPullRequest).toHaveBeenCalledWith({
       title: "Code Factory PRD #1: PRD: Code Factory MVP",
       body: expect.stringContaining("- [x] #3 - Bootstrap"),
-      head: "code-factory/prd-1",
+      head: "krutrimbox/prd-1",
       base: "main",
       labels: ["PRD"]
     });
@@ -1082,15 +1082,15 @@ const fixtureTemplates: TemplateRenderer = {
   async render(templatePath, values) {
     const templates: Record<string, string> = {
       "templates/hitlpause-comment.md":
-        "<!-- code-factory:hitl-prd-{{prd_number}}-issue-{{issue_number}} -->\n\n@{{prd_author}} Code Factory is paused for PRD #{{prd_number}}.\n\n- #{{issue_number}} - {{issue_title}}\n\nBranch: `{{prd_branch}}`\nSandbox: `{{prd_sandbox}}`",
+        "<!-- krutrimbox:hitl-prd-{{prd_number}}-issue-{{issue_number}} -->\n\n@{{prd_author}} Code Factory is paused for PRD #{{prd_number}}.\n\n- #{{issue_number}} - {{issue_title}}\n\nBranch: `{{prd_branch}}`\nSandbox: `{{prd_sandbox}}`",
       "templates/afk-error-comment.md":
-        "<!-- code-factory:afk-error-issue-{{issue_number}} -->\n\n{{error_summary}}\n\nPRD: #{{prd_number}}\nBranch: `{{prd_branch}}`\nSandbox: `{{prd_sandbox}}`",
+        "<!-- krutrimbox:afk-error-issue-{{issue_number}} -->\n\n{{error_summary}}\n\nPRD: #{{prd_number}}\nBranch: `{{prd_branch}}`\nSandbox: `{{prd_sandbox}}`",
       "templates/pr-body.md":
         "## Parent PRD\n\nCloses #{{prd_number}}\n\n## Implementation Issues\n\n{{implementation_issue_checklist}}\n\n## Code Factory\n\nBranch: `{{prd_branch}}`\nSandbox: `{{prd_sandbox}}`",
       "prompts/afk-issue.md":
         "Do not create commits or push branches.\nWork on `{{prd_branch}}`.\n\n## Parent PRD\n{{prd_body}}\n\n## Current AFK Issue\n{{issue_body}}\n\n## Earlier Implementation Issues\n{{earlier_issues}}\n\n## Later Implementation Issues\n{{later_issues}}",
       "templates/final-review-comment.md":
-        "<!-- code-factory:final-review-prd-{{prd_number}} -->\n\n{{review_body}}",
+        "<!-- krutrimbox:final-review-prd-{{prd_number}} -->\n\n{{review_body}}",
       "prompts/final-review.md":
         "## Parent PRD\n{{prd_body}}\n\n## Implementation Issues\n{{implementation_issues}}\n\n## Pull Request Diff\n{{pr_diff}}"
     };
@@ -1171,8 +1171,8 @@ function implementationIssue({
 }
 
 test("deterministic PRD branch and sandbox names stay stable", () => {
-  expect(deterministicPrdBranch(42)).toBe("code-factory/prd-42");
-  expect(deterministicPrdSandbox(42)).toBe("code-factory-prd-42");
+  expect(deterministicPrdBranch(42)).toBe("krutrimbox/prd-42");
+  expect(deterministicPrdSandbox(42)).toBe("krutrimbox-prd-42");
 });
 
 // End-to-end check that a real Factory Run lands both its status lines and the
@@ -1217,7 +1217,7 @@ describe("run logging end-to-end", () => {
       removeSandbox: async () => undefined
     };
 
-    const workdir = await mkdtemp(join(tmpdir(), "code-factory-logs-"));
+    const workdir = await mkdtemp(join(tmpdir(), "krutrimbox-logs-"));
     try {
       const factory = new CodeFactory({
         github,
@@ -1230,10 +1230,10 @@ describe("run logging end-to-end", () => {
 
       await factory.runExplicit(1);
 
-      const logsDir = join(workdir, ".code-factory", "logs");
+      const logsDir = join(workdir, ".krutrimbox", "logs");
       const files = await readdir(logsDir);
       expect(files).toHaveLength(1);
-      expect(files[0]).toMatch(/^code-factory-prd-1--[\d_-]+\.log$/);
+      expect(files[0]).toMatch(/^krutrimbox-prd-1--[\d_-]+\.log$/);
 
       const content = await readFile(join(logsDir, files[0]), "utf8");
       expect(content).toContain("[codex] implementing the issue");

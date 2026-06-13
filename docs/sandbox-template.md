@@ -24,13 +24,13 @@ USER agent
 The factory default template is:
 
 ```text
-docker.io/library/code-factory-codex:pnpm
+docker.io/library/krutrimbox-codex:pnpm
 ```
 
 Override it for experiments with:
 
 ```sh
-CODE_FACTORY_SANDBOX_TEMPLATE=<image-ref> nr start run --prd <number>
+KRUTRIMBOX_SANDBOX_TEMPLATE=<image-ref> nr start run --prd <number>
 ```
 
 ## Preparing a Machine
@@ -44,9 +44,9 @@ pnpm sandbox:prepare-template
 That script does two things:
 
 ```sh
-docker build -f Dockerfile.sandbox -t code-factory-codex:pnpm .
-docker image save code-factory-codex:pnpm -o /tmp/code-factory-codex-pnpm.tar
-sbx template load /tmp/code-factory-codex-pnpm.tar
+docker build -f Dockerfile.sandbox -t krutrimbox-codex:pnpm .
+docker image save krutrimbox-codex:pnpm -o /tmp/krutrimbox-codex-pnpm.tar
+sbx template load /tmp/krutrimbox-codex-pnpm.tar
 ```
 
 The `sbx template load` step matters. Docker Sandboxes has its own template image store, so a successful `docker build` alone does not make the image available to `sbx create --template`.
@@ -60,7 +60,7 @@ sbx template ls
 The loaded image should appear as:
 
 ```text
-docker.io/library/code-factory-codex   pnpm
+docker.io/library/krutrimbox-codex   pnpm
 ```
 
 ## Existing Sandboxes
@@ -70,13 +70,13 @@ Existing PRD Sandboxes keep the template they were created from. If a PRD Sandbo
 Before replacing a sandbox, inspect it for uncommitted work:
 
 ```sh
-sbx exec -w "$(pwd)" code-factory-prd-<number> -- git status --short --branch
+sbx exec -w "$(pwd)" krutrimbox-prd-<number> -- git status --short --branch
 ```
 
 If there is no work to preserve, recreate it from the new template:
 
 ```sh
-sbx rm --force code-factory-prd-<number>
+sbx rm --force krutrimbox-prd-<number>
 nr start run --prd <number>
 ```
 
@@ -89,5 +89,5 @@ The factory passes the absolute repository path to both `sbx create` and `sbx ex
 Clone-mode sandboxes expose the private repository clone at the original host path inside the sandbox. A plain `sbx exec <sandbox> -- git status` starts in Docker Sandboxes' default directory, which may not be a Git repository. Use this shape when debugging manually:
 
 ```sh
-sbx exec -w "$(pwd)" code-factory-prd-<number> -- git status --short --branch
+sbx exec -w "$(pwd)" krutrimbox-prd-<number> -- git status --short --branch
 ```

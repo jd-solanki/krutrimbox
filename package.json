@@ -1,9 +1,9 @@
 {
-  "name": "kutrimcode",
+  "name": "krutrimbox",
   "version": "0.0.1",
   "type": "module",
   "bin": {
-    "kc": "./dist/index.js"
+    "kb": "./dist/index.js"
   },
   "files": [
     "dist"
@@ -11,12 +11,14 @@
   "scripts": {
     "build": "tsdown",
     "release": "bumpp",
-    "sandbox:build-template": "docker build -f Dockerfile.sandbox -t code-factory-codex:pnpm .",
-    "sandbox:load-template": "docker image save code-factory-codex:pnpm -o /tmp/code-factory-codex-pnpm.tar && sbx template load /tmp/code-factory-codex-pnpm.tar",
+    "sandbox:build-template": "docker build -f Dockerfile.sandbox -t krutrimbox-codex:pnpm .",
+    "sandbox:load-template": "docker image save krutrimbox-codex:pnpm -o /tmp/krutrimbox-codex-pnpm.tar && sbx template load /tmp/krutrimbox-codex-pnpm.tar",
     "sandbox:prepare-template": "pnpm sandbox:build-template && pnpm sandbox:load-template",
     "start": "node dist/index.js",
     "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "pkg:link": "pnpm add --global .",
+    "pkg:unlink": "pnpm uninstall --global krutrimbox"
   },
   "dependencies": {
     "commander": "^14.0.2",

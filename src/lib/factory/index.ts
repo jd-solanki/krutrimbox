@@ -13,4 +13,4 @@ export * from "./template-renderer";
 export * from "./lock-store";
 export * from "./run-log";
 export * from "./sandbox-runner";
-export * from "./code-factory";
+export * from "./krutrimbox";

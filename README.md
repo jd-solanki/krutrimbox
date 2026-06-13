@@ -8,7 +8,7 @@ This README is written for a new machine setup. It assumes you are comfortable c
 
 Code Factory uses three layers:
 
-1. Your host machine runs the `kc` Node.js CLI (published as the `kutrimcode` package).
+1. Your host machine runs the `kb` Node.js CLI from the `krutrimbox` package.
 2. Docker Sandboxes creates an isolated PRD Sandbox for agent work.
 3. Codex runs inside that sandbox to implement one AFK issue at a time.
 
@@ -52,8 +52,8 @@ That opens a browser sign-in flow. Docker Sandboxes also prompts for a default n
 Clone the repository and install dependencies:
 
 ```sh
-git clone https://github.com/jd-solanki/code-factory.git
-cd code-factory
+git clone https://github.com/jd-solanki/krutrimbox.git
+cd krutrimbox
 pnpm install
 pnpm build
 ```
@@ -90,7 +90,7 @@ echo "$(gh auth token)" | sbx secret set -g github
 The `-g` flag stores the secret globally for future sandboxes. Existing sandboxes do not receive newly created or changed global secrets; recreate them after setting the secret, or scope the secret to a specific running sandbox:
 
 ```sh
-echo "$(gh auth token)" | sbx secret set code-factory-prd-1 github
+echo "$(gh auth token)" | sbx secret set krutrimbox-prd-1 github
 ```
 
 ## Configure Docker Sandboxes Network Policy
@@ -135,9 +135,9 @@ pnpm sandbox:prepare-template
 That script runs:
 
 ```sh
-docker build -f Dockerfile.sandbox -t code-factory-codex:pnpm .
-docker image save code-factory-codex:pnpm -o /tmp/code-factory-codex-pnpm.tar
-sbx template load /tmp/code-factory-codex-pnpm.tar
+docker build -f Dockerfile.sandbox -t krutrimbox-codex:pnpm .
+docker image save krutrimbox-codex:pnpm -o /tmp/krutrimbox-codex-pnpm.tar
+sbx template load /tmp/krutrimbox-codex-pnpm.tar
 ```
 
 The `sbx template load` step is important. Docker Sandboxes has its own template image store. A successful `docker build` alone does not make the image available to `sbx create --template`.
@@ -151,7 +151,7 @@ sbx template ls
 You should see an entry like:
 
 ```text
-docker.io/library/code-factory-codex   pnpm
+docker.io/library/krutrimbox-codex   pnpm
 ```
 
 ## First Sandbox Smoke Test
@@ -160,8 +160,8 @@ Before running the full factory, create a small test sandbox:
 
 ```sh
 sbx create --clone \
-  --template docker.io/library/code-factory-codex:pnpm \
-  --name code-factory-smoke \
+  --template docker.io/library/krutrimbox-codex:pnpm \
+  --name krutrimbox-smoke \
   codex \
   "$(pwd)"
 ```
@@ -169,11 +169,11 @@ sbx create --clone \
 Check that the repository, GitHub CLI, Codex, and pnpm work inside it:
 
 ```sh
-sbx exec -w "$(pwd)" code-factory-smoke -- git status --short --branch
-sbx exec -w "$(pwd)" code-factory-smoke -- gh auth status
-sbx exec -w "$(pwd)" code-factory-smoke -- gh issue list --limit 1
-sbx exec -w "$(pwd)" code-factory-smoke -- codex --version
-sbx exec -w "$(pwd)" code-factory-smoke -- pnpm --version
+sbx exec -w "$(pwd)" krutrimbox-smoke -- git status --short --branch
+sbx exec -w "$(pwd)" krutrimbox-smoke -- gh auth status
+sbx exec -w "$(pwd)" krutrimbox-smoke -- gh issue list --limit 1
+sbx exec -w "$(pwd)" krutrimbox-smoke -- codex --version
+sbx exec -w "$(pwd)" krutrimbox-smoke -- pnpm --version
 ```
 
 You should see:
@@ -186,7 +186,7 @@ You should see:
 Remove the smoke sandbox:
 
 ```sh
-sbx rm --force code-factory-smoke
+sbx rm --force krutrimbox-smoke
 ```
 
 ## Run Code Factory
@@ -209,11 +209,11 @@ Run batch mode for all eligible ready PRDs:
 pnpm start run
 ```
 
-Once the package is installed globally (`npm i -g kutrimcode`), the same commands are available through the `kc` binary from any repository:
+Once the package is installed globally (`npm i -g krutrimbox`), the same commands are available through the `kb` binary from any repository:
 
 ```sh
-kc run --prd 1
-kc run
+kb run --prd 1
+kb run
 ```
 
 Code Factory currently processes only Factory-Owned PRDs authored by `jd-solanki`.
@@ -231,20 +231,20 @@ sbx ls
 Check an existing PRD Sandbox:
 
 ```sh
-sbx exec -w "$(pwd)" code-factory-prd-1 -- pnpm --version
-sbx exec -w "$(pwd)" code-factory-prd-1 -- gh auth status
+sbx exec -w "$(pwd)" krutrimbox-prd-1 -- pnpm --version
+sbx exec -w "$(pwd)" krutrimbox-prd-1 -- gh auth status
 ```
 
 If `pnpm` is not found or `gh` is not authenticated, inspect for uncommitted work first:
 
 ```sh
-sbx exec -w "$(pwd)" code-factory-prd-1 -- git status --short --branch
+sbx exec -w "$(pwd)" krutrimbox-prd-1 -- git status --short --branch
 ```
 
 If there is no work to preserve, remove the old sandbox:
 
 ```sh
-sbx rm --force code-factory-prd-1
+sbx rm --force krutrimbox-prd-1
 ```
 
 The next factory run will recreate it with the configured template and current global secrets.
@@ -256,13 +256,13 @@ In clone mode, Docker Sandboxes exposes the private repository clone at the orig
 This works:
 
 ```sh
-sbx exec -w "$(pwd)" code-factory-prd-1 -- git status --short --branch
+sbx exec -w "$(pwd)" krutrimbox-prd-1 -- git status --short --branch
 ```
 
 This may fail:
 
 ```sh
-sbx exec code-factory-prd-1 -- git status --short --branch
+sbx exec krutrimbox-prd-1 -- git status --short --branch
 ```
 
 Without `-w`, `sbx exec` can start in a default directory that is not a Git repository. Code Factory handles this internally by resolving the host repository path and passing it to `sbx exec --workdir`.
@@ -316,10 +316,10 @@ pnpm sandbox:prepare-template
 Then recreate any old PRD Sandbox that was created before the template was available:
 
 ```sh
-sbx rm --force code-factory-prd-<number>
+sbx rm --force krutrimbox-prd-<number>
 ```
 
-### `pull failed for image "code-factory-codex:pnpm"`
+### `pull failed for image "krutrimbox-codex:pnpm"`
 
 The image was built in Docker but not loaded into Docker Sandboxes' template store. Run:
 
@@ -356,14 +356,14 @@ echo "$(gh auth token)" | sbx secret set -g github
 If the PRD Sandbox already exists, either remove it after confirming there is no work to preserve:
 
 ```sh
-sbx exec -w "$(pwd)" code-factory-prd-<number> -- git status --short --branch
-sbx rm --force code-factory-prd-<number>
+sbx exec -w "$(pwd)" krutrimbox-prd-<number> -- git status --short --branch
+sbx rm --force krutrimbox-prd-<number>
 ```
 
 Or apply the secret directly to that running sandbox:
 
 ```sh
-echo "$(gh auth token)" | sbx secret set code-factory-prd-<number> github
+echo "$(gh auth token)" | sbx secret set krutrimbox-prd-<number> github
 ```
 
 ### A sandbox is left behind after a failure
@@ -379,13 +379,13 @@ sbx ls
 Inspect a PRD Sandbox:
 
 ```sh
-sbx exec -w "$(pwd)" code-factory-prd-<number> -- git status --short --branch
+sbx exec -w "$(pwd)" krutrimbox-prd-<number> -- git status --short --branch
 ```
 
 Remove it when you are sure no work needs preserving:
 
 ```sh
-sbx rm --force code-factory-prd-<number>
+sbx rm --force krutrimbox-prd-<number>
 ```
 
 ## Useful References

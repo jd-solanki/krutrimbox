@@ -58,7 +58,7 @@ export class CodeFactory {
       ?? new CommandSandboxRunner(
         commandRunner,
         cwd,
-        dependencies.sandboxTemplate ?? process.env.CODE_FACTORY_SANDBOX_TEMPLATE ?? DEFAULT_SANDBOX_TEMPLATE
+        dependencies.sandboxTemplate ?? process.env.KRUTRIMBOX_SANDBOX_TEMPLATE ?? DEFAULT_SANDBOX_TEMPLATE
       );
     const templates = dependencies.templates ?? new BundledTemplateRenderer();
 
