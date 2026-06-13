@@ -145,9 +145,10 @@ export class FactoryRun {
       const unresolvedBlockers = await this.findUnresolvedBlockers(issue);
 
       if (unresolvedBlockers.length > 0) {
-        await this.postAfkErrorComment(issue, unresolvedBlockers);
+        const issueUrl = await this.github.getIssueUrl(issue.number);
+        const commentUrl = await this.postAfkErrorComment(issue, unresolvedBlockers);
         this.logger.log(
-          `krutrimbox: stopped PRD #${prd.number}; AFK Issue #${issue.number} has unresolved blockers.`
+          `krutrimbox: stopped PRD #${prd.number}; AFK Issue #${issue.number} has unresolved blockers. See ${commentUrl} (issue: ${issueUrl}).`
         );
         return "error";
       }
@@ -174,8 +175,11 @@ export class FactoryRun {
 
       return "completed";
     } catch (error) {
-      await this.postAfkErrorComment(issue, [formatError(error)]);
-      this.logger.log(`krutrimbox: stopped PRD #${prd.number}; AFK Issue #${issue.number} failed.`);
+      const issueUrl = await this.github.getIssueUrl(issue.number);
+      const commentUrl = await this.postAfkErrorComment(issue, [formatError(error)]);
+      this.logger.log(
+        `krutrimbox: stopped PRD #${prd.number}; AFK Issue #${issue.number} failed. See ${commentUrl} (issue: ${issueUrl}).`
+      );
       return "error";
     }
   }
@@ -222,7 +226,7 @@ export class FactoryRun {
     await this.upsertComment(this.prd.number, hitlMarker(this.prd.number, issue.number), body);
   }
 
-  private async postAfkErrorComment(issue: ImplementationIssue, errors: string[]): Promise<void> {
+  private async postAfkErrorComment(issue: ImplementationIssue, errors: string[]): Promise<string> {
     const body = await this.templates.render("templates/afk-error-comment.md", {
       prd_number: this.prd.number,
       issue_number: issue.number,
@@ -231,7 +235,8 @@ export class FactoryRun {
       prd_sandbox: this.sandboxName
     });
 
-    await this.upsertComment(issue.number, afkErrorMarker(issue.number), body);
+    const comment = await this.upsertComment(issue.number, afkErrorMarker(issue.number), body);
+    return comment.url;
   }
 
   private async routeFinalReview(sequence: ImplementationSequence): Promise<void> {
@@ -280,16 +285,15 @@ export class FactoryRun {
     });
   }
 
-  private async upsertComment(issueNumber: number, marker: string, body: string): Promise<void> {
+  private async upsertComment(issueNumber: number, marker: string, body: string) {
     const comments = await this.github.listIssueComments(issueNumber);
     const existing = comments.find((comment) => comment.body.includes(marker));
 
     if (existing) {
-      await this.github.updateIssueComment(existing.id, body);
-      return;
+      return this.github.updateIssueComment(existing.id, body);
     }
 
-    await this.github.createIssueComment(issueNumber, body);
+    return this.github.createIssueComment(issueNumber, body);
   }
 }
 

@@ -38,11 +38,12 @@ export interface GitHubIssue {
 export interface GitHubClient {
   ensureRequiredLabels(): Promise<void>;
   getIssue(issueNumber: number): Promise<GitHubIssue>;
+  getIssueUrl(issueNumber: number): Promise<string>;
   listReadyPrds(author: string): Promise<GitHubIssue[]>;
   getAttachedSubIssues(prdNumber: number): Promise<GitHubIssue[]>;
   listIssueComments(issueNumber: number): Promise<GitHubComment[]>;
-  createIssueComment(issueNumber: number, body: string): Promise<void>;
-  updateIssueComment(commentId: string, body: string): Promise<void>;
+  createIssueComment(issueNumber: number, body: string): Promise<GitHubComment>;
+  updateIssueComment(commentId: string, body: string): Promise<GitHubComment>;
   closeIssue(issueNumber: number): Promise<void>;
   getDefaultBranch(): Promise<string>;
   findPullRequestByHead(branchName: string): Promise<GitHubPullRequest | null>;
@@ -70,6 +71,7 @@ export interface CommandRunOptions {
 export interface GitHubComment {
   id: string;
   body: string;
+  url: string;
 }
 
 export interface GitHubPullRequest {
@@ -169,6 +171,11 @@ export function createGitHubCliClient(
       );
     },
 
+    async getIssueUrl(issueNumber: number): Promise<string> {
+      const repo = await getRepository();
+      return `https://github.com/${formatRepository(repo)}/issues/${issueNumber}`;
+    },
+
     async listReadyPrds(author: string): Promise<GitHubIssue[]> {
       const repo = await getRepository();
       const issues = parseJson<RawGhIssue[]>(
@@ -228,32 +235,49 @@ export function createGitHubCliClient(
 
       return comments.map((comment) => ({
         id: String(comment.id),
-        body: comment.body ?? ""
+        body: comment.body ?? "",
+        url: comment.html_url ?? `https://github.com/${formatRepository(repo)}/issues/${issueNumber}`
       }));
     },
 
-    async createIssueComment(issueNumber: number, body: string): Promise<void> {
+    async createIssueComment(issueNumber: number, body: string): Promise<GitHubComment> {
       const repo = await getRepository();
 
-      await runGh([
-        "api",
-        `repos/${repo.owner.login}/${repo.name}/issues/${issueNumber}/comments`,
-        "-f",
-        `body=${body}`
-      ]);
+      const comment = parseJson<RawComment>(
+        await runGh([
+          "api",
+          `repos/${repo.owner.login}/${repo.name}/issues/${issueNumber}/comments`,
+          "-f",
+          `body=${body}`
+        ])
+      );
+
+      return {
+        id: String(comment.id),
+        body: comment.body ?? "",
+        url: comment.html_url ?? `https://github.com/${formatRepository(repo)}/issues/${issueNumber}`
+      };
     },
 
-    async updateIssueComment(commentId: string, body: string): Promise<void> {
+    async updateIssueComment(commentId: string, body: string): Promise<GitHubComment> {
       const repo = await getRepository();
 
-      await runGh([
-        "api",
-        `repos/${repo.owner.login}/${repo.name}/issues/comments/${commentId}`,
-        "-X",
-        "PATCH",
-        "-f",
-        `body=${body}`
-      ]);
+      const comment = parseJson<RawComment>(
+        await runGh([
+          "api",
+          `repos/${repo.owner.login}/${repo.name}/issues/comments/${commentId}`,
+          "-X",
+          "PATCH",
+          "-f",
+          `body=${body}`
+        ])
+      );
+
+      return {
+        id: String(comment.id),
+        body: comment.body ?? "",
+        url: comment.html_url ?? `https://github.com/${formatRepository(repo)}/issues/comments/${commentId}`
+      };
     },
 
     async closeIssue(issueNumber: number): Promise<void> {
@@ -407,6 +431,7 @@ interface RepositoryInfo {
 interface RawComment {
   id: number | string;
   body?: string;
+  html_url?: string;
 }
 
 interface RawPullRequest {

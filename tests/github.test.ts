@@ -231,7 +231,13 @@ describe("GitHubCliClient", () => {
         ],
         [
           commandKey("gh", ["api", "repos/jd-solanki/krutrimbox/issues/4/comments"]),
-          JSON.stringify([{ id: 123, body: "<!-- marker -->\nold" }])
+          JSON.stringify([
+            {
+              id: 123,
+              body: "<!-- marker -->\nold",
+              html_url: "https://github.com/jd-solanki/krutrimbox/issues/4#issuecomment-123"
+            }
+          ])
         ],
         [
           commandKey("gh", [
@@ -240,7 +246,11 @@ describe("GitHubCliClient", () => {
             "-f",
             "body=new comment"
           ]),
-          "{}"
+          JSON.stringify({
+            id: 124,
+            body: "new comment",
+            html_url: "https://github.com/jd-solanki/krutrimbox/issues/4#issuecomment-124"
+          })
         ],
         [
           commandKey("gh", [
@@ -251,17 +261,33 @@ describe("GitHubCliClient", () => {
             "-f",
             "body=updated comment"
           ]),
-          "{}"
+          JSON.stringify({
+            id: 123,
+            body: "updated comment",
+            html_url: "https://github.com/jd-solanki/krutrimbox/issues/4#issuecomment-123"
+          })
         ]
       ])
     );
     const client = createGitHubCliClient(runner);
 
     await expect(client.listIssueComments(4)).resolves.toEqual([
-      { id: "123", body: "<!-- marker -->\nold" }
+      {
+        id: "123",
+        body: "<!-- marker -->\nold",
+        url: "https://github.com/jd-solanki/krutrimbox/issues/4#issuecomment-123"
+      }
     ]);
-    await client.createIssueComment(4, "new comment");
-    await client.updateIssueComment("123", "updated comment");
+    await expect(client.createIssueComment(4, "new comment")).resolves.toEqual({
+      id: "124",
+      body: "new comment",
+      url: "https://github.com/jd-solanki/krutrimbox/issues/4#issuecomment-124"
+    });
+    await expect(client.updateIssueComment("123", "updated comment")).resolves.toEqual({
+      id: "123",
+      body: "updated comment",
+      url: "https://github.com/jd-solanki/krutrimbox/issues/4#issuecomment-123"
+    });
 
     expect(runner.calls).toEqual([
       {

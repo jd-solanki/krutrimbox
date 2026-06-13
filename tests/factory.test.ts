@@ -171,7 +171,8 @@ describe("Krutrimbox", () => {
           [
             {
               id: "100",
-              body: "<!-- krutrimbox:hitl-prd-1-issue-4 -->\nold body"
+              body: "<!-- krutrimbox:hitl-prd-1-issue-4 -->\nold body",
+              url: "https://github.com/jd-solanki/krutrimbox/issues/1#issuecomment-100"
             }
           ]
         ]
@@ -396,7 +397,16 @@ describe("Krutrimbox", () => {
         [1, [implementationIssue({ number: 3, title: "Bootstrap", state: "CLOSED", labels: ["PRD-sub-issue"] })]]
       ]),
       comments: new Map([
-        [10, [{ id: "200", body: "<!-- krutrimbox:final-review-prd-1 -->\nold review" }]]
+        [
+          10,
+          [
+            {
+              id: "200",
+              body: "<!-- krutrimbox:final-review-prd-1 -->\nold review",
+              url: "https://github.com/jd-solanki/krutrimbox/issues/10#issuecomment-200"
+            }
+          ]
+        ]
       ])
     });
     const factory = new Krutrimbox({
@@ -615,7 +625,16 @@ describe("Krutrimbox MVP smoke", () => {
         ]
       ]),
       comments: new Map([
-        [10, [{ id: "existing-final-review", body: "<!-- krutrimbox:final-review-prd-1 -->\nold" }]]
+        [
+          10,
+          [
+            {
+              id: "existing-final-review",
+              body: "<!-- krutrimbox:final-review-prd-1 -->\nold",
+              url: "https://github.com/jd-solanki/krutrimbox/issues/10#issuecomment-existing-final-review"
+            }
+          ]
+        ]
       ])
     });
     const sandbox = new FakeSandboxRunner();
@@ -727,7 +746,16 @@ describe("Krutrimbox MVP smoke", () => {
         ]
       ]),
       comments: new Map([
-        [3, [{ id: "existing-hitl", body: "<!-- krutrimbox:hitl-prd-3-issue-30 -->\nold" }]]
+        [
+          3,
+          [
+            {
+              id: "existing-hitl",
+              body: "<!-- krutrimbox:hitl-prd-3-issue-30 -->\nold",
+              url: "https://github.com/jd-solanki/krutrimbox/issues/3#issuecomment-existing-hitl"
+            }
+          ]
+        ]
       ])
     });
     const sandbox = new FakeSandboxRunner();
@@ -773,8 +801,12 @@ describe("FactoryRun", () => {
     return { log: vi.fn() };
   }
 
-  function runDependencies(github: FakeGitHubClient, sandbox: FakeSandboxRunner) {
-    return { github, sandbox, templates: fixtureTemplates, logger: silentLogger() };
+  function runDependencies(
+    github: FakeGitHubClient,
+    sandbox: FakeSandboxRunner,
+    logger: Pick<Console, "log"> = silentLogger()
+  ) {
+    return { github, sandbox, templates: fixtureTemplates, logger };
   }
 
   test("process() returns \"paused\" at the first HITL Issue without touching the sandbox", async () => {
@@ -814,6 +846,27 @@ describe("FactoryRun", () => {
     await expect(run.process()).resolves.toBe("issue-error");
     expect(github.closeIssue).not.toHaveBeenCalled();
     expect(sandbox.ensureSandbox).not.toHaveBeenCalled();
+  });
+
+  test("logs the AFK failure comment URL when an AFK Issue fails", async () => {
+    const github = new FakeGitHubClient({
+      prds: [prdIssue()],
+      subIssuesByPrd: new Map([
+        [
+          1,
+          [implementationIssue({ number: 4, labels: ["PRD-sub-issue", "ready-for-agent"] })]
+        ]
+      ])
+    });
+    const sandbox = new FakeSandboxRunner();
+    sandbox.runAfkIssue.mockRejectedValueOnce(new Error("boom"));
+    const logger = { log: vi.fn() };
+    const run = new FactoryRun(runDependencies(github, sandbox, logger), prdIssue());
+
+    await expect(run.process()).resolves.toBe("issue-error");
+    expect(logger.log).toHaveBeenCalledWith(
+      "krutrimbox: stopped PRD #1; AFK Issue #4 failed. See https://github.com/jd-solanki/krutrimbox/issues/4#issuecomment-1 (issue: https://github.com/jd-solanki/krutrimbox/issues/4)."
+    );
   });
 
   test("process() returns \"completed\" when every Implementation Issue is already resolved", async () => {
@@ -926,6 +979,9 @@ class FakeGitHubClient implements GitHubClient {
 
     return issue;
   });
+  public readonly getIssueUrl = vi.fn(async (issueNumber: number) => {
+    return `https://github.com/jd-solanki/krutrimbox/issues/${issueNumber}`;
+  });
   public readonly listReadyPrds = vi.fn(async () => this.prds);
   public readonly getAttachedSubIssues = vi.fn(async (prdNumber: number) => {
     return this.subIssuesByPrd.get(prdNumber) ?? [];
@@ -935,8 +991,14 @@ class FakeGitHubClient implements GitHubClient {
   });
   public readonly createIssueComment = vi.fn(async (issueNumber: number, body: string) => {
     const comments = this.comments.get(issueNumber) ?? [];
-    comments.push({ id: String(comments.length + 1), body });
+    const comment = {
+      id: String(comments.length + 1),
+      body,
+      url: `https://github.com/jd-solanki/krutrimbox/issues/${issueNumber}#issuecomment-${comments.length + 1}`
+    };
+    comments.push(comment);
     this.comments.set(issueNumber, comments);
+    return comment;
   });
   public readonly updateIssueComment = vi.fn(async (commentId: string, body: string) => {
     for (const comments of this.comments.values()) {
@@ -944,9 +1006,11 @@ class FakeGitHubClient implements GitHubClient {
 
       if (comment) {
         comment.body = body;
-        return;
+        return comment;
       }
     }
+
+    throw new Error(`No comment fixture for ${commentId}`);
   });
   public readonly closeIssue = vi.fn(async (issueNumber: number) => {
     const issue = this.issues.get(issueNumber);
