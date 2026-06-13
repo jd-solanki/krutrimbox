@@ -5,6 +5,14 @@
   "bin": {
     "kb": "./dist/index.js"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jd-solanki/krutrimbox.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jd-solanki/krutrimbox/issues"
+  },
+  "homepage": "https://github.com/jd-solanki/krutrimbox#readme",
   "files": [
     "dist"
   ],
