@@ -47,7 +47,7 @@ sbx login
 
 That opens a browser sign-in flow. Docker Sandboxes also prompts for a default network policy on first setup.
 
-## Clone And Install
+## Clone And Build From Source
 
 Clone the repository and install dependencies:
 
@@ -63,6 +63,33 @@ Check that the local project is healthy:
 ```sh
 pnpm typecheck
 pnpm test
+```
+
+## Install krutrimbox
+
+If you want the `kb` CLI on your machine instead of running from a clone, install the package globally:
+
+```sh
+npm install --global krutrimbox
+```
+
+Or with pnpm:
+
+```sh
+pnpm add --global krutrimbox
+```
+
+After install, confirm the binary is available:
+
+```sh
+kb --help
+```
+
+If you are developing from this repository and want your local checkout linked as the global `kb` binary, run:
+
+```sh
+pnpm build
+pnpm pkg:link
 ```
 
 ## Authenticate GitHub For Host And Sandboxes
@@ -209,7 +236,7 @@ Run batch mode for all eligible ready PRDs:
 pnpm start run
 ```
 
-Once the package is installed globally (`npm i -g krutrimbox`), the same commands are available through the `kb` binary from any repository:
+Once `krutrimbox` is installed globally, the same commands are available through the `kb` binary from any repository:
 
 ```sh
 kb run --prd 1
