@@ -49,6 +49,13 @@ Before implementation, verify that every Blocking Issue listed for the current A
 ## Completion Response
 
 When finished, report what changed and any important notes for the outer krutrimbox.
+
+## Skills
+
+Use following skills if available to you:
+- /tdd
+- /comment-code
+
 `,
   "prompts/final-review.md": `# krutrimbox Final Review
 
