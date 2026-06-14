@@ -25,8 +25,8 @@
     "start": "node dist/index.js",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "pkg:link": "pnpm link --global",
-    "pkg:unlink": "pnpm unlink --global krutrimbox"
+    "pkg:link": "pnpm add -g .",
+    "pkg:unlink": "pnpm remove -g krutrimbox"
   },
   "dependencies": {
     "commander": "^14.0.2",
@@ -42,5 +42,5 @@
   "engines": {
     "node": ">=20"
   },
-  "packageManager": "pnpm@10.23.0"
+  "packageManager": "pnpm@11.6.0"
 }
