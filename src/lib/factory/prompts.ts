@@ -55,6 +55,7 @@ When finished, report what changed and any important notes for the outer krutrim
 Use following skills if available to you:
 - /tdd
 - /comment-code
+- /clean-code
 
 `,
   "prompts/final-review.md": `# krutrimbox Final Review
@@ -110,5 +111,10 @@ If there are no findings, say that clearly under \`Findings\`.
 ## Pull Request Diff
 
 {{pr_diff}}
+
+## Skills
+
+Use following skills if available to you:
+- /clean-code
 `,
 };
