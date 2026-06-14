@@ -245,6 +245,34 @@ kb run
 
 krutrimbox currently processes only Factory-Owned PRDs authored by `jd-solanki`.
 
+## Project Configuration Directory
+
+Repositories may keep shared krutrimbox configuration in `.krutrimbox/`. Commit files that define team policy, such as config and comment templates. Template override paths in `.krutrimbox/config.json` are relative to `.krutrimbox/`, and omitted template slots use the built-in defaults:
+
+```text
+.krutrimbox/
+  config.json
+  templates/
+    pull-request-body.md
+    hitl-pause-comment.md
+```
+
+```json
+{
+  "templates": {
+    "pullRequestBody": "templates/pull-request-body.md",
+    "hitlPauseComment": "templates/hitl-pause-comment.md"
+  }
+}
+```
+
+Keep runtime state local. Add only these generated subdirectories to the target repository's `.gitignore`:
+
+```gitignore
+.krutrimbox/logs/
+.krutrimbox/locks/
+```
+
 ## Existing Sandboxes After Auth Or Template Changes
 
 Existing sandboxes keep the template and global secrets they were created with. If you created a PRD Sandbox before preparing the `pnpm` template or before setting the global `github` secret, that old sandbox will not automatically gain the missing tool or credential.

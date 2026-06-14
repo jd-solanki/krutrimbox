@@ -24,6 +24,18 @@ _Avoid_: spec, plan, parent ticket
 One execution attempt by krutrimbox against a PRD using the current state of its implementation issues. A PRD can have multiple Factory Runs when human input pauses progress and later unblocks the next actionable issue.
 _Avoid_: trigger, retry, loop
 
+**Project Configuration**:
+Shared repository policy that changes how krutrimbox behaves for every operator of that repository. Project Configuration is reviewed and versioned with the repository, unlike local runtime state.
+_Avoid_: local settings, personal settings, machine settings
+
+**Project Configuration Directory**:
+The repository-owned `.krutrimbox/` directory that holds shared krutrimbox Project Configuration, including configurable comment template files. Runtime-only subdirectories under it remain local state.
+_Avoid_: state directory, cache directory, local config directory
+
+**Template Slot**:
+A named, user-configurable piece of krutrimbox output text, such as the PRD Pull Request Body or a comment body. Each Template Slot has a built-in default and may be replaced by a repository-owned Markdown file.
+_Avoid_: template path, template key, internal template name
+
 **Explicit Run**:
 A Factory Run started for one specified PRD.
 _Avoid_: manual run, single run, targeted run
