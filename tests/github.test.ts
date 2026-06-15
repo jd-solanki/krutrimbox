@@ -449,6 +449,8 @@ describe("GitHubCliClient", () => {
         commandKey("gh", [
           "api",
           "repos/jd-solanki/krutrimbox/commits",
+          "--method",
+          "GET",
           "--paginate",
           "-f",
           "sha=krutrimbox/issue-14"
@@ -477,6 +479,8 @@ describe("GitHubCliClient", () => {
         args: [
           "api",
           "repos/jd-solanki/krutrimbox/commits",
+          "--method",
+          "GET",
           "--paginate",
           "-f",
           "sha=krutrimbox/issue-14"
@@ -487,6 +491,8 @@ describe("GitHubCliClient", () => {
         args: [
           "api",
           "repos/jd-solanki/krutrimbox/commits",
+          "--method",
+          "GET",
           "--paginate",
           "-f",
           "sha=krutrimbox/issue-99"

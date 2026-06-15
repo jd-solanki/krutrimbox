@@ -291,6 +291,8 @@ export function createGitHubCliClient(
           await runGh([
             "api",
             `repos/${repo.owner.login}/${repo.name}/commits`,
+            "--method",
+            "GET",
             "--paginate",
             "-f",
             `sha=${branchName}`
