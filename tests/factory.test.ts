@@ -546,6 +546,32 @@ describe("Krutrimbox", () => {
     expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: "krutrimbox-issue-1" });
   });
 
+  test("skips final review when the Target Issue Pull Request is already ready for review", async () => {
+    const github = new FakeGitHubClient({
+      prds: [prdIssue()],
+      pullRequests: [{ number: 10, isDraft: false, labels: [{ name: "krutrimbox" }] }],
+      subIssuesByPrd: new Map([
+        [1, [implementationIssue({ number: 3, labels: ["PRD-sub-issue", "ready-for-agent"] })]]
+      ]),
+      branchCommitMessages: ["Bootstrap\n\nRefs #3"]
+    });
+    const sandbox = new FakeSandboxRunner();
+    const factory = new Krutrimbox({
+      github,
+      sandbox,
+      lockStore: fakeLockStore(),
+      templates: fixtureTemplates
+    });
+
+    await factory.runExplicit(1);
+
+    expect(sandbox.ensureSandbox).not.toHaveBeenCalled();
+    expect(sandbox.runFinalReview).not.toHaveBeenCalled();
+    expect(github.getPullRequestDiff).not.toHaveBeenCalled();
+    expect(github.markPullRequestReadyForReview).not.toHaveBeenCalled();
+    expect(github.requestPullRequestReview).not.toHaveBeenCalled();
+  });
+
   test("updates an existing final review comment idempotently", async () => {
     const github = new FakeGitHubClient({
       prds: [prdIssue()],

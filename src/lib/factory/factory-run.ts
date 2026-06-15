@@ -257,6 +257,13 @@ export class FactoryRun {
       return;
     }
 
+    if (!pr.isDraft) {
+      this.logger.log(
+        `krutrimbox: PRD Pull Request #${pr.number} for PRD #${prd.number} is already ready for review; skipping final review.`
+      );
+      return;
+    }
+
     this.logger.log(`krutrimbox: running final review for PRD #${prd.number}.`);
 
     const diff = await this.prdPullRequest.diff(pr.number);
