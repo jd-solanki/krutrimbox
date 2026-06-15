@@ -1,11 +1,12 @@
 import { createWriteStream, mkdirSync } from "node:fs";
 import path from "node:path";
-import { deterministicPrdSandbox } from "./sequence";
+import { deterministicTargetIssueSandbox } from "./sequence";
 
-// A per-PRD log sink for one Factory Run. Status lines (`log`) are tee'd to the
-// terminal and the file so a run stays visible while it happens; the raw
-// sandbox/agent bytes are piped through `stream` into the file only, keeping the
-// terminal clean. `close` flushes and closes the file once the run finishes.
+// A per-Target-Issue log sink for one Factory Run. Status lines (`log`) are
+// tee'd to the terminal and the file so a run stays visible while it happens;
+// the raw sandbox/agent bytes are piped through `stream` into the file only,
+// keeping the terminal clean. `close` flushes and closes the file once the run
+// finishes.
 export interface RunLog {
   readonly stream: NodeJS.WritableStream;
   readonly filePath: string | null;
@@ -13,23 +14,23 @@ export interface RunLog {
   close(): Promise<void>;
 }
 
-// Builds the RunLog for a given PRD. Injected into Krutrimbox so tests can swap
-// in a silent sink instead of touching the filesystem.
-export type RunLogFactory = (prdNumber: number) => RunLog;
+// Builds the RunLog for a given Target Issue. Injected into Krutrimbox so tests
+// can swap in a silent sink instead of touching the filesystem.
+export type RunLogFactory = (targetIssueNumber: number) => RunLog;
 
 // Production factory: each run writes to
-// `.krutrimbox/logs/krutrimbox-prd-<num>--<stamp>.log`, appending so a
+// `.krutrimbox/logs/krutrimbox-issue-<num>--<stamp>.log`, appending so a
 // retried run extends its file rather than truncating. Status lines are also
 // forwarded to `terminal` so progress still shows while noise stays in the file.
 export function createFileRunLogFactory(
   cwd: string,
   terminal: Pick<Console, "log"> = console
 ): RunLogFactory {
-  return (prdNumber) => {
+  return (targetIssueNumber) => {
     const dir = path.join(cwd, ".krutrimbox", "logs");
     mkdirSync(dir, { recursive: true });
 
-    const filePath = path.join(dir, `${deterministicPrdSandbox(prdNumber)}--${timestamp()}.log`);
+    const filePath = path.join(dir, `${deterministicTargetIssueSandbox(targetIssueNumber)}--${timestamp()}.log`);
     const stream = createWriteStream(filePath, { flags: "a" });
     stream.on("error", (error) => terminal.log(`krutrimbox: log file ${filePath} error: ${String(error)}`));
 

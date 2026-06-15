@@ -11,7 +11,7 @@ import {
   type FactoryRunDependencies,
   type FactoryRunOutcome
 } from "./factory-run";
-import { FilePrdLockStore, type PrdLockStore } from "./lock-store";
+import { FileTargetIssueLockStore, type TargetIssueLockStore } from "./lock-store";
 import { createFileRunLogFactory, type RunLogFactory } from "./run-log";
 import { CommandSandboxRunner, type SandboxRunner } from "./sandbox-runner";
 import { BundledTemplateRenderer, type TemplateRenderer } from "./template-renderer";
@@ -19,7 +19,7 @@ import { BundledTemplateRenderer, type TemplateRenderer } from "./template-rende
 export interface KrutrimboxDependencies {
   github?: GitHubClient;
   sandbox?: SandboxRunner;
-  lockStore?: PrdLockStore;
+  lockStore?: TargetIssueLockStore;
   templates?: TemplateRenderer;
   logger?: Pick<Console, "log">;
   openRunLog?: RunLogFactory;
@@ -27,16 +27,16 @@ export interface KrutrimboxDependencies {
   sandboxTemplate?: string;
 }
 
-// What dispatching one PRD produces: a Factory Run outcome, or `skipped` when
-// the PRD is not open or is already locked and no run took place.
+// What dispatching one Target Issue produces: a Factory Run outcome, or `skipped`
+// when the issue is not open or is already locked and no run took place.
 type DispatchOutcome = FactoryRunOutcome | "skipped";
 
-// The top-level orchestrator: discovers Factory-Owned PRDs and dispatches each
-// one. Dependencies are injected for tests; in production the constructor wires
-// the file/command-backed implementations from `cwd`.
+// The top-level orchestrator: discovers Factory-Owned Target Issues and
+// dispatches each one. Dependencies are injected for tests; in production the
+// constructor wires the file/command-backed implementations from `cwd`.
 export class Krutrimbox {
   private readonly github: GitHubClient;
-  private readonly lockStore: PrdLockStore;
+  private readonly lockStore: TargetIssueLockStore;
   private readonly logger: Pick<Console, "log">;
   private readonly openRunLog: RunLogFactory;
   private readonly runDependencies: FactoryRunDependencies;
@@ -49,7 +49,7 @@ export class Krutrimbox {
     const commandRunner = createExecFileCommandRunner();
 
     this.github = dependencies.github ?? createGitHubCliClient();
-    this.lockStore = dependencies.lockStore ?? new FilePrdLockStore(cwd);
+    this.lockStore = dependencies.lockStore ?? new FileTargetIssueLockStore(cwd);
     this.logger = dependencies.logger ?? console;
     this.openRunLog = dependencies.openRunLog ?? createFileRunLogFactory(cwd, this.logger);
 
@@ -65,65 +65,67 @@ export class Krutrimbox {
     this.runDependencies = { github: this.github, sandbox, templates, logger: this.logger };
   }
 
-  public async runExplicit(prdNumber: number): Promise<void> {
+  public async runExplicit(issueNumber: number): Promise<void> {
     await this.github.ensureRequiredLabels();
 
-    const prd = await this.github.getIssue(prdNumber);
+    const targetIssue = await this.github.getIssue(issueNumber);
 
-    if (!isFactoryOwnedPrd(prd)) {
+    if (!isFactoryOwnedTargetIssue(targetIssue)) {
       this.logger.log(
-        `krutrimbox: skipping PRD #${prd.number}; author ${prd.author.login} is not ${FACTORY_OWNER}.`
+        `krutrimbox: skipping Target Issue #${targetIssue.number}; author ${targetIssue.author.login} is not ${FACTORY_OWNER}.`
       );
       return;
     }
 
-    this.logger.log(`krutrimbox: starting Explicit Run for PRD #${prd.number}.`);
-    this.logger.log(`krutrimbox: processing only Factory-Owned PRDs by ${FACTORY_OWNER}.`);
-    await this.dispatch(prd);
+    this.logger.log(`krutrimbox: starting Explicit Run for Target Issue #${targetIssue.number}.`);
+    this.logger.log(`krutrimbox: processing only Factory-Owned Target Issues by ${FACTORY_OWNER}.`);
+    await this.dispatch(targetIssue);
   }
 
   public async runBatch(): Promise<void> {
-    this.logger.log("krutrimbox: starting Batch Run for ready PRDs.");
+    this.logger.log("krutrimbox: starting Batch Run for ready Target Issues.");
     await this.github.ensureRequiredLabels();
-    this.logger.log(`krutrimbox: discovering Factory-Owned PRDs by ${FACTORY_OWNER}.`);
+    this.logger.log(`krutrimbox: discovering Factory-Owned Target Issues by ${FACTORY_OWNER}.`);
 
-    const prds = [...await this.github.listReadyPrds(FACTORY_OWNER)]
+    const targetIssues = [...await this.github.listReadyTargetIssues(FACTORY_OWNER)]
       .sort((left, right) => left.number - right.number);
     const outcomes: DispatchOutcome[] = [];
 
-    for (const prd of prds) {
-      outcomes.push(await this.dispatch(prd));
+    for (const targetIssue of targetIssues) {
+      outcomes.push(await this.dispatch(targetIssue));
     }
 
     this.logBatchSummary(outcomes);
   }
 
-  // The dispatch seam: discovery hands a PRD here, and dispatch guards it (open
-  // state + PRD Lock) before a Factory Run ever exists. Holding the lock across
-  // `process()` keeps the run's invariant intact: a FactoryRun ⇒ we own its
-  // PRD Branch and PRD Sandbox.
-  private async dispatch(prd: GitHubIssue): Promise<DispatchOutcome> {
-    if (prd.state !== "OPEN") {
-      this.logger.log(`krutrimbox: skipping PRD #${prd.number}; PRD is ${prd.state}.`);
+  // The dispatch seam: discovery hands a Target Issue here, and dispatch guards
+  // it (open state + lock) before a Factory Run ever exists. Holding the lock
+  // across `process()` keeps the run's invariant intact: a FactoryRun owns its
+  // deterministic branch and sandbox.
+  private async dispatch(targetIssue: GitHubIssue): Promise<DispatchOutcome> {
+    if (targetIssue.state !== "OPEN") {
+      this.logger.log(
+        `krutrimbox: skipping Target Issue #${targetIssue.number}; issue is ${targetIssue.state}.`
+      );
       return "skipped";
     }
 
-    const lock = await this.lockStore.acquire(prd.number);
+    const lock = await this.lockStore.acquire(targetIssue.number);
 
     if (!lock) {
-      this.logger.log(`krutrimbox: skipping PRD #${prd.number}; PRD is already locked.`);
+      this.logger.log(`krutrimbox: skipping Target Issue #${targetIssue.number}; issue is already locked.`);
       return "skipped";
     }
 
-    const runLog = this.openRunLog(prd.number);
+    const runLog = this.openRunLog(targetIssue.number);
     if (runLog.filePath) {
-      this.logger.log(`krutrimbox: writing PRD #${prd.number} logs to ${runLog.filePath}.`);
+      this.logger.log(`krutrimbox: writing Target Issue #${targetIssue.number} logs to ${runLog.filePath}.`);
     }
 
     try {
       return await new FactoryRun(
         { ...this.runDependencies, logger: runLog, output: runLog.stream },
-        prd
+        targetIssue
       ).process();
     } finally {
       await runLog.close();
@@ -139,15 +141,15 @@ export class Krutrimbox {
     }
 
     this.logger.log(
-      `krutrimbox: Batch Run finished; processed ${outcomes.length} PRD(s): `
+      `krutrimbox: Batch Run finished; processed ${outcomes.length} Target Issue(s): `
       + `${tally.completed} completed, ${tally.paused} paused, `
       + `${tally["issue-error"]} errored, ${tally.skipped} skipped.`
     );
   }
 }
 
-function isFactoryOwnedPrd(prd: GitHubIssue): boolean {
-  return prd.author.login === FACTORY_OWNER;
+function isFactoryOwnedTargetIssue(targetIssue: GitHubIssue): boolean {
+  return targetIssue.author.login === FACTORY_OWNER;
 }
 
 function isGitHubClient(value: GitHubClient | KrutrimboxDependencies): value is GitHubClient {

@@ -1,7 +1,7 @@
 // Sandboxed Agent prompts, inlined as string constants so the published
 // bundle carries them instead of reading files relative to cwd. `{{key}}`
 // placeholders are filled by the BundledTemplateRenderer. Keyed by their
-// historical file paths.
+// bundled file paths.
 
 export const PROMPTS: Record<string, string> = {
   "prompts/afk-issue.md": `# AFK Issue Implementation
@@ -13,8 +13,8 @@ You are a Sandboxed Agent implementing exactly one AFK Issue for krutrimbox.
 - Work only on the current AFK Issue.
 - Do not implement future Implementation Issues.
 - Do not close GitHub issues.
-- Do not create, edit, mark ready, merge, or comment on the PRD Pull Request.
-- Do not change labels or parent PRD state.
+- Do not create, edit, mark ready, merge, or comment on the Target Issue Pull Request.
+- Do not change labels or Target Issue state.
 - Do not create commits or push branches.
 - You may use read-only \`gh\` commands to inspect GitHub state.
 
@@ -24,15 +24,15 @@ Before implementation, verify that every Blocking Issue listed for the current A
 
 ## Git Requirements
 
-- Work on the PRD Branch: \`{{prd_branch}}\`.
+- Work on the Target Issue Branch: \`{{target_issue_branch}}\`.
 - Before changing files, inspect the current branch and working tree state with git.
 - If earlier failed attempts already left work for this same AFK Issue, understand and continue that work instead of starting over or overwriting it.
 - Leave the completed file changes in the working tree.
-- The outer krutrimbox will create the commit and push the PRD Branch.
+- The outer krutrimbox will create the commit and push the Target Issue Branch.
 
-## Parent PRD
+## Target Issue
 
-{{prd_body}}
+{{target_issue_body}}
 
 ## Current AFK Issue
 
@@ -60,7 +60,7 @@ Use following skills if available to you:
 `,
   "prompts/final-review.md": `# krutrimbox Final Review
 
-You are reviewing the completed PRD Pull Request for krutrimbox.
+You are reviewing the completed Target Issue Pull Request for krutrimbox.
 
 ## Review Boundaries
 
@@ -71,11 +71,11 @@ You are reviewing the completed PRD Pull Request for krutrimbox.
 
 ## Review Focus
 
-Review the pull request diff against the parent PRD and its Implementation Issues. Prioritize concrete risks over style preferences.
+Review the pull request diff against the Target Issue and its Implementation Issues. Prioritize concrete risks over style preferences.
 
 Look for:
 
-- Behavior that does not satisfy the PRD.
+- Behavior that does not satisfy the Target Issue.
 - Missing or incomplete Implementation Issues.
 - Regressions introduced by interactions between issues.
 - Risky code paths, data handling mistakes, or edge cases.
@@ -100,9 +100,9 @@ Use this structure:
 
 If there are no findings, say that clearly under \`Findings\`.
 
-## Parent PRD
+## Target Issue
 
-{{prd_body}}
+{{target_issue_body}}
 
 ## Implementation Issues
 

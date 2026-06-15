@@ -2,9 +2,8 @@ import type { GitHubIssue } from "../github";
 import {
   AFK_LABEL,
   HITL_LABEL,
-  IMPLEMENTATION_LABEL,
-  PRD_BRANCH_PREFIX,
-  PRD_SANDBOX_PREFIX
+  TARGET_ISSUE_BRANCH_PREFIX,
+  TARGET_ISSUE_SANDBOX_PREFIX
 } from "./constants";
 
 export interface ImplementationIssue {
@@ -29,20 +28,22 @@ export interface ImplementationSequence {
 }
 
 export function buildImplementationSequence(
-  prdNumber: number,
-  attachedSubIssues: GitHubIssue[]
+  targetIssue: GitHubIssue,
+  attachedSubIssues: GitHubIssue[],
+  doneSet: Set<number>
 ): ImplementationSequence {
   const openIssues: ImplementationIssue[] = [];
   const resolvedIssues: ResolvedIssue[] = [];
+  const candidateIssues = attachedSubIssues.length > 0 ? attachedSubIssues : [targetIssue];
 
-  for (const issue of attachedSubIssues) {
+  for (const issue of candidateIssues) {
     const labels = labelNames(issue);
 
-    if (!labels.includes(IMPLEMENTATION_LABEL) || issue.parentNumber !== prdNumber) {
+    if (attachedSubIssues.length > 0 && issue.parentNumber !== targetIssue.number) {
       continue;
     }
 
-    if (issue.state === "CLOSED") {
+    if (doneSet.has(issue.number)) {
       resolvedIssues.push({
         number: issue.number,
         title: issue.title,
@@ -79,12 +80,12 @@ export function buildImplementationSequence(
   };
 }
 
-export function deterministicPrdBranch(prdNumber: number): string {
-  return `${PRD_BRANCH_PREFIX}${prdNumber}`;
+export function deterministicTargetIssueBranch(targetIssueNumber: number): string {
+  return `${TARGET_ISSUE_BRANCH_PREFIX}${targetIssueNumber}`;
 }
 
-export function deterministicPrdSandbox(prdNumber: number): string {
-  return `${PRD_SANDBOX_PREFIX}${prdNumber}`;
+export function deterministicTargetIssueSandbox(targetIssueNumber: number): string {
+  return `${TARGET_ISSUE_SANDBOX_PREFIX}${targetIssueNumber}`;
 }
 
 export function parseBlockingIssueNumbers(body: string): number[] {

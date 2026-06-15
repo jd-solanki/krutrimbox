@@ -1,6 +1,6 @@
 # Sandbox Template Setup
 
-krutrimbox PRD Sandboxes use Docker Sandboxes clone mode and a custom Codex template image.
+krutrimbox Target Issue Sandboxes use Docker Sandboxes clone mode and a custom Codex template image.
 
 ## Why this exists
 
@@ -30,7 +30,7 @@ docker.io/library/krutrimbox-codex:pnpm
 Override it for experiments with:
 
 ```sh
-KRUTRIMBOX_SANDBOX_TEMPLATE=<image-ref> nr start run --prd <number>
+KRUTRIMBOX_SANDBOX_TEMPLATE=<image-ref> nr start run --issue <number>
 ```
 
 ## Preparing a Machine
@@ -65,19 +65,19 @@ docker.io/library/krutrimbox-codex   pnpm
 
 ## Existing Sandboxes
 
-Existing PRD Sandboxes keep the template they were created from. If a PRD Sandbox was created before this template was loaded, it will not gain `pnpm` automatically.
+Existing Target Issue Sandboxes keep the template they were created from. If a Target Issue Sandbox was created before this template was loaded, it will not gain `pnpm` automatically.
 
 Before replacing a sandbox, inspect it for uncommitted work:
 
 ```sh
-sbx exec -w "$(pwd)" krutrimbox-prd-<number> -- git status --short --branch
+sbx exec -w "$(pwd)" krutrimbox-issue-<number> -- git status --short --branch
 ```
 
 If there is no work to preserve, recreate it from the new template:
 
 ```sh
-sbx rm --force krutrimbox-prd-<number>
-nr start run --prd <number>
+sbx rm --force krutrimbox-issue-<number>
+nr start run --issue <number>
 ```
 
 The factory will create the replacement sandbox with the configured template.
@@ -89,5 +89,5 @@ The factory passes the absolute repository path to both `sbx create` and `sbx ex
 Clone-mode sandboxes expose the private repository clone at the original host path inside the sandbox. A plain `sbx exec <sandbox> -- git status` starts in Docker Sandboxes' default directory, which may not be a Git repository. Use this shape when debugging manually:
 
 ```sh
-sbx exec -w "$(pwd)" krutrimbox-prd-<number> -- git status --short --branch
+sbx exec -w "$(pwd)" krutrimbox-issue-<number> -- git status --short --branch
 ```

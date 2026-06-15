@@ -9,11 +9,11 @@ describe("CommandSandboxRunner", () => {
       calls.push({ command, args });
 
       if (args.includes("--list")) {
-        return "  krutrimbox/prd-1\n";
+        return "  krutrimbox/issue-1\n";
       }
 
       if (args.includes("ls-remote")) {
-        return "abc123\trefs/heads/krutrimbox/prd-1\n";
+        return "abc123\trefs/heads/krutrimbox/issue-1\n";
       }
 
       return "";
@@ -21,8 +21,8 @@ describe("CommandSandboxRunner", () => {
     const sandbox = new CommandSandboxRunner(runner, "/workspace/krutrimbox", "template");
 
     await sandbox.checkoutBranch({
-      sandboxName: "krutrimbox-prd-1",
-      branchName: "krutrimbox/prd-1"
+      sandboxName: "krutrimbox-issue-1",
+      branchName: "krutrimbox/issue-1"
     });
 
     expect(calls).toEqual([
@@ -32,12 +32,12 @@ describe("CommandSandboxRunner", () => {
           "exec",
           "--workdir",
           "/workspace/krutrimbox",
-          "krutrimbox-prd-1",
+          "krutrimbox-issue-1",
           "--",
           "git",
           "branch",
           "--list",
-          "krutrimbox/prd-1"
+          "krutrimbox/issue-1"
         ]
       },
       {
@@ -46,13 +46,13 @@ describe("CommandSandboxRunner", () => {
           "exec",
           "--workdir",
           "/workspace/krutrimbox",
-          "krutrimbox-prd-1",
+          "krutrimbox-issue-1",
           "--",
           "git",
           "ls-remote",
           "--heads",
           "origin",
-          "krutrimbox/prd-1"
+          "krutrimbox/issue-1"
         ]
       },
       {
@@ -61,11 +61,11 @@ describe("CommandSandboxRunner", () => {
           "exec",
           "--workdir",
           "/workspace/krutrimbox",
-          "krutrimbox-prd-1",
+          "krutrimbox-issue-1",
           "--",
           "git",
           "checkout",
-          "krutrimbox/prd-1"
+          "krutrimbox/issue-1"
         ]
       },
       {
@@ -74,7 +74,7 @@ describe("CommandSandboxRunner", () => {
           "exec",
           "--workdir",
           "/workspace/krutrimbox",
-          "krutrimbox-prd-1",
+          "krutrimbox-issue-1",
           "--",
           "git",
           "pull",
@@ -82,7 +82,7 @@ describe("CommandSandboxRunner", () => {
           "--autostash",
           "--no-edit",
           "origin",
-          "krutrimbox/prd-1"
+          "krutrimbox/issue-1"
         ]
       }
     ]);
@@ -97,14 +97,14 @@ describe("CommandSandboxRunner", () => {
     const sandbox = new CommandSandboxRunner(runner, "/workspace/krutrimbox", "template");
 
     await sandbox.checkoutBranch({
-      sandboxName: "krutrimbox-prd-1",
-      branchName: "krutrimbox/prd-1"
+      sandboxName: "krutrimbox-issue-1",
+      branchName: "krutrimbox/issue-1"
     });
 
     expect(calls.map((call) => call.args.slice(5))).toEqual([
-      ["git", "branch", "--list", "krutrimbox/prd-1"],
-      ["git", "ls-remote", "--heads", "origin", "krutrimbox/prd-1"],
-      ["git", "checkout", "-B", "krutrimbox/prd-1"]
+      ["git", "branch", "--list", "krutrimbox/issue-1"],
+      ["git", "ls-remote", "--heads", "origin", "krutrimbox/issue-1"],
+      ["git", "checkout", "-B", "krutrimbox/issue-1"]
     ]);
   });
 
@@ -116,12 +116,12 @@ describe("CommandSandboxRunner", () => {
     };
     const sandbox = new CommandSandboxRunner(runner, "/workspace/krutrimbox", "template");
 
-    await sandbox.removeSandbox({ sandboxName: "krutrimbox-prd-1" });
+    await sandbox.removeSandbox({ sandboxName: "krutrimbox-issue-1" });
 
     expect(calls).toEqual([
       {
         command: "sbx",
-        args: ["rm", "--force", "krutrimbox-prd-1"]
+        args: ["rm", "--force", "krutrimbox-issue-1"]
       }
     ]);
   });

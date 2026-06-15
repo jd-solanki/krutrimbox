@@ -1,11 +1,12 @@
 import type { GitHubClient, GitHubIssue } from "../github";
+import { fetchDoneSet } from "./done-set";
 import { formatEarlierIssues, formatLaterIssues } from "./format";
-import { PrdPullRequest } from "./prd-pull-request";
+import { TargetIssuePullRequest } from "./target-issue-pull-request";
 import type { SandboxRunner } from "./sandbox-runner";
 import {
   buildImplementationSequence,
-  deterministicPrdBranch,
-  deterministicPrdSandbox,
+  deterministicTargetIssueBranch,
+  deterministicTargetIssueSandbox,
   parseBlockingIssueNumbers,
   type ImplementationIssue,
   type ImplementationSequence,
@@ -13,11 +14,11 @@ import {
 } from "./sequence";
 import type { TemplateRenderer } from "./template-renderer";
 
-// The terminal outcome of one Factory Run against a locked PRD. `skipped` is a
+// The terminal outcome of one Factory Run against a locked Target Issue. `skipped` is a
 // dispatch concern (no run ever started), so it is not a Factory Run outcome.
 export type FactoryRunOutcome = "completed" | "paused" | "issue-error";
 
-// The seams a Factory Run drives. The PRD Lock is deliberately absent: a
+// The seams a Factory Run drives. The Target Issue Lock is deliberately absent: a
 // FactoryRun exists only while krutrimbox holds its lock, so locking is a
 // dispatch concern above the run, not a dependency of the run itself.
 export interface FactoryRunDependencies {
@@ -35,11 +36,11 @@ export interface FactoryRunDependencies {
 // as a whole completes, pauses, or stops on an issue error.
 type IssueOutcome = "completed" | "error";
 
-// One execution attempt by krutrimbox against a single locked PRD. The
-// PRD Branch and PRD Sandbox names are derived once and held as invariants;
-// `closedIssueNumbers` and `processedIssues` are intra-run bookkeeping rebuilt
-// fresh every run (ADR-0002), never persisted. Single-use: call `process()`
-// once.
+// One execution attempt by krutrimbox against a single locked Target Issue. The
+// Target Issue Branch and Target Issue Sandbox names are derived once and held as invariants;
+// `doneSet` and `processedIssues` are intra-run bookkeeping rebuilt fresh every
+// run from the branch's Refs footers (ADR-0015), never persisted separately.
+// Single-use: call `process()` once.
 export class FactoryRun {
   private readonly github: GitHubClient;
   private readonly sandbox: SandboxRunner;
@@ -48,45 +49,48 @@ export class FactoryRun {
   private readonly output?: NodeJS.WritableStream;
   public readonly branchName: string;
   public readonly sandboxName: string;
-  private readonly prdPullRequest: PrdPullRequest;
-  private readonly closedIssueNumbers = new Set<number>();
+  private readonly targetIssuePullRequest: TargetIssuePullRequest;
+  private readonly doneSet = new Set<number>();
   private readonly processedIssues: ResolvedIssue[] = [];
 
   public constructor(
     dependencies: FactoryRunDependencies,
-    private readonly prd: GitHubIssue
+    private readonly targetIssue: GitHubIssue
   ) {
     this.github = dependencies.github;
     this.sandbox = dependencies.sandbox;
     this.templates = dependencies.templates;
     this.logger = dependencies.logger;
     this.output = dependencies.output;
-    this.branchName = deterministicPrdBranch(prd.number);
-    this.sandboxName = deterministicPrdSandbox(prd.number);
-    this.prdPullRequest = new PrdPullRequest(
+    this.branchName = deterministicTargetIssueBranch(targetIssue.number);
+    this.sandboxName = deterministicTargetIssueSandbox(targetIssue.number);
+    this.targetIssuePullRequest = new TargetIssuePullRequest(
       this.github,
       this.templates,
       this.logger,
-      prd,
+      targetIssue,
       this.branchName,
       this.sandboxName
     );
   }
 
   public async process(): Promise<FactoryRunOutcome> {
-    const { prd } = this;
-    this.logger.log(`krutrimbox: building Implementation Sequence for PRD #${prd.number}.`);
+    const { targetIssue } = this;
+    this.logger.log(`krutrimbox: building Implementation Sequence for Target Issue #${targetIssue.number}.`);
 
-    const subIssues = await this.github.getAttachedSubIssues(prd.number);
-    const sequence = buildImplementationSequence(prd.number, subIssues);
+    const subIssues = await this.github.getAttachedSubIssues(targetIssue.number);
+    for (const issueNumber of await fetchDoneSet(this.github, this.branchName)) {
+      this.doneSet.add(issueNumber);
+    }
+
+    const sequence = buildImplementationSequence(targetIssue, subIssues, this.doneSet);
 
     for (const issue of sequence.resolvedIssues) {
-      this.closedIssueNumbers.add(issue.number);
       this.logger.log(`krutrimbox: skipping Resolved Issue #${issue.number}.`);
     }
 
     if (sequence.openIssues.length === 0) {
-      this.logger.log(`krutrimbox: PRD #${prd.number} has no open Implementation Issues.`);
+      this.logger.log(`krutrimbox: Target Issue #${targetIssue.number} has no open Implementation Issues.`);
 
       if (sequence.resolvedIssues.length > 0) {
         await this.routeFinalReview(sequence);
@@ -98,12 +102,12 @@ export class FactoryRun {
     const orderedIssues = sequence.openIssues
       .map((issue) => `#${issue.number} (${issue.kind})`)
       .join(", ");
-    this.logger.log(`krutrimbox: Implementation Sequence for PRD #${prd.number}: ${orderedIssues}.`);
+    this.logger.log(`krutrimbox: Implementation Sequence for Target Issue #${targetIssue.number}: ${orderedIssues}.`);
 
     for (const issue of sequence.openIssues) {
       if (issue.kind === "hitl") {
         await this.pauseAtHitl(issue);
-        this.logger.log(`krutrimbox: paused PRD #${prd.number} at HITL Issue #${issue.number}.`);
+        this.logger.log(`krutrimbox: paused Target Issue #${targetIssue.number} at HITL Issue #${issue.number}.`);
         return "paused";
       }
 
@@ -115,7 +119,7 @@ export class FactoryRun {
         return "issue-error";
       }
 
-      this.closedIssueNumbers.add(issue.number);
+      this.doneSet.add(issue.number);
       this.processedIssues.push({
         number: issue.number,
         title: issue.title,
@@ -139,7 +143,7 @@ export class FactoryRun {
     priorIssues: ResolvedIssue[],
     laterIssues: ImplementationIssue[]
   ): Promise<IssueOutcome> {
-    const { prd } = this;
+    const { targetIssue } = this;
 
     try {
       const unresolvedBlockers = await this.findUnresolvedBlockers(issue);
@@ -148,7 +152,7 @@ export class FactoryRun {
         const issueUrl = await this.github.getIssueUrl(issue.number);
         const commentUrl = await this.postAfkErrorComment(issue, unresolvedBlockers);
         this.logger.log(
-          `krutrimbox: stopped PRD #${prd.number}; AFK Issue #${issue.number} has unresolved blockers. See ${commentUrl} (issue: ${issueUrl}).`
+          `krutrimbox: stopped Target Issue #${targetIssue.number}; AFK Issue #${issue.number} has unresolved blockers. See ${commentUrl} (issue: ${issueUrl}).`
         );
         return "error";
       }
@@ -167,10 +171,9 @@ export class FactoryRun {
         issueNumber: issue.number
       });
 
-      const closedAfterCurrent = new Set(this.closedIssueNumbers);
-      closedAfterCurrent.add(issue.number);
-      await this.prdPullRequest.ensureReflectsSequence(sequence, closedAfterCurrent);
-      await this.github.closeIssue(issue.number);
+      const doneAfterCurrent = new Set(this.doneSet);
+      doneAfterCurrent.add(issue.number);
+      await this.targetIssuePullRequest.ensureReflectsSequence(sequence, doneAfterCurrent);
       this.logger.log(`krutrimbox: completed AFK Issue #${issue.number}.`);
 
       return "completed";
@@ -178,7 +181,7 @@ export class FactoryRun {
       const issueUrl = await this.github.getIssueUrl(issue.number);
       const commentUrl = await this.postAfkErrorComment(issue, [formatError(error)]);
       this.logger.log(
-        `krutrimbox: stopped PRD #${prd.number}; AFK Issue #${issue.number} failed. See ${commentUrl} (issue: ${issueUrl}).`
+        `krutrimbox: stopped Target Issue #${targetIssue.number}; AFK Issue #${issue.number} failed. See ${commentUrl} (issue: ${issueUrl}).`
       );
       return "error";
     }
@@ -189,6 +192,10 @@ export class FactoryRun {
     const unresolved: string[] = [];
 
     for (const blockerNumber of blockerNumbers) {
+      if (this.doneSet.has(blockerNumber)) {
+        continue;
+      }
+
       const blocker = await this.github.getIssue(blockerNumber);
 
       if (blocker.state !== "CLOSED") {
@@ -205,8 +212,8 @@ export class FactoryRun {
     laterIssues: ImplementationIssue[]
   ): Promise<string> {
     return this.templates.render("prompts/afk-issue.md", {
-      prd_branch: this.branchName,
-      prd_body: this.prd.body,
+      target_issue_branch: this.branchName,
+      target_issue_body: this.targetIssue.body,
       issue_body: issue.body,
       earlier_issues: formatEarlierIssues(priorIssues),
       later_issues: formatLaterIssues(laterIssues)
@@ -215,24 +222,24 @@ export class FactoryRun {
 
   private async pauseAtHitl(issue: ImplementationIssue): Promise<void> {
     const body = await this.templates.render("templates/hitlpause-comment.md", {
-      prd_number: this.prd.number,
-      prd_author: this.prd.author.login,
+      target_issue_number: this.targetIssue.number,
+      target_issue_author: this.targetIssue.author.login,
       issue_number: issue.number,
       issue_title: issue.title,
-      prd_branch: this.branchName,
-      prd_sandbox: this.sandboxName
+      target_issue_branch: this.branchName,
+      target_issue_sandbox: this.sandboxName
     });
 
-    await this.upsertComment(this.prd.number, hitlMarker(this.prd.number, issue.number), body);
+    await this.upsertComment(this.targetIssue.number, hitlMarker(this.targetIssue.number, issue.number), body);
   }
 
   private async postAfkErrorComment(issue: ImplementationIssue, errors: string[]): Promise<string> {
     const body = await this.templates.render("templates/afk-error-comment.md", {
-      prd_number: this.prd.number,
+      target_issue_number: this.targetIssue.number,
       issue_number: issue.number,
       error_summary: errors.join("\n"),
-      prd_branch: this.branchName,
-      prd_sandbox: this.sandboxName
+      target_issue_branch: this.branchName,
+      target_issue_sandbox: this.sandboxName
     });
 
     const comment = await this.upsertComment(issue.number, afkErrorMarker(issue.number), body);
@@ -240,19 +247,26 @@ export class FactoryRun {
   }
 
   private async routeFinalReview(sequence: ImplementationSequence): Promise<void> {
-    const { prd } = this;
-    const pr = await this.prdPullRequest.find();
+    const { targetIssue } = this;
+    const pr = await this.targetIssuePullRequest.find();
 
     if (!pr) {
       this.logger.log(
-        `krutrimbox: no PRD Pull Request found for PRD #${prd.number}; skipping final review.`
+        `krutrimbox: no Target Issue Pull Request found for Target Issue #${targetIssue.number}; skipping final review.`
       );
       return;
     }
 
-    this.logger.log(`krutrimbox: running final review for PRD #${prd.number}.`);
+    if (!pr.isDraft) {
+      this.logger.log(
+        `krutrimbox: Target Issue Pull Request #${pr.number} for Target Issue #${targetIssue.number} is already ready for review; skipping final review.`
+      );
+      return;
+    }
 
-    const diff = await this.prdPullRequest.diff(pr.number);
+    this.logger.log(`krutrimbox: running final review for Target Issue #${targetIssue.number}.`);
+
+    const diff = await this.targetIssuePullRequest.diff(pr.number);
     const prompt = await this.buildFinalReviewPrompt(sequence, diff);
 
     await this.sandbox.ensureSandbox({ sandboxName: this.sandboxName });
@@ -263,15 +277,15 @@ export class FactoryRun {
     });
 
     const commentBody = await this.templates.render("templates/final-review-comment.md", {
-      prd_number: prd.number,
+      target_issue_number: targetIssue.number,
       review_body: reviewBody
     });
 
-    await this.upsertComment(pr.number, finalReviewMarker(prd.number), commentBody);
-    await this.prdPullRequest.routeForReview(pr.number, prd.author.login);
+    await this.upsertComment(pr.number, finalReviewMarker(targetIssue.number), commentBody);
+    await this.targetIssuePullRequest.routeForReview(pr.number, targetIssue.author.login);
 
     await this.sandbox.removeSandbox({ sandboxName: this.sandboxName });
-    this.logger.log(`krutrimbox: removed PRD Sandbox ${this.sandboxName}.`);
+    this.logger.log(`krutrimbox: removed Target Issue Sandbox ${this.sandboxName}.`);
   }
 
   private async buildFinalReviewPrompt(
@@ -279,7 +293,7 @@ export class FactoryRun {
     diff: string
   ): Promise<string> {
     return this.templates.render("prompts/final-review.md", {
-      prd_body: this.prd.body,
+      target_issue_body: this.targetIssue.body,
       implementation_issues: formatEarlierIssues(sequence.resolvedIssues),
       pr_diff: diff
     });
@@ -297,16 +311,16 @@ export class FactoryRun {
   }
 }
 
-function hitlMarker(prdNumber: number, issueNumber: number): string {
-  return `<!-- krutrimbox:hitl-prd-${prdNumber}-issue-${issueNumber} -->`;
+function hitlMarker(targetIssueNumber: number, issueNumber: number): string {
+  return `<!-- krutrimbox:hitl-issue-${targetIssueNumber}-implementation-${issueNumber} -->`;
 }
 
 function afkErrorMarker(issueNumber: number): string {
   return `<!-- krutrimbox:afk-error-issue-${issueNumber} -->`;
 }
 
-function finalReviewMarker(prdNumber: number): string {
-  return `<!-- krutrimbox:final-review-prd-${prdNumber} -->`;
+function finalReviewMarker(targetIssueNumber: number): string {
+  return `<!-- krutrimbox:final-review-issue-${targetIssueNumber} -->`;
 }
 
 function formatError(error: unknown): string {

@@ -7,7 +7,7 @@ import {
 
 export function formatImplementationChecklist(
   sequence: ImplementationSequence,
-  closedIssueNumbers: Set<number>
+  doneSet: Set<number>
 ): string {
   const issues = [...sequence.resolvedIssues, ...sequence.openIssues].sort(
     (left, right) => left.number - right.number
@@ -18,8 +18,21 @@ export function formatImplementationChecklist(
   }
 
   return issues
-    .map((issue) => `- [${closedIssueNumbers.has(issue.number) ? "x" : " "}] #${issue.number} - ${issue.title}`)
+    .map((issue) => `- [${doneSet.has(issue.number) ? "x" : " "}] #${issue.number} - ${issue.title}`)
     .join("\n");
+}
+
+export function formatClosingKeywords(
+  targetIssueNumber: number,
+  sequence: ImplementationSequence
+): string {
+  const issueNumbers = [
+    targetIssueNumber,
+    ...[...sequence.resolvedIssues, ...sequence.openIssues].map((issue) => issue.number)
+  ];
+  const uniqueIssueNumbers = [...new Set(issueNumbers)].sort((left, right) => left - right);
+
+  return uniqueIssueNumbers.map((issueNumber) => `Closes #${issueNumber}`).join("\n");
 }
 
 export function formatEarlierIssues(issues: ResolvedIssue[]): string {

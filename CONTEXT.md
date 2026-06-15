@@ -18,7 +18,7 @@ _Avoid_: GitHub access, gh permissions, live state
 
 **Target Issue**:
 The discoverable GitHub issue a Factory Run targets: agent-ready (labeled `ready-for-agent`) and not itself a sub-issue of any other issue. It is either Standalone or a Parent Target Issue.
-_Avoid_: root issue, main issue, parent ticket, PRD
+_Avoid_: root issue, main issue, parent ticket
 
 **Standalone Target Issue**:
 A Target Issue with no attached sub-issues, whose own body is the unit of work; krutrimbox implements it directly as a sequence of one.
@@ -26,11 +26,7 @@ _Avoid_: single issue, simple issue, lone issue
 
 **Parent Target Issue**:
 A Target Issue with attached sub-issues, whose body is implementation context only; krutrimbox implements its ordered Implementation Issues rather than the body.
-_Avoid_: epic, PRD, parent ticket
-
-**PRD**:
-Informal shorthand for a Parent Target Issue whose body is a product and implementation plan. Not a label or a requirement — just one shape a Target Issue can take.
-_Avoid_: spec, plan, the PRD label
+_Avoid_: epic, parent ticket
 
 **Factory Run**:
 One execution attempt by krutrimbox against a Target Issue using the current state of its work. A Target Issue can have multiple Factory Runs when human input pauses progress and later unblocks the next actionable issue.
@@ -90,11 +86,11 @@ _Avoid_: closes footer, closing keyword, auto-close footer
 
 **Target Issue Branch**:
 The shared branch (`krutrimbox/issue-<number>`) for all changes made while delivering one Target Issue.
-_Avoid_: PRD branch, issue branch, feature branch
+_Avoid_: issue branch, feature branch
 
 **Target Issue Pull Request**:
 The single pull request for a Target Issue Branch that accumulates all commits, carries the `Closes #<number>` keywords that auto-close the Target Issue and its Implementation Issues on merge, and receives final review once every Implementation Issue is resolved.
-_Avoid_: PRD pull request, implementation PR, issue PR
+_Avoid_: implementation PR, issue PR
 
 **Target Issue Pull Request Body**:
 The deterministic pull request description generated and maintained by krutrimbox: it carries the `Closes` keywords and a derived checklist projection of the Done Set, and is never read back as a source of truth.
@@ -110,11 +106,11 @@ _Avoid_: bot author, factory author, reviewer
 
 **Target Issue Author**:
 The human GitHub user who created the Target Issue and owns acceptance of the requested work.
-_Avoid_: PRD author, reporter, requester
+_Avoid_: reporter, requester
 
 **Factory-Owned Target Issue**:
 A Target Issue authored by `jd-solanki`, making it eligible for krutrimbox processing.
-_Avoid_: eligible issue, owned issue, my PRD
+_Avoid_: eligible issue, owned issue
 
 **Final Reviewer**:
 The human reviewer selected for the completed Target Issue Pull Request after krutrimbox posts its review.
@@ -125,7 +121,7 @@ The condition where a sandboxed agent session exits successfully after implement
 _Avoid_: agent done, run passed, implementation complete
 
 **Target Issue Sandbox**:
-The Docker sandbox used by krutrimbox while delivering one PRD. It may be reused across AFK Issues for code and dependency continuity, while Codex sessions inside it remain fresh per issue.
+The Docker sandbox used by krutrimbox while delivering one Target Issue. It may be reused across AFK Issues for code and dependency continuity, while Codex sessions inside it remain fresh per issue.
 _Avoid_: container, VM, issue sandbox
 
 **krutrimbox Sandbox Template**:
@@ -159,5 +155,4 @@ _Avoid_: comment tag, marker, dedupe token
 ## Flagged ambiguities
 
 - The `ready-for-agent` label is used both to make a **Target Issue** discoverable and to mark an **AFK Issue** ready. These never collide because discovery additionally requires _no parent issue_ — a sub-issue carrying `ready-for-agent` is reached only by walking down from its Parent Target Issue, never discovered as a Target Issue itself.
-- "PRD" was previously the root concept and a required label. Resolved: the root concept is now the **Target Issue**; "PRD" is informal shorthand for one shape (a Parent Target Issue whose body is a plan), and the `PRD` / `PRD-sub-issue` labels are retired.
 - "Resolved" no longer means GitHub-closed. Resolved: an Implementation Issue is resolved when it is in the **Done Set** (an Issue Reference Footer commit exists); krutrimbox closes nothing during a run — issues auto-close on **Target Issue Pull Request** merge.

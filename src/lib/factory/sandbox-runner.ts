@@ -27,9 +27,10 @@ interface SandboxExecOptions {
   output?: NodeJS.WritableStream;
 }
 
-// Drives one PRD Sandbox through `sbx`: create/reuse, branch checkout, the inner
-// Codex AFK and final-review runs, commit/push, and teardown. All sandbox state
-// lives behind these methods so Factory Runs never shell out directly.
+// Drives one Target Issue Sandbox through `sbx`: create/reuse, branch checkout,
+// the inner Codex AFK and final-review runs, commit/push, and teardown. All
+// sandbox state lives behind these methods so Factory Runs never shell out
+// directly.
 export class CommandSandboxRunner {
   public constructor(
     private readonly runner: CommandRunner,
