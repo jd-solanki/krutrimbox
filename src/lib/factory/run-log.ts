@@ -16,7 +16,7 @@ export interface RunLog {
 
 // Builds the RunLog for a given Target Issue. Injected into Krutrimbox so tests
 // can swap in a silent sink instead of touching the filesystem.
-export type RunLogFactory = (prdNumber: number) => RunLog;
+export type RunLogFactory = (targetIssueNumber: number) => RunLog;
 
 // Production factory: each run writes to
 // `.krutrimbox/logs/krutrimbox-issue-<num>--<stamp>.log`, appending so a
@@ -26,11 +26,11 @@ export function createFileRunLogFactory(
   cwd: string,
   terminal: Pick<Console, "log"> = console
 ): RunLogFactory {
-  return (prdNumber) => {
+  return (targetIssueNumber) => {
     const dir = path.join(cwd, ".krutrimbox", "logs");
     mkdirSync(dir, { recursive: true });
 
-    const filePath = path.join(dir, `${deterministicTargetIssueSandbox(prdNumber)}--${timestamp()}.log`);
+    const filePath = path.join(dir, `${deterministicTargetIssueSandbox(targetIssueNumber)}--${timestamp()}.log`);
     const stream = createWriteStream(filePath, { flags: "a" });
     stream.on("error", (error) => terminal.log(`krutrimbox: log file ${filePath} error: ${String(error)}`));
 

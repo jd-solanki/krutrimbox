@@ -20,7 +20,7 @@ describe("krutrimbox CLI", () => {
     expect(dispatch.runBatch).not.toHaveBeenCalled();
   });
 
-  test("does not expose the retired --prd option", () => {
+  test("does not expose the retired legacy Target Issue option", () => {
     const program = createTestProgram(createTestDispatch());
     const runCommand = program.commands.find((command) => command.name() === "run");
 

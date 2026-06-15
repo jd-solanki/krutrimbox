@@ -40,7 +40,7 @@ export interface GitHubClient {
   getIssue(issueNumber: number): Promise<GitHubIssue>;
   getIssueUrl(issueNumber: number): Promise<string>;
   listReadyTargetIssues(author: string): Promise<GitHubIssue[]>;
-  getAttachedSubIssues(prdNumber: number): Promise<GitHubIssue[]>;
+  getAttachedSubIssues(targetIssueNumber: number): Promise<GitHubIssue[]>;
   listIssueComments(issueNumber: number): Promise<GitHubComment[]>;
   createIssueComment(issueNumber: number, body: string): Promise<GitHubComment>;
   updateIssueComment(commentId: string, body: string): Promise<GitHubComment>;
@@ -197,7 +197,7 @@ export function createGitHubCliClient(
         .sort((left, right) => left.number - right.number);
     },
 
-    async getAttachedSubIssues(prdNumber: number): Promise<GitHubIssue[]> {
+    async getAttachedSubIssues(targetIssueNumber: number): Promise<GitHubIssue[]> {
       const repo = await getRepository();
       const response = parseJson<SubIssuesGraphqlResponse>(
         await runGh([
@@ -210,7 +210,7 @@ export function createGitHubCliClient(
           "-F",
           `repo=${repo.name}`,
           "-F",
-          `number=${prdNumber}`
+          `number=${targetIssueNumber}`
         ])
       );
 

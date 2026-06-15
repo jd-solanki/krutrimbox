@@ -9,4 +9,3 @@ krutrimbox discovers a Target Issue as any open, Factory-Owned issue labeled `re
 ## Consequences
 
 - The `ready-for-agent` label is intentionally overloaded (discovery signal on a Target Issue, readiness signal on an AFK Issue); the *no-parent* requirement is what keeps the two from colliding, so discovery must query the native parent link, not just the label.
-- The `PRD` and `PRD-sub-issue` labels are retired; membership is expressed entirely through GitHub's native sub-issue relationship plus the `ready-for-agent` / `ready-for-human` state labels.

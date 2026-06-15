@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   buildImplementationSequence,
-  FilePrdLockStore,
+  FileTargetIssueLockStore,
   Krutrimbox,
   deterministicTargetIssueBranch,
   deterministicTargetIssueSandbox,
@@ -12,10 +12,10 @@ import {
   fetchDoneSet,
   parseDoneSetFromCommitMessages,
   parseBlockingIssueNumbers,
-  PrdPullRequest,
+  TargetIssuePullRequest,
   SANDBOX_CODEX_EXEC_FLAGS,
-  type PrdLock,
-  type PrdLockStore,
+  type TargetIssueLock,
+  type TargetIssueLockStore,
   type SandboxRunner,
   type TemplateRenderer
 } from "../src/lib/factory/index";
@@ -1184,13 +1184,13 @@ describe("FactoryRun", () => {
   });
 });
 
-describe("PrdPullRequest", () => {
+describe("TargetIssuePullRequest", () => {
   const sequence = buildImplementationSequence(targetIssue(), [
     implementationIssue({ number: 3, title: "Bootstrap", labels: ["ready-for-agent"] })
   ], new Set([3]));
 
   function prModule(github: FakeGitHubClient) {
-    return new PrdPullRequest(
+    return new TargetIssuePullRequest(
       github,
       fixtureTemplates,
       { log: vi.fn() },
@@ -1401,14 +1401,14 @@ class FakeSandboxRunner implements SandboxRunner {
   });
 }
 
-function fakeLockStore({ locked = false }: { locked?: boolean } = {}): PrdLockStore {
+function fakeLockStore({ locked = false }: { locked?: boolean } = {}): TargetIssueLockStore {
   return {
     acquire: vi.fn(async () => {
       if (locked) {
         return null;
       }
 
-      const lock: PrdLock = { release: vi.fn(async () => undefined) };
+      const lock: TargetIssueLock = { release: vi.fn(async () => undefined) };
       return lock;
     })
   };
@@ -1425,7 +1425,7 @@ function recordingLockStore({ lockedTargetIssues = new Set<number>() }: { locked
         return null;
       }
 
-      const lock: PrdLock = {
+      const lock: TargetIssueLock = {
         release: vi.fn(async () => {
           store.released.push(targetIssueNumber);
         })
@@ -1434,24 +1434,24 @@ function recordingLockStore({ lockedTargetIssues = new Set<number>() }: { locked
     })
   };
 
-  return store satisfies PrdLockStore & { acquired: number[]; released: number[] };
+  return store satisfies TargetIssueLockStore & { acquired: number[]; released: number[] };
 }
 
 const fixtureTemplates: TemplateRenderer = {
   async render(templatePath, values) {
     const templates: Record<string, string> = {
       "templates/hitlpause-comment.md":
-        "<!-- krutrimbox:hitl-issue-{{prd_number}}-implementation-{{issue_number}} -->\n\n@{{prd_author}} krutrimbox is paused for Target Issue #{{prd_number}}.\n\nThe next required issue is HITL:\n\n- #{{issue_number}} - {{issue_title}}\n\n> [!IMPORTANT]\n> When the HITL work is finished, push a `Refs #{{issue_number}}` commit to the Target Issue Branch `{{prd_branch}}`.\n> An empty commit is acceptable for non-code work. Then rerun krutrimbox:\n\n```sh\nkb run --issue {{prd_number}}\n```\n\nSandbox: `{{prd_sandbox}}`",
+        "<!-- krutrimbox:hitl-issue-{{target_issue_number}}-implementation-{{issue_number}} -->\n\n@{{target_issue_author}} krutrimbox is paused for Target Issue #{{target_issue_number}}.\n\nThe next required issue is HITL:\n\n- #{{issue_number}} - {{issue_title}}\n\n> [!IMPORTANT]\n> When the HITL work is finished, push a `Refs #{{issue_number}}` commit to the Target Issue Branch `{{target_issue_branch}}`.\n> An empty commit is acceptable for non-code work. Then rerun krutrimbox:\n\n```sh\nkb run --issue {{target_issue_number}}\n```\n\nSandbox: `{{target_issue_sandbox}}`",
       "templates/afk-error-comment.md":
-        "<!-- krutrimbox:afk-error-issue-{{issue_number}} -->\n\n{{error_summary}}\n\nTarget Issue: #{{prd_number}}\nBranch: `{{prd_branch}}`\nSandbox: `{{prd_sandbox}}`",
+        "<!-- krutrimbox:afk-error-issue-{{issue_number}} -->\n\n{{error_summary}}\n\nTarget Issue: #{{target_issue_number}}\nBranch: `{{target_issue_branch}}`\nSandbox: `{{target_issue_sandbox}}`",
       "templates/pr-body.md":
-        "## Target Issue Closure\n\n{{closing_keywords}}\n\n## Implementation Issues\n\n{{implementation_issue_checklist}}\n\n## krutrimbox\n\nBranch: `{{prd_branch}}`\nSandbox: `{{prd_sandbox}}`",
+        "## Target Issue Closure\n\n{{closing_keywords}}\n\n## Implementation Issues\n\n{{implementation_issue_checklist}}\n\n## krutrimbox\n\nBranch: `{{target_issue_branch}}`\nSandbox: `{{target_issue_sandbox}}`",
       "prompts/afk-issue.md":
-        "Do not create commits or push branches.\nWork on Target Issue Branch `{{prd_branch}}`.\n\n## Target Issue\n{{prd_body}}\n\n## Current AFK Issue\n{{issue_body}}\n\n## Earlier Implementation Issues\n{{earlier_issues}}\n\n## Later Implementation Issues\n{{later_issues}}",
+        "Do not create commits or push branches.\nWork on Target Issue Branch `{{target_issue_branch}}`.\n\n## Target Issue\n{{target_issue_body}}\n\n## Current AFK Issue\n{{issue_body}}\n\n## Earlier Implementation Issues\n{{earlier_issues}}\n\n## Later Implementation Issues\n{{later_issues}}",
       "templates/final-review-comment.md":
-        "<!-- krutrimbox:final-review-issue-{{prd_number}} -->\n\n{{review_body}}",
+        "<!-- krutrimbox:final-review-issue-{{target_issue_number}} -->\n\n{{review_body}}",
       "prompts/final-review.md":
-        "## Target Issue\n{{prd_body}}\n\n## Implementation Issues\n{{implementation_issues}}\n\n## Pull Request Diff\n{{pr_diff}}"
+        "## Target Issue\n{{target_issue_body}}\n\n## Implementation Issues\n{{implementation_issues}}\n\n## Pull Request Diff\n{{pr_diff}}"
     };
     const template = templates[templatePath];
 
@@ -1537,7 +1537,7 @@ test("deterministic Target Issue branch and sandbox names stay stable", () => {
 test("file locks use the deterministic Target Issue slug", async () => {
   const workdir = await mkdtemp(join(tmpdir(), "krutrimbox-locks-"));
   try {
-    const store = new FilePrdLockStore(workdir);
+    const store = new FileTargetIssueLockStore(workdir);
     const lock = await store.acquire(42);
 
     await expect(readdir(join(workdir, ".krutrimbox", "locks"))).resolves.toEqual([

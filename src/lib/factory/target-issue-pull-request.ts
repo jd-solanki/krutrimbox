@@ -15,12 +15,12 @@ import type { TemplateRenderer } from "./template-renderer";
 // and Final Reviewer routing (ADR-0004). Review generation (a Sandbox concern)
 // and the idempotent review comment (a Factory Comment Marker concern) stay
 // with the Factory Run that drives it.
-export class PrdPullRequest {
+export class TargetIssuePullRequest {
   public constructor(
     private readonly github: GitHubClient,
     private readonly templates: TemplateRenderer,
     private readonly logger: Pick<Console, "log">,
-    private readonly prd: GitHubIssue,
+    private readonly targetIssue: GitHubIssue,
     private readonly branchName: string,
     private readonly sandboxName: string
   ) {}
@@ -47,7 +47,7 @@ export class PrdPullRequest {
     }
 
     const created = await this.github.createDraftPullRequest({
-      title: `krutrimbox #${this.prd.number}: ${this.prd.title}`,
+      title: `krutrimbox #${this.targetIssue.number}: ${this.targetIssue.title}`,
       body,
       head: this.branchName,
       base: await this.github.getDefaultBranch(),
@@ -56,7 +56,7 @@ export class PrdPullRequest {
     await this.github.setPullRequestLabels(created.number, [KRUTRIMBOX_LABEL]);
   }
 
-  public async routeForReview(pullRequestNumber: number, prdAuthor: string): Promise<void> {
+  public async routeForReview(pullRequestNumber: number, targetIssueAuthor: string): Promise<void> {
     await this.github.markPullRequestReadyForReview(pullRequestNumber);
     this.logger.log(
       `krutrimbox: marked Target Issue Pull Request #${pullRequestNumber} ready for review.`
@@ -64,18 +64,18 @@ export class PrdPullRequest {
 
     const prAuthor = await this.github.getAuthenticatedUser();
 
-    if (prdAuthor !== prAuthor) {
-      await this.github.requestPullRequestReview(pullRequestNumber, prdAuthor);
+    if (targetIssueAuthor !== prAuthor) {
+      await this.github.requestPullRequestReview(pullRequestNumber, targetIssueAuthor);
       this.logger.log(
-        `krutrimbox: requested review from ${prdAuthor} for Target Issue Pull Request #${pullRequestNumber}.`
+        `krutrimbox: requested review from ${targetIssueAuthor} for Target Issue Pull Request #${pullRequestNumber}.`
       );
       return;
     }
 
-    const tagBody = `@${prdAuthor} krutrimbox has completed all Implementation Issues for Target Issue #${this.prd.number}. Please review the PR.`;
+    const tagBody = `@${targetIssueAuthor} krutrimbox has completed all Implementation Issues for Target Issue #${this.targetIssue.number}. Please review the PR.`;
     await this.github.createIssueComment(pullRequestNumber, tagBody);
     this.logger.log(
-      `krutrimbox: tagged ${prdAuthor} in Target Issue Pull Request #${pullRequestNumber} (self-review).`
+      `krutrimbox: tagged ${targetIssueAuthor} in Target Issue Pull Request #${pullRequestNumber} (self-review).`
     );
   }
 
@@ -84,10 +84,10 @@ export class PrdPullRequest {
     doneSet: Set<number>
   ): Promise<string> {
     return this.templates.render("templates/pr-body.md", {
-      prd_number: this.prd.number,
-      prd_branch: this.branchName,
-      prd_sandbox: this.sandboxName,
-      closing_keywords: formatClosingKeywords(this.prd.number, sequence),
+      target_issue_number: this.targetIssue.number,
+      target_issue_branch: this.branchName,
+      target_issue_sandbox: this.sandboxName,
+      closing_keywords: formatClosingKeywords(this.targetIssue.number, sequence),
       implementation_issue_checklist: formatImplementationChecklist(sequence, doneSet)
     });
   }

@@ -17,26 +17,26 @@ export const TEMPLATES: Record<string, string> = {
 
 ## Krutrimbox
 
-Branch: \`{{prd_branch}}\`
-Sandbox: \`{{prd_sandbox}}\`
+Branch: \`{{target_issue_branch}}\`
+Sandbox: \`{{target_issue_sandbox}}\`
 `,
-  "templates/hitlpause-comment.md": `<!-- krutrimbox:hitl-issue-{{prd_number}}-implementation-{{issue_number}} -->
+  "templates/hitlpause-comment.md": `<!-- krutrimbox:hitl-issue-{{target_issue_number}}-implementation-{{issue_number}} -->
 
-@{{prd_author}} krutrimbox is paused for Target Issue #{{prd_number}}.
+@{{target_issue_author}} krutrimbox is paused for Target Issue #{{target_issue_number}}.
 
 The next required issue is HITL:
 
 - #{{issue_number}} - {{issue_title}}
 
 > [!IMPORTANT]
-> When the HITL work is finished, push a \`Refs #{{issue_number}}\` commit to the Target Issue Branch \`{{prd_branch}}\`.
+> When the HITL work is finished, push a \`Refs #{{issue_number}}\` commit to the Target Issue Branch \`{{target_issue_branch}}\`.
 > An empty commit is acceptable for non-code work. Then rerun krutrimbox:
 
 \`\`\`sh
-kb run --issue {{prd_number}}
+kb run --issue {{target_issue_number}}
 \`\`\`
 
-Sandbox: \`{{prd_sandbox}}\`
+Sandbox: \`{{target_issue_sandbox}}\`
 `,
   "templates/afk-error-comment.md": `<!-- krutrimbox:afk-error-issue-{{issue_number}} -->
 
@@ -50,23 +50,23 @@ Reason:
 
 Factory context:
 
-- Target Issue: #{{prd_number}}
-- Branch: \`{{prd_branch}}\`
-- Sandbox: \`{{prd_sandbox}}\`
+- Target Issue: #{{target_issue_number}}
+- Branch: \`{{target_issue_branch}}\`
+- Sandbox: \`{{target_issue_sandbox}}\`
 
 The issue remains open. Inspect the sandbox if needed, then rerun:
 
 \`\`\`sh
-kb run --issue {{prd_number}}
+kb run --issue {{target_issue_number}}
 \`\`\`
 
 Cleanup, if you decide the sandbox is no longer needed:
 
 \`\`\`sh
-sbx rm {{prd_sandbox}}
+sbx rm {{target_issue_sandbox}}
 \`\`\`
 `,
-  "templates/final-review-comment.md": `<!-- krutrimbox:final-review-issue-{{prd_number}} -->
+  "templates/final-review-comment.md": `<!-- krutrimbox:final-review-issue-{{target_issue_number}} -->
 
 {{review_body}}
 `,

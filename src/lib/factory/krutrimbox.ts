@@ -11,7 +11,7 @@ import {
   type FactoryRunDependencies,
   type FactoryRunOutcome
 } from "./factory-run";
-import { FilePrdLockStore, type PrdLockStore } from "./lock-store";
+import { FileTargetIssueLockStore, type TargetIssueLockStore } from "./lock-store";
 import { createFileRunLogFactory, type RunLogFactory } from "./run-log";
 import { CommandSandboxRunner, type SandboxRunner } from "./sandbox-runner";
 import { BundledTemplateRenderer, type TemplateRenderer } from "./template-renderer";
@@ -19,7 +19,7 @@ import { BundledTemplateRenderer, type TemplateRenderer } from "./template-rende
 export interface KrutrimboxDependencies {
   github?: GitHubClient;
   sandbox?: SandboxRunner;
-  lockStore?: PrdLockStore;
+  lockStore?: TargetIssueLockStore;
   templates?: TemplateRenderer;
   logger?: Pick<Console, "log">;
   openRunLog?: RunLogFactory;
@@ -36,7 +36,7 @@ type DispatchOutcome = FactoryRunOutcome | "skipped";
 // constructor wires the file/command-backed implementations from `cwd`.
 export class Krutrimbox {
   private readonly github: GitHubClient;
-  private readonly lockStore: PrdLockStore;
+  private readonly lockStore: TargetIssueLockStore;
   private readonly logger: Pick<Console, "log">;
   private readonly openRunLog: RunLogFactory;
   private readonly runDependencies: FactoryRunDependencies;
@@ -49,7 +49,7 @@ export class Krutrimbox {
     const commandRunner = createExecFileCommandRunner();
 
     this.github = dependencies.github ?? createGitHubCliClient();
-    this.lockStore = dependencies.lockStore ?? new FilePrdLockStore(cwd);
+    this.lockStore = dependencies.lockStore ?? new FileTargetIssueLockStore(cwd);
     this.logger = dependencies.logger ?? console;
     this.openRunLog = dependencies.openRunLog ?? createFileRunLogFactory(cwd, this.logger);
 
