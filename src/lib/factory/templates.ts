@@ -33,7 +33,7 @@ The next required issue is HITL:
 > An empty commit is acceptable for non-code work. Then rerun krutrimbox:
 
 \`\`\`sh
-kb run --issue {{target_issue_number}}
+kb run --issue {{target_issue_number}} --agent {{agent_name}}
 \`\`\`
 
 Sandbox: \`{{target_issue_sandbox}}\`
@@ -57,7 +57,7 @@ Factory context:
 The issue remains open. Inspect the sandbox if needed, then rerun:
 
 \`\`\`sh
-kb run --issue {{target_issue_number}}
+kb run --issue {{target_issue_number}} --agent {{agent_name}}
 \`\`\`
 
 Cleanup, if you decide the sandbox is no longer needed:

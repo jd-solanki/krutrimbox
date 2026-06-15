@@ -261,7 +261,7 @@ describe("Krutrimbox", () => {
     expect(updatedBody).toContain("push a `Refs #4` commit");
     expect(updatedBody).toContain("empty commit is acceptable");
     expect(updatedBody).toContain("Target Issue Branch `krutrimbox/issue-1`");
-    expect(updatedBody).toContain("kb run --issue 1");
+    expect(updatedBody).toContain("kb run --issue 1 --agent codex");
     expect(github.createIssueComment).not.toHaveBeenCalled();
     expect(sandbox.ensureSandbox).not.toHaveBeenCalled();
   });
@@ -302,6 +302,10 @@ describe("Krutrimbox", () => {
     expect(github.createIssueComment).toHaveBeenCalledWith(
       4,
       expect.stringContaining("#3 - Discover target issues (OPEN)")
+    );
+    expect(github.createIssueComment).toHaveBeenCalledWith(
+      4,
+      expect.stringContaining("kb run --issue 1 --agent codex")
     );
     expect(sandbox.ensureSandbox).not.toHaveBeenCalled();
     expect(github.closeIssue).not.toHaveBeenCalled();
@@ -1433,9 +1437,9 @@ const fixtureTemplates: TemplateRenderer = {
   async render(templatePath, values) {
     const templates: Record<string, string> = {
       "templates/hitlpause-comment.md":
-        "<!-- krutrimbox:hitl-issue-{{target_issue_number}}-implementation-{{issue_number}} -->\n\n@{{target_issue_author}} krutrimbox is paused for Target Issue #{{target_issue_number}}.\n\nThe next required issue is HITL:\n\n- #{{issue_number}} - {{issue_title}}\n\n> [!IMPORTANT]\n> When the HITL work is finished, push a `Refs #{{issue_number}}` commit to the Target Issue Branch `{{target_issue_branch}}`.\n> An empty commit is acceptable for non-code work. Then rerun krutrimbox:\n\n```sh\nkb run --issue {{target_issue_number}}\n```\n\nSandbox: `{{target_issue_sandbox}}`",
+        "<!-- krutrimbox:hitl-issue-{{target_issue_number}}-implementation-{{issue_number}} -->\n\n@{{target_issue_author}} krutrimbox is paused for Target Issue #{{target_issue_number}}.\n\nThe next required issue is HITL:\n\n- #{{issue_number}} - {{issue_title}}\n\n> [!IMPORTANT]\n> When the HITL work is finished, push a `Refs #{{issue_number}}` commit to the Target Issue Branch `{{target_issue_branch}}`.\n> An empty commit is acceptable for non-code work. Then rerun krutrimbox:\n\n```sh\nkb run --issue {{target_issue_number}} --agent {{agent_name}}\n```\n\nSandbox: `{{target_issue_sandbox}}`",
       "templates/afk-error-comment.md":
-        "<!-- krutrimbox:afk-error-issue-{{issue_number}} -->\n\n{{error_summary}}\n\nTarget Issue: #{{target_issue_number}}\nBranch: `{{target_issue_branch}}`\nSandbox: `{{target_issue_sandbox}}`",
+        "<!-- krutrimbox:afk-error-issue-{{issue_number}} -->\n\n{{error_summary}}\n\nTarget Issue: #{{target_issue_number}}\nBranch: `{{target_issue_branch}}`\nSandbox: `{{target_issue_sandbox}}`\n\n```sh\nkb run --issue {{target_issue_number}} --agent {{agent_name}}\n```",
       "templates/pr-body.md":
         "## Target Issue Closure\n\n{{closing_keywords}}\n\n## Implementation Issues\n\n{{implementation_issue_checklist}}\n\n## krutrimbox\n\nBranch: `{{target_issue_branch}}`\nSandbox: `{{target_issue_sandbox}}`",
       "prompts/afk-issue.md":

@@ -51,6 +51,9 @@ export class FactoryRun {
   private readonly templates: TemplateRenderer;
   private readonly logger: Pick<Console, "log">;
   private readonly output?: NodeJS.WritableStream;
+  // The run's Agent Backend name, surfaced in rerun commands so a resumed run
+  // re-selects the same agent (`--agent` is required and has no default).
+  private readonly agentName: string;
   public readonly branchName: string;
   public readonly sandboxName: string;
   private readonly targetIssuePullRequest: TargetIssuePullRequest;
@@ -66,6 +69,7 @@ export class FactoryRun {
     this.templates = dependencies.templates;
     this.logger = dependencies.logger;
     this.output = dependencies.output;
+    this.agentName = dependencies.agent.name;
     this.branchName = deterministicTargetIssueBranch(targetIssue.number);
     this.sandboxName = deterministicTargetIssueSandbox(targetIssue.number, dependencies.agent.name);
     this.targetIssuePullRequest = new TargetIssuePullRequest(
@@ -231,7 +235,8 @@ export class FactoryRun {
       issue_number: issue.number,
       issue_title: issue.title,
       target_issue_branch: this.branchName,
-      target_issue_sandbox: this.sandboxName
+      target_issue_sandbox: this.sandboxName,
+      agent_name: this.agentName
     });
 
     await this.upsertComment(this.targetIssue.number, hitlMarker(this.targetIssue.number, issue.number), body);
@@ -243,7 +248,8 @@ export class FactoryRun {
       issue_number: issue.number,
       error_summary: errors.join("\n"),
       target_issue_branch: this.branchName,
-      target_issue_sandbox: this.sandboxName
+      target_issue_sandbox: this.sandboxName,
+      agent_name: this.agentName
     });
 
     const comment = await this.upsertComment(issue.number, afkErrorMarker(issue.number), body);
