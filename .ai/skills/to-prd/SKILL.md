@@ -5,6 +5,8 @@ description: Turn the current conversation context into a PRD and publish it to 
 
 This skill takes the current conversation context and codebase understanding and produces a PRD. Do NOT interview the user — just synthesize what you already know.
 
+A PRD is a **Parent Target Issue** whose body is a product and implementation plan: krutrimbox discovers it (when it is labeled `ready-for-agent` and has no parent) and walks the Implementation Issues that the follow-up `to-issues` workflow creates as its native sub-issues.
+
 Invoke the `github-labels` skill before publishing so the PRD issue gets the correct GitHub labels.
 
 ## Process
@@ -15,7 +17,7 @@ Invoke the `github-labels` skill before publishing so the PRD issue gets the cor
 
 Check with the user that these seams match their expectations.
 
-3. Write the PRD using the template below, then publish it to the project issue tracker. Apply only the `PRD` label. Do not apply `ready-for-agent` yet; the PRD is not ready for agents until the follow-up `to-issues` workflow has created all implementation issues for it.
+3. Write the PRD using the template below, then publish it to the project issue tracker. Apply `needs-triage`. Do not apply `ready-for-agent` yet; a Parent Target Issue becomes ready only after the follow-up `to-issues` workflow has created and linked all its Implementation Issues, at which point `to-issues` applies `ready-for-agent` to the PRD.
 
 <prd-template>
 

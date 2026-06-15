@@ -53,26 +53,25 @@ Iterate until the user approves the breakdown.
 
 ### 5. Publish the issues to the issue tracker
 
-For each approved slice, publish a new issue to the issue tracker. Use the issue body template below. Publish AFK slices with `PRD-sub-issue` and `ready-for-agent`; publish HITL slices with `PRD-sub-issue` and `ready-for-human` unless instructed otherwise.
+For each approved slice, publish a new issue to the issue tracker. Use the issue body template below. Each slice becomes an **Implementation Issue**: publish AFK slices with `ready-for-agent`; publish HITL slices with `ready-for-human` unless instructed otherwise. Do not apply a membership label — the native sub-issue link is the membership (the retired `PRD-sub-issue` label is no longer used). Invoke the `github-labels` skill if unsure which labels apply.
 
 Publish issues in dependency order (blockers first) so you can reference real issue identifiers in the "Blocked by" field.
 
-When the source is an existing PRD issue, each generated child issue MUST be attached to that PRD using GitHub's sub-issue feature. Create child issues with `gh api` so the REST issue `id` is available immediately, then call the sub-issues endpoint before moving to the next slice:
+The source is normally a **Parent Target Issue** (a PRD), and each generated Implementation Issue MUST be attached to it using GitHub's native sub-issue feature — that link, not a label, is what makes krutrimbox treat it as a child. `gh issue create` accepts `--parent`, which creates the issue and links it as a native sub-issue in one call (GitHub CLI v2.94.0+). Pass the parent issue number (or URL):
 
 ```sh
-child_json=$(gh api repos/{owner}/{repo}/issues \
-  -f title="$title" \
-  -F body=@"$body_file" \
-  -f 'labels[]=PRD-sub-issue' \
-  -f "labels[]=$readiness_label")
-child_id=$(printf '%s' "$child_json" | jq -r '.id')
-gh api -X POST repos/{owner}/{repo}/issues/PARENT_NUMBER/sub_issues \
-  -F sub_issue_id="$child_id"
+gh issue create \
+  --title "$title" \
+  --body-file "$body_file" \
+  --label "$readiness_label" \
+  --parent PARENT_NUMBER
 ```
 
-Use the child issue number or URL in later "Blocked by" references, but use the numeric REST `id` as `sub_issue_id`. If the sub-issue API call fails, stop and resolve it; do not treat the child issue as published for this workflow until the parent-child relationship exists.
+Use the child issue number or URL in later "Blocked by" references. If the create fails (e.g. `--parent` is unrecognized on an old CLI), stop and resolve it — upgrade `gh`, or fall back to creating the issue and linking it via the REST `POST /repos/{owner}/{repo}/issues/{parent}/sub_issues` endpoint — before treating the slice as published.
 
-After all issues for an existing parent PRD have been created, apply `ready-for-agent` to the parent PRD issue. This marks that the PRD has been broken down and is ready for agents to pick up its child work. Do not apply `ready-for-agent` to the parent before every approved slice has a published issue.
+After all Implementation Issues for an existing Parent Target Issue have been created and linked, apply `ready-for-agent` to the parent so krutrimbox discovers it and walks its sub-issues. Do not apply `ready-for-agent` to the parent before every approved slice has a published, linked issue.
+
+**Single-slice plans:** if the breakdown reduces to exactly one slice with no parent to attach it to, publish it as a **Standalone Target Issue** instead — one issue labeled `ready-for-agent`, with no parent link and no sub-issues. krutrimbox implements its body directly and drafts a pull request.
 
 <issue-template>
 ## What to build

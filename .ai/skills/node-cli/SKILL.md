@@ -47,6 +47,51 @@ program.addCommand(fooCommand)
 await program.parseAsync()
 ```
 
+## Testing CLI wiring
+
+Keep executable entrypoints and test seams distinct. If `src/index.ts` calls
+`parseAsync()` at top level, treat it as executable-only: tests should import
+command factories from `src/commands/*`, assemble a local `Command`, and pass a
+controlled argv. Do not import a top-level executable entrypoint in tests,
+because it will parse the test runner's `process.argv`.
+
+```ts
+// src/commands/run.ts
+import { Command } from 'commander'
+
+export interface RunDispatch {
+  runBatch(): Promise<void> | void
+}
+
+export function createRunCommand(dispatch: RunDispatch): Command {
+  return new Command('run').action(async () => {
+    await dispatch.runBatch()
+  })
+}
+```
+
+```ts
+// tests/cli.test.ts
+import { Command } from 'commander'
+import { describe, expect, test, vi } from 'vitest'
+import { createRunCommand } from '../src/commands/run'
+
+test('dispatches run', async () => {
+  const dispatch = { runBatch: vi.fn() }
+  const program = new Command('your-cli')
+  program.addCommand(createRunCommand(dispatch))
+
+  await program.parseAsync(['node', 'your-cli', 'run'])
+
+  expect(dispatch.runBatch).toHaveBeenCalledOnce()
+})
+```
+
+For larger CLIs, a second common pattern is a thin bin file that imports a
+testable `run(argv)` or `execute(argv)` module. Use this when the CLI has
+substantial startup behavior, needs integration-style tests around exit codes,
+or also exposes a public library API.
+
 ## Update notifier
 
 Use the [`update-notifier`](https://github.com/sindresorhus/update-notifier) package. It handles background checks (24 h interval), state persistence, CI/TTY/`NO_UPDATE_NOTIFIER` opt-outs automatically.

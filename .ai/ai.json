@@ -1,12 +1,11 @@
 {
   "packages": {
     "jd-solanki/.ai": {
-      "version": "v1.0.16",
+      "version": "v1.0.17",
       "linked": [
         "skills/automate-commit-based-gh-release-changelog",
         "skills/automate-npm-release",
         "skills/comment-code",
-        "skills/github-labels",
         "skills/grill-me",
         "skills/grill-with-docs",
         "skills/to-issues",
@@ -16,7 +15,8 @@
         "skills/clean-code",
         "skills/diagnose",
         "skills/improve-codebase-architecture",
-        "skills/tdd"
+        "skills/tdd",
+        "skills/krutrimbox-github-labels"
       ]
     }
   }
