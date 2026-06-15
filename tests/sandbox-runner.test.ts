@@ -1,5 +1,9 @@
 import { describe, expect, test } from "vitest";
-import { CommandSandboxRunner, resolveCodingAgent } from "../src/lib/factory/index";
+import {
+  CommandSandboxRunner,
+  resolveCodingAgent,
+  toHttpsRemoteUrl
+} from "../src/lib/factory/index";
 import type { CommandRunner } from "../src/lib/github";
 
 const codex = resolveCodingAgent("codex");
@@ -71,19 +75,87 @@ describe("CommandSandboxRunner", () => {
 
     await sandbox.ensureSandbox({ sandboxName: "krutrimbox-issue-1-claude" });
 
-    expect(calls.at(-1)).toEqual({
-      command: "sbx",
-      args: [
-        "create",
-        "--clone",
-        "--template",
-        "docker.io/library/krutrimbox-claude:pnpm",
-        "--name",
-        "krutrimbox-issue-1-claude",
-        "claude",
-        "/workspace/krutrimbox"
-      ]
-    });
+    const createCall = calls.find((call) => call.command === "sbx" && call.args[0] === "create");
+    expect(createCall?.args).toEqual([
+      "create",
+      "--clone",
+      "--template",
+      "docker.io/library/krutrimbox-claude:pnpm",
+      "--name",
+      "krutrimbox-issue-1-claude",
+      "claude",
+      "/workspace/krutrimbox"
+    ]);
+  });
+
+  test("rewrites an SSH-alias `origin` to its HTTPS GitHub form before remote work", async () => {
+    const calls: Array<{ command: string; args: string[] }> = [];
+    const runner: CommandRunner = async (command, args) => {
+      calls.push({ command, args });
+      if (command === "sbx" && args[0] === "ls") {
+        return '{"sandboxes":[]}';
+      }
+      if (args.includes("get-url")) {
+        return "git@github-personal:jd-solanki/code-factory.git\n";
+      }
+      return "";
+    };
+    const sandbox = new CommandSandboxRunner(runner, "/workspace/krutrimbox", claude, "template");
+
+    await sandbox.ensureSandbox({ sandboxName: "krutrimbox-issue-1-claude" });
+
+    expect(calls.at(-1)?.args.slice(5)).toEqual([
+      "git",
+      "remote",
+      "set-url",
+      "origin",
+      "https://github.com/jd-solanki/code-factory.git"
+    ]);
+  });
+
+  test("normalizes the origin of a reused sandbox without recreating it", async () => {
+    const calls: Array<{ command: string; args: string[] }> = [];
+    const runner: CommandRunner = async (command, args) => {
+      calls.push({ command, args });
+      if (command === "sbx" && args[0] === "ls") {
+        return '{"sandboxes":[{"name":"krutrimbox-issue-1-codex"}]}';
+      }
+      if (args.includes("get-url")) {
+        return "git@github-personal:jd-solanki/code-factory.git\n";
+      }
+      return "";
+    };
+    const sandbox = new CommandSandboxRunner(runner, "/workspace/krutrimbox", codex, "template");
+
+    await sandbox.ensureSandbox({ sandboxName: "krutrimbox-issue-1-codex" });
+
+    expect(calls.some((call) => call.command === "sbx" && call.args[0] === "create")).toBe(false);
+    expect(calls.at(-1)?.args.slice(5)).toEqual([
+      "git",
+      "remote",
+      "set-url",
+      "origin",
+      "https://github.com/jd-solanki/code-factory.git"
+    ]);
+  });
+
+  test("leaves an HTTPS `origin` untouched so no set-url runs", async () => {
+    const calls: Array<{ command: string; args: string[] }> = [];
+    const runner: CommandRunner = async (command, args) => {
+      calls.push({ command, args });
+      if (command === "sbx" && args[0] === "ls") {
+        return '{"sandboxes":[]}';
+      }
+      if (args.includes("get-url")) {
+        return "https://github.com/jd-solanki/code-factory.git\n";
+      }
+      return "";
+    };
+    const sandbox = new CommandSandboxRunner(runner, "/workspace/krutrimbox", codex, "template");
+
+    await sandbox.ensureSandbox({ sandboxName: "krutrimbox-issue-1-codex" });
+
+    expect(calls.some((call) => call.args.includes("set-url"))).toBe(false);
   });
 
   test("runs an AFK Issue through the Agent Backend's non-interactive exec command", async () => {
@@ -147,5 +219,48 @@ describe("CommandSandboxRunner", () => {
         args: ["rm", "--force", "krutrimbox-issue-1-codex"]
       }
     ]);
+  });
+});
+
+describe("toHttpsRemoteUrl", () => {
+  test("rewrites an scp-style SSH alias remote to github.com over HTTPS", () => {
+    expect(toHttpsRemoteUrl("git@github-personal:jd-solanki/code-factory.git")).toBe(
+      "https://github.com/jd-solanki/code-factory.git"
+    );
+  });
+
+  test("rewrites a plain github.com SSH remote", () => {
+    expect(toHttpsRemoteUrl("git@github.com:jd-solanki/code-factory.git")).toBe(
+      "https://github.com/jd-solanki/code-factory.git"
+    );
+  });
+
+  test("rewrites an `ssh://` remote and tolerates a port", () => {
+    expect(toHttpsRemoteUrl("ssh://git@github.com:22/jd-solanki/code-factory.git")).toBe(
+      "https://github.com/jd-solanki/code-factory.git"
+    );
+  });
+
+  test("preserves a real (dotted) host for GitHub Enterprise SSH remotes", () => {
+    expect(toHttpsRemoteUrl("git@git.example.com:team/repo.git")).toBe(
+      "https://git.example.com/team/repo.git"
+    );
+  });
+
+  test("appends a `.git` suffix when the SSH remote omits it", () => {
+    expect(toHttpsRemoteUrl("git@github-personal:jd-solanki/code-factory")).toBe(
+      "https://github.com/jd-solanki/code-factory.git"
+    );
+  });
+
+  test("returns null for remotes that are already HTTP(S)", () => {
+    expect(toHttpsRemoteUrl("https://github.com/jd-solanki/code-factory.git")).toBeNull();
+    expect(toHttpsRemoteUrl("http://github.com/jd-solanki/code-factory.git")).toBeNull();
+  });
+
+  test("returns null for empty or unrecognized input", () => {
+    expect(toHttpsRemoteUrl("")).toBeNull();
+    expect(toHttpsRemoteUrl("   ")).toBeNull();
+    expect(toHttpsRemoteUrl("not a url")).toBeNull();
   });
 });

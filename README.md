@@ -120,6 +120,8 @@ The `-g` flag stores the secret globally for future sandboxes. Existing sandboxe
 echo "$(gh auth token)" | sbx secret set krutrimbox-issue-1 github
 ```
 
+Because all sandbox git access goes over HTTPS through this `github` secret, krutrimbox rewrites the cloned sandbox's `origin` to its HTTPS GitHub form before any remote operation. This means a host repo whose `origin` is an SSH remote — including an `~/.ssh/config` alias such as `git@github-personal:owner/repo.git` — works unchanged; the sandbox never needs your SSH config or keys. A real (dotted) SSH host is preserved for GitHub Enterprise, while an alias host resolves to `github.com`.
+
 ## Authenticate Your Agent For Sandboxes
 
 The Sandboxed Agent inside each Target Issue Sandbox needs its own credentials to reach its model. krutrimbox writes no agent-credential code; authentication is entirely Docker Sandboxes' host-side credential proxy, and it is a **one-time setup per agent**. The token lives on your host (never inside the sandbox) and the proxy injects it into requests from any sandbox, so it survives krutrimbox removing and recreating Target Issue Sandboxes — you log in once, not per run.

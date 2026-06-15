@@ -55,6 +55,36 @@ export class CommandSandboxRunner {
         this.workspacePath
       ]);
     }
+
+    await this.normalizeOrigin(input.sandboxName);
+  }
+
+  // Rewrites the sandbox clone's `origin` to HTTPS so later remote git operations
+  // can authenticate. Why this is needed, and why HTTPS specifically:
+  //
+  // The scenario: `sbx create --clone` gives the sandbox a private clone that
+  // inherits the host repo's `origin` URL verbatim. Many hosts use an SSH remote,
+  // commonly an `~/.ssh/config` alias such as `git@github-personal:owner/repo.git`.
+  // Inside the sandbox that remote is unusable on two counts: the sandbox carries no
+  // SSH keys to authenticate with, and no `~/.ssh/config` to resolve the alias — so
+  // even name resolution fails ("Could not resolve hostname github-personal") on the
+  // first `git ls-remote`/`pull`/`push`.
+  //
+  // Why HTTPS is the fix: the only credential krutrimbox injects into a sandbox is
+  // Docker Sandboxes' `github` secret, and the credential proxy applies it to HTTPS
+  // GitHub requests only — never SSH. We deliberately do not forward host SSH keys
+  // into the sandbox. So converting `origin` to its HTTPS GitHub form is what lets
+  // that secret authenticate the push at the end of the run. Run before any remote
+  // operation; idempotent, since an already-HTTPS `origin` is left untouched and
+  // reused sandboxes pay only for the read.
+  private async normalizeOrigin(sandboxName: string): Promise<void> {
+    const current = (
+      await this.exec(sandboxName, ["git", "remote", "get-url", "origin"])
+    ).trim();
+    const https = toHttpsRemoteUrl(current);
+    if (https && https !== current) {
+      await this.exec(sandboxName, ["git", "remote", "set-url", "origin", https]);
+    }
   }
 
   public async checkoutBranch(input: SandboxBranchInput): Promise<void> {
@@ -130,6 +160,32 @@ export class CommandSandboxRunner {
 
     return this.runner("sbx", args, { output: options.output });
   }
+}
+
+// Converts an `origin` remote URL to its HTTPS GitHub form (see `normalizeOrigin`
+// for why the sandbox needs this). Returns null when no rewrite is needed or
+// possible: URLs that are already HTTP(S) are left alone, and unrecognized shapes
+// are not touched. SSH remotes (scp-style `git@host:owner/repo` or
+// `ssh://git@host/owner/repo`) are rewritten. The host is only a usable hostname
+// when it contains a dot — a real host (e.g. `github.com`, or an Enterprise host)
+// is kept as-is, whereas a dotless host is an `~/.ssh/config` alias whose true
+// target we can't recover, so we fall back to `github.com`.
+export function toHttpsRemoteUrl(url: string): string | null {
+  const trimmed = url.trim();
+  if (!trimmed || /^https?:\/\//i.test(trimmed)) {
+    return null;
+  }
+
+  const ssh = /^ssh:\/\/(?:[^@/]+@)?([^/:]+)(?::\d+)?\/(.+)$/i.exec(trimmed);
+  const scp = /^(?:[^@/]+@)?([^/:]+):(.+)$/.exec(trimmed);
+  const match = ssh ?? scp;
+  if (!match) {
+    return null;
+  }
+
+  const host = match[1].includes(".") ? match[1] : "github.com";
+  const repoPath = match[2].replace(/^\/+/, "").replace(/\.git$/i, "");
+  return `https://${host}/${repoPath}.git`;
 }
 
 // Injection seam: the public surface of CommandSandboxRunner, so fakes need no separate contract.
