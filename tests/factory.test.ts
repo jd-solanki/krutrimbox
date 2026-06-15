@@ -40,49 +40,82 @@ vi.mock("../src/lib/factory/run-log", () => ({
 }));
 
 describe("buildImplementationSequence", () => {
+  test("treats a standalone Target Issue as a sequence-of-one AFK Implementation Issue", () => {
+    const targetIssue = prdIssue({
+      number: 9,
+      body: "Standalone body\n\n## Blocked by\n\n- #3"
+    });
+
+    const sequence = buildImplementationSequence(targetIssue, [], new Set());
+
+    expect(sequence.resolvedIssues).toEqual([]);
+    expect(sequence.openIssues).toEqual([
+      {
+        number: 9,
+        title: "PRD: krutrimbox MVP",
+        body: "Standalone body\n\n## Blocked by\n\n- #3",
+        state: "OPEN",
+        kind: "afk",
+        labels: ["ready-for-agent"]
+      }
+    ]);
+  });
+
   test("validates, orders, and skips Implementation Issues in the Done Set", () => {
-    const sequence = buildImplementationSequence(1, [
+    const sequence = buildImplementationSequence(prdIssue(), [
       implementationIssue({
         number: 5,
         title: "Human input",
-        labels: ["PRD-sub-issue", "ready-for-human"]
+        labels: ["ready-for-human"]
       }),
       implementationIssue({
         number: 3,
         title: "Bootstrap",
-        labels: ["PRD-sub-issue", "ready-for-agent"]
+        labels: ["ready-for-agent"]
       }),
       implementationIssue({
         number: 4,
         title: "Discovery",
-        labels: ["PRD-sub-issue", "ready-for-agent"]
+        labels: ["ready-for-agent"]
       }),
       implementationIssue({
         number: 6,
         title: "Wrong parent",
         parentNumber: 2,
-        labels: ["PRD-sub-issue", "ready-for-agent"]
+        labels: ["ready-for-agent"]
       }),
       implementationIssue({
         number: 7,
-        title: "Not an implementation issue",
+        title: "No retired implementation label",
         labels: ["ready-for-agent"]
       })
     ], new Set([3]));
 
     expect(sequence.openIssues.map((issue) => [issue.number, issue.kind])).toEqual([
       [4, "afk"],
-      [5, "hitl"]
+      [5, "hitl"],
+      [7, "afk"]
     ]);
     expect(sequence.resolvedIssues.map((issue) => issue.number)).toEqual([3]);
   });
 
   test("rejects open Implementation Issues without exactly one state label", () => {
     expect(() =>
-      buildImplementationSequence(1, [
+      buildImplementationSequence(prdIssue(), [
+        implementationIssue({
+          number: 7,
+          labels: []
+        })
+      ], new Set())
+    ).toThrow(
+      "Implementation Issue #7 must have exactly one open state label: ready-for-agent or ready-for-human."
+    );
+
+    expect(() =>
+      buildImplementationSequence(prdIssue(), [
         implementationIssue({
           number: 8,
-          labels: ["PRD-sub-issue", "ready-for-agent", "ready-for-human"]
+          labels: ["ready-for-agent", "ready-for-human"]
         })
       ], new Set())
     ).toThrow(
@@ -274,6 +307,46 @@ describe("Krutrimbox", () => {
       expect.stringContaining("#3 - Discover PRDs (OPEN)")
     );
     expect(sandbox.ensureSandbox).not.toHaveBeenCalled();
+    expect(github.closeIssue).not.toHaveBeenCalled();
+  });
+
+  test("implements a standalone Target Issue through sandbox, commit, and PR without closing it", async () => {
+    const github = new FakeGitHubClient({
+      prds: [
+        prdIssue({
+          body: "Standalone target issue body\n\n## Blocked by\n\n- #3"
+        })
+      ],
+      issues: [blockerIssue({ number: 3, title: "Prerequisite", state: "CLOSED" })]
+    });
+    const sandbox = new FakeSandboxRunner();
+    const factory = new Krutrimbox({
+      github,
+      sandbox,
+      lockStore: fakeLockStore(),
+      templates: fixtureTemplates
+    });
+
+    await factory.runExplicit(1);
+
+    expect(github.getAttachedSubIssues).toHaveBeenCalledWith(1);
+    expect(github.getIssue).toHaveBeenCalledWith(3);
+    expect(String(sandbox.runAfkIssue.mock.calls[0]?.[0].prompt)).toContain(
+      "Standalone target issue body"
+    );
+    expect(sandbox.commitAndPush).toHaveBeenCalledWith({
+      sandboxName: "krutrimbox-issue-1",
+      branchName: "krutrimbox/issue-1",
+      issueNumber: 1
+    });
+    expect(github.createDraftPullRequest).toHaveBeenCalledWith({
+      title: "krutrimbox #1: PRD: krutrimbox MVP",
+      body: expect.stringContaining("- [x] #1 - PRD: krutrimbox MVP"),
+      head: "krutrimbox/issue-1",
+      base: "main",
+      labels: ["krutrimbox"]
+    });
+    expect(github.pullRequestBodies.at(-1)).toContain("Closes #1");
     expect(github.closeIssue).not.toHaveBeenCalled();
   });
 
@@ -985,7 +1058,7 @@ describe("FactoryRun", () => {
 });
 
 describe("PrdPullRequest", () => {
-  const sequence = buildImplementationSequence(1, [
+  const sequence = buildImplementationSequence(prdIssue(), [
     implementationIssue({ number: 3, title: "Bootstrap", labels: ["PRD-sub-issue", "ready-for-agent"] })
   ], new Set([3]));
 

@@ -2,7 +2,6 @@ import type { GitHubIssue } from "../github";
 import {
   AFK_LABEL,
   HITL_LABEL,
-  IMPLEMENTATION_LABEL,
   TARGET_ISSUE_BRANCH_PREFIX,
   TARGET_ISSUE_SANDBOX_PREFIX
 } from "./constants";
@@ -29,17 +28,18 @@ export interface ImplementationSequence {
 }
 
 export function buildImplementationSequence(
-  prdNumber: number,
+  targetIssue: GitHubIssue,
   attachedSubIssues: GitHubIssue[],
   doneSet: Set<number>
 ): ImplementationSequence {
   const openIssues: ImplementationIssue[] = [];
   const resolvedIssues: ResolvedIssue[] = [];
+  const candidateIssues = attachedSubIssues.length > 0 ? attachedSubIssues : [targetIssue];
 
-  for (const issue of attachedSubIssues) {
+  for (const issue of candidateIssues) {
     const labels = labelNames(issue);
 
-    if (!labels.includes(IMPLEMENTATION_LABEL) || issue.parentNumber !== prdNumber) {
+    if (attachedSubIssues.length > 0 && issue.parentNumber !== targetIssue.number) {
       continue;
     }
 

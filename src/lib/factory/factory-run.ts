@@ -83,7 +83,7 @@ export class FactoryRun {
       this.doneSet.add(issueNumber);
     }
 
-    const sequence = buildImplementationSequence(prd.number, subIssues, this.doneSet);
+    const sequence = buildImplementationSequence(prd, subIssues, this.doneSet);
 
     for (const issue of sequence.resolvedIssues) {
       this.logger.log(`krutrimbox: skipping Resolved Issue #${issue.number}.`);
