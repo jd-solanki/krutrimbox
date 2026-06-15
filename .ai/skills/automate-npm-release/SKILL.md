@@ -1,72 +1,36 @@
 ---
 name: automate-npm-release
-description: Automate npm package publishing via GitHub Actions — version bumping with bumpp, npm publish with provenance, and NODE_AUTH_TOKEN/setup-node configuration. Use when setting up or modifying npm publish workflows, npm release pipelines, version bumping, provenance badges, or NPM_TOKEN secrets.
+description: Automate npm package publishing via GitHub Actions for single-package repos and independent monorepo packages, including bumpp version tags, GitHub release notes, trusted publishing, provenance, and package-scoped release tags. Use when setting up or modifying npm publish workflows, npm release pipelines, version bumping, package-scoped monorepo releases, changelogithub release notes, trusted publishing, provenance badges, NPM_TOKEN, or OIDC publishing.
 ---
 
 # Automate npm Release
 
-## First publish (manual)
+Use this skill to set up npm release automation. First identify the repository shape, then load the matching reference:
 
-npm requires the first publish to be done manually to establish package name and ownership. All future releases are automated.
+- Single publishable package: see [SINGLE_PACKAGE.md](SINGLE_PACKAGE.md).
+- Workspace monorepo with independently published packages: see [MONOREPO.md](MONOREPO.md).
+
+## Shared rules
+
+- npm requires the first publish to be done manually for each public package:
 
 ```bash
 npm publish --access public
 ```
 
-## Automated releases via GitHub Actions
+- Prefer npm trusted publishing/OIDC when the project asks for it. Configure the package on npmjs.com after the first manual publish, then use `id-token: write` in GitHub Actions. Ensure `package.json` has `repository.url` exactly matching the GitHub repo URL (case-sensitive) — required for provenance validation.
+- If using token-based publishing, configure `actions/setup-node` with `registry-url: https://registry.npmjs.org` so `NODE_AUTH_TOKEN` can authenticate `npm publish`.
+- In pnpm workspaces, publish via `pnpm pack` followed by `npm publish <tarball> --access public`. This lets pnpm rewrite `workspace:*` dependencies while npm handles trusted publishing/OIDC. Use changelogithub only for GitHub release notes/releases.
+- Always run checks, tests, and package builds before publishing.
+- Keep the private workspace root unpublished; publish from the actual package directory.
 
-Pushing a `v*` tag triggers the full release pipeline:
+## Quick choice
 
-```
-pnpm release        # bumps version, commits, tags & pushes
-      ↓
-GitHub Actions workflow triggers on v* tag
-      ↓
-tests → build → npm publish → GitHub release with changelog
-```
+Use single-package release automation when one `package.json` owns the npm artifact and one `v*` tag maps to one package.
 
-### 1. Version bump with bumpp
+Use monorepo release automation when multiple workspace packages publish independently. In that flow, tags must encode the package, such as `cli-v0.1.0`, and GitHub release-note generation must use explicit previous same-package tag ranges.
 
-[`bumpp`](https://github.com/antfu/bumpp) bumps `package.json`, commits, tags, and pushes in one step:
+## Workflow examples
 
-```json
-// package.json
-"scripts": {
-  "release": "bumpp"
-}
-```
-
-Run `pnpm release` and pick the version increment interactively.
-
-### 2. Workflow trigger
-
-```yaml
-on:
-  push:
-    tags:
-      - 'v*'
-
-permissions:
-  contents: write   # required for creating GitHub releases
-  id-token: write   # required for npm provenance
-```
-
-### 3. npm provenance
-
-npm provenance uses GitHub's OIDC token to cryptographically attest that a package was built from a specific repo, commit, and workflow run. Adds a verified provenance badge on the npm package page.
-
-```yaml
-- uses: actions/setup-node@v6
-  with:
-    registry-url: https://registry.npmjs.org  # required — writes .npmrc for auth
-
-- run: npm publish --provenance --access public
-  env:
-    NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}
-```
-
-`setup-node` with `registry-url` auto-configures `.npmrc` to read `NODE_AUTH_TOKEN`. Without `registry-url`, the env var has nothing to hook into and publish fails unauthenticated.
-
-## Reference
-
-- [EXAMPLE_WORKFLOW.yml](EXAMPLE_WORKFLOW.yml) — complete pnpm-based publish workflow with provenance, tests, and changelog generation
+- [EXAMPLE_WORKFLOW.yml](EXAMPLE_WORKFLOW.yml) — single-package token/provenance workflow.
+- [MONOREPO_WORKFLOW.yml](MONOREPO_WORKFLOW.yml) — package-scoped monorepo workflow using trusted publishing and changelogithub.

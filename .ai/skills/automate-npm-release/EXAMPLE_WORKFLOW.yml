@@ -21,7 +21,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Set up Node
         uses: actions/setup-node@v6
@@ -40,9 +40,7 @@ jobs:
         run: pnpm build
 
       - name: Publish package
-        run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}
+        run: npm publish --access public
 
       - name: Generate changelog
         run: npx changelogithub
