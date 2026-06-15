@@ -1,13 +1,13 @@
 // krutrimbox comment/body templates, inlined as string constants so the
 // published bundle carries them instead of reading files relative to the
 // orchestrated repo's cwd. `{{key}}` placeholders are filled by the
-// BundledTemplateRenderer. Keyed by their historical file paths.
+// BundledTemplateRenderer. Keyed by their bundled file paths.
 
 export const TEMPLATES: Record<string, string> = {
   "templates/pr-body.md": `> [!NOTE]  
 >  Generated and maintained by krutrimbox.
 
-## Parent PRD
+## Target Issue Closure
 
 {{closing_keywords}}
 
@@ -20,7 +20,7 @@ export const TEMPLATES: Record<string, string> = {
 Branch: \`{{prd_branch}}\`
 Sandbox: \`{{prd_sandbox}}\`
 `,
-  "templates/hitlpause-comment.md": `<!-- krutrimbox:hitl-prd-{{prd_number}}-issue-{{issue_number}} -->
+  "templates/hitlpause-comment.md": `<!-- krutrimbox:hitl-issue-{{prd_number}}-implementation-{{issue_number}} -->
 
 @{{prd_author}} krutrimbox is paused for Target Issue #{{prd_number}}.
 
@@ -50,7 +50,7 @@ Reason:
 
 Factory context:
 
-- PRD: #{{prd_number}}
+- Target Issue: #{{prd_number}}
 - Branch: \`{{prd_branch}}\`
 - Sandbox: \`{{prd_sandbox}}\`
 
@@ -66,7 +66,7 @@ Cleanup, if you decide the sandbox is no longer needed:
 sbx rm {{prd_sandbox}}
 \`\`\`
 `,
-  "templates/final-review-comment.md": `<!-- krutrimbox:final-review-prd-{{prd_number}} -->
+  "templates/final-review-comment.md": `<!-- krutrimbox:final-review-issue-{{prd_number}} -->
 
 {{review_body}}
 `,

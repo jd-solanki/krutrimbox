@@ -207,7 +207,7 @@ describe("Krutrimbox", () => {
     );
   });
 
-  test("skips an already locked PRD before reading sub-issues", async () => {
+  test("skips an already locked Target Issue before reading sub-issues", async () => {
     const github = new FakeGitHubClient({ prds: [prdIssue()] });
     const lockStore = fakeLockStore({ locked: true });
     const factory = new Krutrimbox({
@@ -244,7 +244,7 @@ describe("Krutrimbox", () => {
           [
             {
               id: "100",
-              body: "<!-- krutrimbox:hitl-prd-1-issue-4 -->\nold body",
+              body: "<!-- krutrimbox:hitl-issue-1-implementation-4 -->\nold body",
               url: "https://github.com/jd-solanki/krutrimbox/issues/1#issuecomment-100"
             }
           ]
@@ -549,7 +549,7 @@ describe("Krutrimbox", () => {
           [
             {
               id: "100",
-              body: "<!-- krutrimbox:hitl-prd-1-issue-4 -->\nold body",
+              body: "<!-- krutrimbox:hitl-issue-1-implementation-4 -->\nold body",
               url: "https://github.com/jd-solanki/krutrimbox/issues/1#issuecomment-100"
             }
           ]
@@ -687,7 +687,7 @@ describe("Krutrimbox", () => {
           [
             {
               id: "200",
-              body: "<!-- krutrimbox:final-review-prd-1 -->\nold review",
+              body: "<!-- krutrimbox:final-review-issue-1 -->\nold review",
               url: "https://github.com/jd-solanki/krutrimbox/issues/10#issuecomment-200"
             }
           ]
@@ -705,15 +705,15 @@ describe("Krutrimbox", () => {
 
     expect(github.updateIssueComment).toHaveBeenCalledWith(
       "200",
-      expect.stringContaining("<!-- krutrimbox:final-review-prd-1 -->")
+      expect.stringContaining("<!-- krutrimbox:final-review-issue-1 -->")
     );
     expect(github.createIssueComment).not.toHaveBeenCalledWith(
       10,
-      expect.stringContaining("<!-- krutrimbox:final-review-prd-1 -->")
+      expect.stringContaining("<!-- krutrimbox:final-review-issue-1 -->")
     );
   });
 
-  test("requests review from PRD Author when they differ from PR Author", async () => {
+  test("requests review from Target Issue Author when they differ from PR Author", async () => {
     const github = new FakeGitHubClient({
       prds: [prdIssue({ author: "jd-solanki" })],
       pullRequests: [{ number: 10, isDraft: true, labels: [{ name: "krutrimbox" }] }],
@@ -739,7 +739,7 @@ describe("Krutrimbox", () => {
     );
   });
 
-  test("tags PRD Author in a comment instead of requesting self-review when authors match", async () => {
+  test("tags Target Issue Author in a comment instead of requesting self-review when authors match", async () => {
     const github = new FakeGitHubClient({
       prds: [prdIssue({ author: "jd-solanki" })],
       pullRequests: [{ number: 10, isDraft: true, labels: [{ name: "krutrimbox" }] }],
@@ -765,7 +765,7 @@ describe("Krutrimbox", () => {
     );
   });
 
-  test("removes the PRD Sandbox after final review routing succeeds", async () => {
+  test("removes the Target Issue Sandbox after final review routing succeeds", async () => {
     const github = new FakeGitHubClient({
       prds: [prdIssue()],
       pullRequests: [{ number: 10, isDraft: true, labels: [{ name: "krutrimbox" }] }],
@@ -831,7 +831,7 @@ describe("Krutrimbox", () => {
     expect(github.markPullRequestReadyForReview).not.toHaveBeenCalled();
   });
 
-  test("batch runs continue after a PRD-local HITL pause", async () => {
+  test("batch runs continue after a Target-Issue-local HITL pause", async () => {
     const firstPrd = prdIssue({ number: 1 });
     const secondPrd = prdIssue({ number: 2 });
     const github = new FakeGitHubClient({
@@ -920,7 +920,7 @@ describe("Krutrimbox MVP smoke", () => {
           [
             {
               id: "existing-final-review",
-              body: "<!-- krutrimbox:final-review-prd-1 -->\nold",
+              body: "<!-- krutrimbox:final-review-issue-1 -->\nold",
               url: "https://github.com/jd-solanki/krutrimbox/issues/10#issuecomment-existing-final-review"
             }
           ]
@@ -1038,7 +1038,7 @@ describe("Krutrimbox MVP smoke", () => {
           [
             {
               id: "existing-hitl",
-              body: "<!-- krutrimbox:hitl-prd-3-issue-30 -->\nold",
+              body: "<!-- krutrimbox:hitl-issue-3-implementation-30 -->\nold",
               url: "https://github.com/jd-solanki/krutrimbox/issues/3#issuecomment-existing-hitl"
             }
           ]
@@ -1152,7 +1152,7 @@ describe("FactoryRun", () => {
 
     await expect(run.process()).resolves.toBe("issue-error");
     expect(logger.log).toHaveBeenCalledWith(
-      "krutrimbox: stopped PRD #1; AFK Issue #4 failed. See https://github.com/jd-solanki/krutrimbox/issues/4#issuecomment-1 (issue: https://github.com/jd-solanki/krutrimbox/issues/4)."
+      "krutrimbox: stopped Target Issue #1; AFK Issue #4 failed. See https://github.com/jd-solanki/krutrimbox/issues/4#issuecomment-1 (issue: https://github.com/jd-solanki/krutrimbox/issues/4)."
     );
   });
 
@@ -1233,7 +1233,7 @@ describe("PrdPullRequest", () => {
     expect(github.setPullRequestLabels).toHaveBeenCalledWith(12, ["krutrimbox"]);
   });
 
-  test("routeForReview requests review from the PRD Author when distinct from the PR Author", async () => {
+  test("routeForReview requests review from the Target Issue Author when distinct from the PR Author", async () => {
     const github = new FakeGitHubClient({ prds: [prdIssue()] });
     github.getAuthenticatedUser.mockResolvedValue("factory-bot");
 
@@ -1244,7 +1244,7 @@ describe("PrdPullRequest", () => {
     expect(github.createIssueComment).not.toHaveBeenCalled();
   });
 
-  test("routeForReview tags the PRD Author for self-review when they are the PR Author", async () => {
+  test("routeForReview tags the Target Issue Author for self-review when they are the PR Author", async () => {
     const github = new FakeGitHubClient({ prds: [prdIssue()] });
     github.getAuthenticatedUser.mockResolvedValue("jd-solanki");
 
@@ -1441,17 +1441,17 @@ const fixtureTemplates: TemplateRenderer = {
   async render(templatePath, values) {
     const templates: Record<string, string> = {
       "templates/hitlpause-comment.md":
-        "<!-- krutrimbox:hitl-prd-{{prd_number}}-issue-{{issue_number}} -->\n\n@{{prd_author}} krutrimbox is paused for Target Issue #{{prd_number}}.\n\nThe next required issue is HITL:\n\n- #{{issue_number}} - {{issue_title}}\n\n> [!IMPORTANT]\n> When the HITL work is finished, push a `Refs #{{issue_number}}` commit to the Target Issue Branch `{{prd_branch}}`.\n> An empty commit is acceptable for non-code work. Then rerun krutrimbox:\n\n```sh\nkb run --issue {{prd_number}}\n```\n\nSandbox: `{{prd_sandbox}}`",
+        "<!-- krutrimbox:hitl-issue-{{prd_number}}-implementation-{{issue_number}} -->\n\n@{{prd_author}} krutrimbox is paused for Target Issue #{{prd_number}}.\n\nThe next required issue is HITL:\n\n- #{{issue_number}} - {{issue_title}}\n\n> [!IMPORTANT]\n> When the HITL work is finished, push a `Refs #{{issue_number}}` commit to the Target Issue Branch `{{prd_branch}}`.\n> An empty commit is acceptable for non-code work. Then rerun krutrimbox:\n\n```sh\nkb run --issue {{prd_number}}\n```\n\nSandbox: `{{prd_sandbox}}`",
       "templates/afk-error-comment.md":
-        "<!-- krutrimbox:afk-error-issue-{{issue_number}} -->\n\n{{error_summary}}\n\nPRD: #{{prd_number}}\nBranch: `{{prd_branch}}`\nSandbox: `{{prd_sandbox}}`",
+        "<!-- krutrimbox:afk-error-issue-{{issue_number}} -->\n\n{{error_summary}}\n\nTarget Issue: #{{prd_number}}\nBranch: `{{prd_branch}}`\nSandbox: `{{prd_sandbox}}`",
       "templates/pr-body.md":
-        "## Parent PRD\n\n{{closing_keywords}}\n\n## Implementation Issues\n\n{{implementation_issue_checklist}}\n\n## krutrimbox\n\nBranch: `{{prd_branch}}`\nSandbox: `{{prd_sandbox}}`",
+        "## Target Issue Closure\n\n{{closing_keywords}}\n\n## Implementation Issues\n\n{{implementation_issue_checklist}}\n\n## krutrimbox\n\nBranch: `{{prd_branch}}`\nSandbox: `{{prd_sandbox}}`",
       "prompts/afk-issue.md":
-        "Do not create commits or push branches.\nWork on `{{prd_branch}}`.\n\n## Parent PRD\n{{prd_body}}\n\n## Current AFK Issue\n{{issue_body}}\n\n## Earlier Implementation Issues\n{{earlier_issues}}\n\n## Later Implementation Issues\n{{later_issues}}",
+        "Do not create commits or push branches.\nWork on Target Issue Branch `{{prd_branch}}`.\n\n## Target Issue\n{{prd_body}}\n\n## Current AFK Issue\n{{issue_body}}\n\n## Earlier Implementation Issues\n{{earlier_issues}}\n\n## Later Implementation Issues\n{{later_issues}}",
       "templates/final-review-comment.md":
-        "<!-- krutrimbox:final-review-prd-{{prd_number}} -->\n\n{{review_body}}",
+        "<!-- krutrimbox:final-review-issue-{{prd_number}} -->\n\n{{review_body}}",
       "prompts/final-review.md":
-        "## Parent PRD\n{{prd_body}}\n\n## Implementation Issues\n{{implementation_issues}}\n\n## Pull Request Diff\n{{pr_diff}}"
+        "## Target Issue\n{{prd_body}}\n\n## Implementation Issues\n{{implementation_issues}}\n\n## Pull Request Diff\n{{pr_diff}}"
     };
     const template = templates[templatePath];
 
@@ -1551,11 +1551,11 @@ test("file locks use the deterministic Target Issue slug", async () => {
 });
 
 // End-to-end check that a real Factory Run lands both its status lines and the
-// streamed sandbox/agent bytes in a per-PRD log file, without needing gh/sbx/
+// streamed sandbox/agent bytes in a per-Target-Issue log file, without needing gh/sbx/
 // codex. Uses the real file-backed run log (via importActual, bypassing the
 // module mock above) pointed at a temp directory.
 describe("run logging end-to-end", () => {
-  test("writes status lines and streamed sandbox output to a per-PRD log file", async () => {
+  test("writes status lines and streamed sandbox output to a per-Target-Issue log file", async () => {
     const { createFileRunLogFactory } =
       await vi.importActual<typeof import("../src/lib/factory/run-log")>("../src/lib/factory/run-log");
 

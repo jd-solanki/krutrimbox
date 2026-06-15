@@ -5,7 +5,7 @@ export type PrdLock = {
   release(): Promise<void>;
 };
 
-// Acquires PRD Locks as exclusive lock directories under `.krutrimbox/locks`.
+// Acquires Target Issue Locks as exclusive lock directories under `.krutrimbox/locks`.
 // `acquire` returns null when the lock already exists (another run holds it).
 export class FilePrdLockStore {
   public constructor(private readonly cwd: string) {}

@@ -14,11 +14,11 @@ import {
 } from "./sequence";
 import type { TemplateRenderer } from "./template-renderer";
 
-// The terminal outcome of one Factory Run against a locked PRD. `skipped` is a
+// The terminal outcome of one Factory Run against a locked Target Issue. `skipped` is a
 // dispatch concern (no run ever started), so it is not a Factory Run outcome.
 export type FactoryRunOutcome = "completed" | "paused" | "issue-error";
 
-// The seams a Factory Run drives. The PRD Lock is deliberately absent: a
+// The seams a Factory Run drives. The Target Issue Lock is deliberately absent: a
 // FactoryRun exists only while krutrimbox holds its lock, so locking is a
 // dispatch concern above the run, not a dependency of the run itself.
 export interface FactoryRunDependencies {
@@ -36,8 +36,8 @@ export interface FactoryRunDependencies {
 // as a whole completes, pauses, or stops on an issue error.
 type IssueOutcome = "completed" | "error";
 
-// One execution attempt by krutrimbox against a single locked PRD. The
-// PRD Branch and PRD Sandbox names are derived once and held as invariants;
+// One execution attempt by krutrimbox against a single locked Target Issue. The
+// Target Issue Branch and Target Issue Sandbox names are derived once and held as invariants;
 // `doneSet` and `processedIssues` are intra-run bookkeeping rebuilt fresh every
 // run from the branch's Refs footers (ADR-0015), never persisted separately.
 // Single-use: call `process()` once.
@@ -76,7 +76,7 @@ export class FactoryRun {
 
   public async process(): Promise<FactoryRunOutcome> {
     const { prd } = this;
-    this.logger.log(`krutrimbox: building Implementation Sequence for PRD #${prd.number}.`);
+    this.logger.log(`krutrimbox: building Implementation Sequence for Target Issue #${prd.number}.`);
 
     const subIssues = await this.github.getAttachedSubIssues(prd.number);
     for (const issueNumber of await fetchDoneSet(this.github, this.branchName)) {
@@ -90,7 +90,7 @@ export class FactoryRun {
     }
 
     if (sequence.openIssues.length === 0) {
-      this.logger.log(`krutrimbox: PRD #${prd.number} has no open Implementation Issues.`);
+      this.logger.log(`krutrimbox: Target Issue #${prd.number} has no open Implementation Issues.`);
 
       if (sequence.resolvedIssues.length > 0) {
         await this.routeFinalReview(sequence);
@@ -102,12 +102,12 @@ export class FactoryRun {
     const orderedIssues = sequence.openIssues
       .map((issue) => `#${issue.number} (${issue.kind})`)
       .join(", ");
-    this.logger.log(`krutrimbox: Implementation Sequence for PRD #${prd.number}: ${orderedIssues}.`);
+    this.logger.log(`krutrimbox: Implementation Sequence for Target Issue #${prd.number}: ${orderedIssues}.`);
 
     for (const issue of sequence.openIssues) {
       if (issue.kind === "hitl") {
         await this.pauseAtHitl(issue);
-        this.logger.log(`krutrimbox: paused PRD #${prd.number} at HITL Issue #${issue.number}.`);
+        this.logger.log(`krutrimbox: paused Target Issue #${prd.number} at HITL Issue #${issue.number}.`);
         return "paused";
       }
 
@@ -152,7 +152,7 @@ export class FactoryRun {
         const issueUrl = await this.github.getIssueUrl(issue.number);
         const commentUrl = await this.postAfkErrorComment(issue, unresolvedBlockers);
         this.logger.log(
-          `krutrimbox: stopped PRD #${prd.number}; AFK Issue #${issue.number} has unresolved blockers. See ${commentUrl} (issue: ${issueUrl}).`
+          `krutrimbox: stopped Target Issue #${prd.number}; AFK Issue #${issue.number} has unresolved blockers. See ${commentUrl} (issue: ${issueUrl}).`
         );
         return "error";
       }
@@ -181,7 +181,7 @@ export class FactoryRun {
       const issueUrl = await this.github.getIssueUrl(issue.number);
       const commentUrl = await this.postAfkErrorComment(issue, [formatError(error)]);
       this.logger.log(
-        `krutrimbox: stopped PRD #${prd.number}; AFK Issue #${issue.number} failed. See ${commentUrl} (issue: ${issueUrl}).`
+        `krutrimbox: stopped Target Issue #${prd.number}; AFK Issue #${issue.number} failed. See ${commentUrl} (issue: ${issueUrl}).`
       );
       return "error";
     }
@@ -252,19 +252,19 @@ export class FactoryRun {
 
     if (!pr) {
       this.logger.log(
-        `krutrimbox: no PRD Pull Request found for PRD #${prd.number}; skipping final review.`
+        `krutrimbox: no Target Issue Pull Request found for Target Issue #${prd.number}; skipping final review.`
       );
       return;
     }
 
     if (!pr.isDraft) {
       this.logger.log(
-        `krutrimbox: PRD Pull Request #${pr.number} for PRD #${prd.number} is already ready for review; skipping final review.`
+        `krutrimbox: Target Issue Pull Request #${pr.number} for Target Issue #${prd.number} is already ready for review; skipping final review.`
       );
       return;
     }
 
-    this.logger.log(`krutrimbox: running final review for PRD #${prd.number}.`);
+    this.logger.log(`krutrimbox: running final review for Target Issue #${prd.number}.`);
 
     const diff = await this.prdPullRequest.diff(pr.number);
     const prompt = await this.buildFinalReviewPrompt(sequence, diff);
@@ -285,7 +285,7 @@ export class FactoryRun {
     await this.prdPullRequest.routeForReview(pr.number, prd.author.login);
 
     await this.sandbox.removeSandbox({ sandboxName: this.sandboxName });
-    this.logger.log(`krutrimbox: removed PRD Sandbox ${this.sandboxName}.`);
+    this.logger.log(`krutrimbox: removed Target Issue Sandbox ${this.sandboxName}.`);
   }
 
   private async buildFinalReviewPrompt(
@@ -312,7 +312,7 @@ export class FactoryRun {
 }
 
 function hitlMarker(prdNumber: number, issueNumber: number): string {
-  return `<!-- krutrimbox:hitl-prd-${prdNumber}-issue-${issueNumber} -->`;
+  return `<!-- krutrimbox:hitl-issue-${prdNumber}-implementation-${issueNumber} -->`;
 }
 
 function afkErrorMarker(issueNumber: number): string {
@@ -320,7 +320,7 @@ function afkErrorMarker(issueNumber: number): string {
 }
 
 function finalReviewMarker(prdNumber: number): string {
-  return `<!-- krutrimbox:final-review-prd-${prdNumber} -->`;
+  return `<!-- krutrimbox:final-review-issue-${prdNumber} -->`;
 }
 
 function formatError(error: unknown): string {

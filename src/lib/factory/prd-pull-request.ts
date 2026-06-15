@@ -9,12 +9,12 @@ import { formatClosingKeywords, formatImplementationChecklist } from "./format";
 import type { ImplementationSequence } from "./sequence";
 import type { TemplateRenderer } from "./template-renderer";
 
-// The single pull request that accumulates a PRD's AFK Issue commits, identified
-// by its PRD Branch. Owns find-or-create, the deterministic PRD Pull Request
-// Body, the "exactly the PRD label" invariant, and Final Reviewer routing
-// (ADR-0004). Review generation (a Sandbox concern) and the idempotent review
-// comment (a Factory Comment Marker concern) stay with the Factory Run that
-// drives it.
+// The single pull request that accumulates a Target Issue's AFK Issue commits,
+// identified by its Target Issue Branch. Owns find-or-create, the deterministic
+// Target Issue Pull Request Body, the "exactly the krutrimbox label" invariant,
+// and Final Reviewer routing (ADR-0004). Review generation (a Sandbox concern)
+// and the idempotent review comment (a Factory Comment Marker concern) stay
+// with the Factory Run that drives it.
 export class PrdPullRequest {
   public constructor(
     private readonly github: GitHubClient,
@@ -59,7 +59,7 @@ export class PrdPullRequest {
   public async routeForReview(pullRequestNumber: number, prdAuthor: string): Promise<void> {
     await this.github.markPullRequestReadyForReview(pullRequestNumber);
     this.logger.log(
-      `krutrimbox: marked PRD Pull Request #${pullRequestNumber} ready for review.`
+      `krutrimbox: marked Target Issue Pull Request #${pullRequestNumber} ready for review.`
     );
 
     const prAuthor = await this.github.getAuthenticatedUser();
@@ -67,15 +67,15 @@ export class PrdPullRequest {
     if (prdAuthor !== prAuthor) {
       await this.github.requestPullRequestReview(pullRequestNumber, prdAuthor);
       this.logger.log(
-        `krutrimbox: requested review from ${prdAuthor} for PRD Pull Request #${pullRequestNumber}.`
+        `krutrimbox: requested review from ${prdAuthor} for Target Issue Pull Request #${pullRequestNumber}.`
       );
       return;
     }
 
-    const tagBody = `@${prdAuthor} krutrimbox has completed all Implementation Issues for PRD #${this.prd.number}. Please review the PR.`;
+    const tagBody = `@${prdAuthor} krutrimbox has completed all Implementation Issues for Target Issue #${this.prd.number}. Please review the PR.`;
     await this.github.createIssueComment(pullRequestNumber, tagBody);
     this.logger.log(
-      `krutrimbox: tagged ${prdAuthor} in PRD Pull Request #${pullRequestNumber} (self-review).`
+      `krutrimbox: tagged ${prdAuthor} in Target Issue Pull Request #${pullRequestNumber} (self-review).`
     );
   }
 

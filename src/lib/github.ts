@@ -29,9 +29,9 @@ export interface GitHubIssue {
   labels: Array<{
     name: string;
   }>;
-  // The PRD this issue is attached to through GitHub's native sub-issue link
+  // The Target Issue this issue is attached to through GitHub's native sub-issue link
   // (REST `parent_issue_url` / GraphQL `parent`). Null for top-level issues such
-  // as PRDs, or when the issue was not fetched through the sub-issue relationship.
+  // as Target Issues, or when the issue was not fetched through the sub-issue relationship.
   parentNumber: number | null;
 }
 

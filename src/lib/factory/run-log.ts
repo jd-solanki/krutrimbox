@@ -2,10 +2,11 @@ import { createWriteStream, mkdirSync } from "node:fs";
 import path from "node:path";
 import { deterministicTargetIssueSandbox } from "./sequence";
 
-// A per-PRD log sink for one Factory Run. Status lines (`log`) are tee'd to the
-// terminal and the file so a run stays visible while it happens; the raw
-// sandbox/agent bytes are piped through `stream` into the file only, keeping the
-// terminal clean. `close` flushes and closes the file once the run finishes.
+// A per-Target-Issue log sink for one Factory Run. Status lines (`log`) are
+// tee'd to the terminal and the file so a run stays visible while it happens;
+// the raw sandbox/agent bytes are piped through `stream` into the file only,
+// keeping the terminal clean. `close` flushes and closes the file once the run
+// finishes.
 export interface RunLog {
   readonly stream: NodeJS.WritableStream;
   readonly filePath: string | null;
@@ -13,8 +14,8 @@ export interface RunLog {
   close(): Promise<void>;
 }
 
-// Builds the RunLog for a given PRD. Injected into Krutrimbox so tests can swap
-// in a silent sink instead of touching the filesystem.
+// Builds the RunLog for a given Target Issue. Injected into Krutrimbox so tests
+// can swap in a silent sink instead of touching the filesystem.
 export type RunLogFactory = (prdNumber: number) => RunLog;
 
 // Production factory: each run writes to

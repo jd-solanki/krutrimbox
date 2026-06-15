@@ -13,7 +13,7 @@ const program = new Command();
 
 program
   .name("kb")
-  .description("Run krutrimbox orchestration for ready PRDs.")
+  .description("Run krutrimbox orchestration for ready Target Issues.")
   .version(packageJson.version);
 
 program.addCommand(createRunCommand());

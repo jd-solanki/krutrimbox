@@ -1,6 +1,6 @@
 # Krutrimbox
 
-Krutrimbox is a code factory which is a local orchestrator for GitHub PRDs and their ordered implementation issues. It finds a ready PRD, walks its implementation sequence, delegates AFK work to fresh Codex sessions inside Docker Sandboxes, pauses for human work when needed, and keeps the outer process in charge of GitHub state, commits, pushes, and pull requests.
+Krutrimbox is a code factory: a local orchestrator for agent-ready GitHub issues. It discovers Target Issues labeled `ready-for-agent` that have no parent issue, implements standalone Target Issues directly or walks their ordered Implementation Issues, delegates AFK work to fresh Codex sessions inside Docker Sandboxes, pauses for human work when needed, and keeps the outer process in charge of GitHub state, commits, pushes, and pull requests.
 
 This README is written for a new machine setup. It assumes you are comfortable copying terminal commands, but not necessarily familiar with Docker Sandboxes yet.
 
@@ -9,7 +9,7 @@ This README is written for a new machine setup. It assumes you are comfortable c
 krutrimbox uses three layers:
 
 1. Your host machine runs the `kb` Node.js CLI from the `krutrimbox` package.
-2. Docker Sandboxes creates an isolated PRD Sandbox for agent work.
+2. Docker Sandboxes creates an isolated Target Issue Sandbox for agent work.
 3. Codex runs inside that sandbox to implement one AFK issue at a time.
 
 The sandbox is intentionally separate from your host working tree. In Docker Sandboxes clone mode, the sandbox gets its own private Git clone. That keeps agent changes away from your current local branch until the outer krutrimbox commits and pushes them.
@@ -106,7 +106,7 @@ If needed:
 gh auth login
 ```
 
-The account must be able to read issues, create/edit pull requests, push branches, comment on issues/PRs, and close implementation issues in the target repository.
+The account must be able to read issues, create/edit pull requests, push branches, and comment on issues/PRs in the target repository.
 
 Docker Sandboxes do not automatically inherit your host GitHub CLI login. Store the host `gh` token as Docker's built-in `github` sandbox secret so `gh` and HTTPS GitHub requests can authenticate inside newly created sandboxes:
 
@@ -117,7 +117,7 @@ echo "$(gh auth token)" | sbx secret set -g github
 The `-g` flag stores the secret globally for future sandboxes. Existing sandboxes do not receive newly created or changed global secrets; recreate them after setting the secret, or scope the secret to a specific running sandbox:
 
 ```sh
-echo "$(gh auth token)" | sbx secret set krutrimbox-prd-1 github
+echo "$(gh auth token)" | sbx secret set krutrimbox-issue-1 github
 ```
 
 ## Configure Docker Sandboxes Network Policy
@@ -149,7 +149,7 @@ sbx policy log
 
 ## Prepare krutrimbox Sandbox Template
 
-Docker's stock Codex sandbox image includes Codex and Node.js tooling, but this repository expects `pnpm` to be available directly inside the sandbox. We use a custom Docker Sandboxes template so every fresh PRD Sandbox has the same toolchain.
+Docker's stock Codex sandbox image includes Codex and Node.js tooling, but this repository expects `pnpm` to be available directly inside the sandbox. We use a custom Docker Sandboxes template so every fresh Target Issue Sandbox has the same toolchain.
 
 The template is defined in `Dockerfile.sandbox` and installs `pnpm@10.23.0` on top of Docker's Codex sandbox template.
 
@@ -218,19 +218,19 @@ sbx rm --force krutrimbox-smoke
 
 ## Run krutrimbox
 
-Run one explicit PRD:
+Run one explicit Target Issue:
 
 ```sh
-pnpm start run --prd 1
+pnpm start run --issue 1
 ```
 
 If you use an alias such as `nr`, this is equivalent:
 
 ```sh
-nr start run --prd 1
+nr start run --issue 1
 ```
 
-Run batch mode for all eligible ready PRDs:
+Run batch mode for all eligible ready Target Issues:
 
 ```sh
 pnpm start run
@@ -239,11 +239,17 @@ pnpm start run
 Once `krutrimbox` is installed globally, the same commands are available through the `kb` binary from any repository:
 
 ```sh
-kb run --prd 1
+kb run --issue 1
 kb run
 ```
 
-krutrimbox currently processes only Factory-Owned PRDs authored by `jd-solanki`.
+krutrimbox currently processes only Factory-Owned Target Issues authored by `jd-solanki`.
+
+Batch discovery finds open issues authored by `jd-solanki` with the `ready-for-agent` label and excludes any issue that has a parent issue. A child Implementation Issue can also carry `ready-for-agent`; the no-parent rule prevents it from being discovered as its own Target Issue.
+
+A Standalone Target Issue has no attached sub-issues, so krutrimbox treats the Target Issue itself as a sequence-of-one Implementation Issue and implements its body directly. A Parent Target Issue has attached sub-issues, so krutrimbox uses the Target Issue body as context and walks those Implementation Issues in issue-number order.
+
+krutrimbox does not close issues during a run. Each successful AFK or HITL completion is recorded by a `Refs #<issue-number>` commit footer on the Target Issue Branch; the Done Set is rebuilt from those footers on every run and drives resume behavior. The Target Issue Pull Request body carries `Closes #<number>` keywords for the Target Issue and every Implementation Issue, so GitHub closes them when the pull request merges.
 
 ## Project Configuration Directory
 
@@ -275,7 +281,7 @@ Keep runtime state local. Add only these generated subdirectories to the target 
 
 ## Existing Sandboxes After Auth Or Template Changes
 
-Existing sandboxes keep the template and global secrets they were created with. If you created a PRD Sandbox before preparing the `pnpm` template or before setting the global `github` secret, that old sandbox will not automatically gain the missing tool or credential.
+Existing sandboxes keep the template and global secrets they were created with. If you created a Target Issue Sandbox before preparing the `pnpm` template or before setting the global `github` secret, that old sandbox will not automatically gain the missing tool or credential.
 
 List existing sandboxes:
 
@@ -283,23 +289,23 @@ List existing sandboxes:
 sbx ls
 ```
 
-Check an existing PRD Sandbox:
+Check an existing Target Issue Sandbox:
 
 ```sh
-sbx exec -w "$(pwd)" krutrimbox-prd-1 -- pnpm --version
-sbx exec -w "$(pwd)" krutrimbox-prd-1 -- gh auth status
+sbx exec -w "$(pwd)" krutrimbox-issue-1 -- pnpm --version
+sbx exec -w "$(pwd)" krutrimbox-issue-1 -- gh auth status
 ```
 
 If `pnpm` is not found or `gh` is not authenticated, inspect for uncommitted work first:
 
 ```sh
-sbx exec -w "$(pwd)" krutrimbox-prd-1 -- git status --short --branch
+sbx exec -w "$(pwd)" krutrimbox-issue-1 -- git status --short --branch
 ```
 
 If there is no work to preserve, remove the old sandbox:
 
 ```sh
-sbx rm --force krutrimbox-prd-1
+sbx rm --force krutrimbox-issue-1
 ```
 
 The next factory run will recreate it with the configured template and current global secrets.
@@ -311,13 +317,13 @@ In clone mode, Docker Sandboxes exposes the private repository clone at the orig
 This works:
 
 ```sh
-sbx exec -w "$(pwd)" krutrimbox-prd-1 -- git status --short --branch
+sbx exec -w "$(pwd)" krutrimbox-issue-1 -- git status --short --branch
 ```
 
 This may fail:
 
 ```sh
-sbx exec krutrimbox-prd-1 -- git status --short --branch
+sbx exec krutrimbox-issue-1 -- git status --short --branch
 ```
 
 Without `-w`, `sbx exec` can start in a default directory that is not a Git repository. krutrimbox handles this internally by resolving the host repository path and passing it to `sbx exec --workdir`.
@@ -368,10 +374,10 @@ Prepare and load the custom sandbox template:
 pnpm sandbox:prepare-template
 ```
 
-Then recreate any old PRD Sandbox that was created before the template was available:
+Then recreate any old Target Issue Sandbox that was created before the template was available:
 
 ```sh
-sbx rm --force krutrimbox-prd-<number>
+sbx rm --force krutrimbox-issue-<number>
 ```
 
 ### `pull failed for image "krutrimbox-codex:pnpm"`
@@ -408,22 +414,22 @@ Then store the host token for future Docker Sandboxes:
 echo "$(gh auth token)" | sbx secret set -g github
 ```
 
-If the PRD Sandbox already exists, either remove it after confirming there is no work to preserve:
+If the Target Issue Sandbox already exists, either remove it after confirming there is no work to preserve:
 
 ```sh
-sbx exec -w "$(pwd)" krutrimbox-prd-<number> -- git status --short --branch
-sbx rm --force krutrimbox-prd-<number>
+sbx exec -w "$(pwd)" krutrimbox-issue-<number> -- git status --short --branch
+sbx rm --force krutrimbox-issue-<number>
 ```
 
 Or apply the secret directly to that running sandbox:
 
 ```sh
-echo "$(gh auth token)" | sbx secret set krutrimbox-prd-<number> github
+echo "$(gh auth token)" | sbx secret set krutrimbox-issue-<number> github
 ```
 
 ### A sandbox is left behind after a failure
 
-krutrimbox intentionally keeps PRD Sandboxes after HITL pauses and failures so you can inspect them.
+krutrimbox intentionally keeps Target Issue Sandboxes after HITL pauses and failures so you can inspect them.
 
 List sandboxes:
 
@@ -431,16 +437,16 @@ List sandboxes:
 sbx ls
 ```
 
-Inspect a PRD Sandbox:
+Inspect a Target Issue Sandbox:
 
 ```sh
-sbx exec -w "$(pwd)" krutrimbox-prd-<number> -- git status --short --branch
+sbx exec -w "$(pwd)" krutrimbox-issue-<number> -- git status --short --branch
 ```
 
 Remove it when you are sure no work needs preserving:
 
 ```sh
-sbx rm --force krutrimbox-prd-<number>
+sbx rm --force krutrimbox-issue-<number>
 ```
 
 ## Useful References
