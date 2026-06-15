@@ -24,7 +24,7 @@ Install these before running krutrimbox:
 - pnpm 10.23.0 or newer
 - Docker Desktop or a working Docker Engine
 - Docker Sandboxes CLI, `sbx`
-- OpenAI/Codex authentication for Docker Sandboxes
+- Authentication for at least one Agent Backend (Codex and/or Claude Code) in Docker Sandboxes — see "Authenticate Your Agent For Sandboxes"
 
 On macOS, Docker Sandboxes can be installed with Homebrew:
 
@@ -120,6 +120,32 @@ The `-g` flag stores the secret globally for future sandboxes. Existing sandboxe
 echo "$(gh auth token)" | sbx secret set krutrimbox-issue-1 github
 ```
 
+## Authenticate Your Agent For Sandboxes
+
+The Sandboxed Agent inside each Target Issue Sandbox needs its own credentials to reach its model. krutrimbox writes no agent-credential code; authentication is entirely Docker Sandboxes' host-side credential proxy, and it is a **one-time setup per agent**. The token lives on your host (never inside the sandbox) and the proxy injects it into requests from any sandbox, so it survives krutrimbox removing and recreating Target Issue Sandboxes — you log in once, not per run.
+
+Authenticate only the agents you intend to run with `--agent`.
+
+If you use a subscription (no API key), sign in interactively once. Create a throwaway sandbox for the agent, attach, and run `/login`:
+
+```sh
+# Codex
+sbx create codex "$(pwd)"   # then `sbx run <sandbox>` and complete `/login`
+# Claude Code
+sbx create claude "$(pwd)"  # then `sbx run <sandbox>` and complete `/login`
+```
+
+After the OAuth flow completes, the host holds the token and every future Target Issue Sandbox authenticates through the proxy. You can remove the throwaway sandbox.
+
+If you prefer an API key (e.g. CI), store it as the matching Docker Sandboxes service secret instead, and skip the interactive `/login`:
+
+```sh
+sbx secret set -g anthropic   # Claude Code; prompts for the key
+sbx secret set -g openai      # Codex
+```
+
+If a run fails because the inner agent is unauthenticated, krutrimbox treats it as an environment error and stops the current Target Issue, just as it does for missing `gh` credentials.
+
 ## Configure Docker Sandboxes Network Policy
 
 Sandboxes need network access for things like GitHub, package registries, and model/tool calls.
@@ -149,36 +175,49 @@ sbx policy log
 
 ## Prepare krutrimbox Sandbox Template
 
-Docker's stock Codex sandbox image includes Codex and Node.js tooling, but this repository expects `pnpm` to be available directly inside the sandbox. We use a custom Docker Sandboxes template so every fresh Target Issue Sandbox has the same toolchain.
+Docker's stock agent sandbox images include the agent CLI and Node.js tooling, but this repository expects `pnpm` to be available directly inside the sandbox. We use a custom Docker Sandboxes template per Agent Backend so every fresh Target Issue Sandbox has the same toolchain.
 
-The template is defined in `Dockerfile.sandbox` and installs `pnpm@10.23.0` on top of Docker's Codex sandbox template.
+A single parameterized `Dockerfile.sandbox` installs `pnpm@10.23.0` on top of the agent's stock template, selected by the `BASE` build argument (`docker/sandbox-templates:codex` or `docker/sandbox-templates:claude`).
 
-Run this once per machine:
+Prepare only the agents you run. For Codex:
+
+```sh
+pnpm sandbox:prepare-template:codex
+```
+
+For Claude Code:
+
+```sh
+pnpm sandbox:prepare-template:claude
+```
+
+Or prepare both at once:
 
 ```sh
 pnpm sandbox:prepare-template
 ```
 
-That script runs:
+Each `sandbox:prepare-template:<agent>` script runs, for example:
 
 ```sh
-docker build -f Dockerfile.sandbox -t krutrimbox-codex:pnpm .
+docker build -f Dockerfile.sandbox --build-arg BASE=docker/sandbox-templates:codex -t krutrimbox-codex:pnpm .
 docker image save krutrimbox-codex:pnpm -o /tmp/krutrimbox-codex-pnpm.tar
 sbx template load /tmp/krutrimbox-codex-pnpm.tar
 ```
 
 The `sbx template load` step is important. Docker Sandboxes has its own template image store. A successful `docker build` alone does not make the image available to `sbx create --template`.
 
-Verify that Docker Sandboxes can see the template:
+Verify that Docker Sandboxes can see the templates:
 
 ```sh
 sbx template ls
 ```
 
-You should see an entry like:
+You should see an entry for each agent you prepared:
 
 ```text
-docker.io/library/krutrimbox-codex   pnpm
+docker.io/library/krutrimbox-codex    pnpm
+docker.io/library/krutrimbox-claude   pnpm
 ```
 
 ## First Sandbox Smoke Test
@@ -218,30 +257,34 @@ sbx rm --force krutrimbox-smoke
 
 ## Run krutrimbox
 
+Every run must choose an Agent Backend with the required `--agent` flag (`codex` or `claude`). There is no default — a run never starts without an agent named explicitly.
+
 Run one explicit Target Issue:
 
 ```sh
-pnpm start run --issue 1
+pnpm start run --issue 1 --agent codex
 ```
 
 If you use an alias such as `nr`, this is equivalent:
 
 ```sh
-nr start run --issue 1
+nr start run --issue 1 --agent codex
 ```
 
-Run batch mode for all eligible ready Target Issues:
+Run batch mode for all eligible ready Target Issues, backed by Claude Code:
 
 ```sh
-pnpm start run
+pnpm start run --agent claude
 ```
 
 Once `krutrimbox` is installed globally, the same commands are available through the `kb` binary from any repository:
 
 ```sh
-kb run --issue 1
-kb run
+kb run --issue 1 --agent codex
+kb run --agent claude
 ```
+
+The Agent Backend is chosen per run. Because the Done Set is rebuilt from `Refs #<number>` commit footers on the agent-blind Target Issue Branch, you can even resume a Target Issue with a different agent than an earlier run used; each agent gets its own Target Issue Sandbox (`krutrimbox-issue-<number>-<agent>`).
 
 krutrimbox currently processes only Factory-Owned Target Issues authored by `jd-solanki`.
 
@@ -328,17 +371,20 @@ sbx exec krutrimbox-issue-1 -- git status --short --branch
 
 Without `-w`, `sbx exec` can start in a default directory that is not a Git repository. krutrimbox handles this internally by resolving the host repository path and passing it to `sbx exec --workdir`.
 
-## How Inner Codex Runs Are Authorized
+## How Inner Agent Runs Are Authorized
 
-krutrimbox launches sandboxed Codex sessions with explicit non-interactive flags:
+krutrimbox launches each Sandboxed Agent non-interactively, with explicit flags so it never pauses for an approval prompt that no human is attached to answer. The exact command depends on the run's Agent Backend:
 
 ```sh
+# --agent codex
 codex exec --ephemeral --dangerously-bypass-approvals-and-sandbox "<prompt>"
+# --agent claude
+claude -p "<prompt>" --dangerously-skip-permissions
 ```
 
-This is intentional. The Codex process is already running inside a Docker Sandbox private clone, so Docker Sandboxes is the outer isolation boundary. The inner Codex process must not pause for approval prompts because no human is attached to the AFK Issue session.
+This is intentional. The agent process is already running inside a Docker Sandbox private clone, so Docker Sandboxes is the outer isolation boundary. The inner process must not pause for approval because no human is attached to the AFK Issue session. `claude -p` is also a fresh one-shot (never `--continue`/`--resume`), which keeps each AFK Issue's context window fresh.
 
-These flags prevent Codex approval prompts. They do not answer ordinary command prompts from tools such as `git`, package managers, or auth flows. That is why the machine setup, GitHub auth, Docker Sandboxes auth, network policy, and custom `pnpm` template all need to be prepared before running the factory.
+These flags prevent the agent's own approval prompts. They do not answer ordinary command prompts from tools such as `git`, package managers, or auth flows. That is why the machine setup, GitHub auth, agent auth, network policy, and custom `pnpm` template all need to be prepared before running the factory.
 
 ## Troubleshooting
 
@@ -377,7 +423,7 @@ pnpm sandbox:prepare-template
 Then recreate any old Target Issue Sandbox that was created before the template was available:
 
 ```sh
-sbx rm --force krutrimbox-issue-<number>
+sbx rm --force krutrimbox-issue-<number>-<agent>
 ```
 
 ### `pull failed for image "krutrimbox-codex:pnpm"`
@@ -417,14 +463,14 @@ echo "$(gh auth token)" | sbx secret set -g github
 If the Target Issue Sandbox already exists, either remove it after confirming there is no work to preserve:
 
 ```sh
-sbx exec -w "$(pwd)" krutrimbox-issue-<number> -- git status --short --branch
-sbx rm --force krutrimbox-issue-<number>
+sbx exec -w "$(pwd)" krutrimbox-issue-<number>-<agent> -- git status --short --branch
+sbx rm --force krutrimbox-issue-<number>-<agent>
 ```
 
 Or apply the secret directly to that running sandbox:
 
 ```sh
-echo "$(gh auth token)" | sbx secret set krutrimbox-issue-<number> github
+echo "$(gh auth token)" | sbx secret set krutrimbox-issue-<number>-<agent> github
 ```
 
 ### A sandbox is left behind after a failure
@@ -440,13 +486,13 @@ sbx ls
 Inspect a Target Issue Sandbox:
 
 ```sh
-sbx exec -w "$(pwd)" krutrimbox-issue-<number> -- git status --short --branch
+sbx exec -w "$(pwd)" krutrimbox-issue-<number>-<agent> -- git status --short --branch
 ```
 
 Remove it when you are sure no work needs preserving:
 
 ```sh
-sbx rm --force krutrimbox-issue-<number>
+sbx rm --force krutrimbox-issue-<number>-<agent>
 ```
 
 ## Useful References

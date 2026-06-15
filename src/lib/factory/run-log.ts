@@ -1,6 +1,6 @@
 import { createWriteStream, mkdirSync } from "node:fs";
 import path from "node:path";
-import { deterministicTargetIssueSandbox } from "./sequence";
+import { deterministicTargetIssueSlug } from "./sequence";
 
 // A per-Target-Issue log sink for one Factory Run. Status lines (`log`) are
 // tee'd to the terminal and the file so a run stays visible while it happens;
@@ -30,7 +30,7 @@ export function createFileRunLogFactory(
     const dir = path.join(cwd, ".krutrimbox", "logs");
     mkdirSync(dir, { recursive: true });
 
-    const filePath = path.join(dir, `${deterministicTargetIssueSandbox(targetIssueNumber)}--${timestamp()}.log`);
+    const filePath = path.join(dir, `${deterministicTargetIssueSlug(targetIssueNumber)}--${timestamp()}.log`);
     const stream = createWriteStream(filePath, { flags: "a" });
     stream.on("error", (error) => terminal.log(`krutrimbox: log file ${filePath} error: ${String(error)}`));
 

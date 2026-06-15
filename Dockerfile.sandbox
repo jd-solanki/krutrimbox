@@ -1,4 +1,15 @@
-FROM docker/sandbox-templates:codex
+# check=skip=InvalidDefaultArgInFrom
+# Parameterized krutrimbox Sandbox Template (ADR-0012). One Dockerfile builds a
+# pnpm-extended image per Agent Backend; BASE selects the agent's stock template
+# (docker/sandbox-templates:codex or :claude). The pnpm layer is identical for
+# every agent, so it lives here once.
+#
+# BASE is required and has no default — mirroring the required `--agent` flag, so
+# a bare `docker build` can never silently produce a Codex image for a Claude
+# run. An unset BASE leaves `FROM` blank and fails at parse time. Always build
+# through the `sandbox:prepare-template:<agent>` scripts, which pass it.
+ARG BASE
+FROM ${BASE}
 
 USER root
 RUN npm install -g pnpm@10.23.0

@@ -1,0 +1,50 @@
+import { describe, expect, test } from "vitest";
+import { resolveCodingAgent, AGENT_NAMES } from "../src/lib/factory/index";
+
+describe("resolveCodingAgent", () => {
+  test("backs Codex runs with a non-resumed `codex exec` session and its own template", () => {
+    const agent = resolveCodingAgent("codex");
+
+    expect(agent.name).toBe("codex");
+    expect(agent.sbxAgentName).toBe("codex");
+    expect(agent.defaultTemplate).toBe("docker.io/library/krutrimbox-codex:pnpm");
+    expect(agent.buildExecCommand("do the work")).toEqual([
+      "codex",
+      "exec",
+      "--ephemeral",
+      "--dangerously-bypass-approvals-and-sandbox",
+      "do the work"
+    ]);
+  });
+
+  test("backs Claude runs with a fresh `claude -p` one-shot and its own template", () => {
+    const agent = resolveCodingAgent("claude");
+
+    expect(agent.name).toBe("claude");
+    expect(agent.sbxAgentName).toBe("claude");
+    expect(agent.defaultTemplate).toBe("docker.io/library/krutrimbox-claude:pnpm");
+    expect(agent.buildExecCommand("do the work")).toEqual([
+      "claude",
+      "-p",
+      "do the work",
+      "--dangerously-skip-permissions"
+    ]);
+  });
+
+  test("never bypasses with a resumed Claude session, which would leak context across AFK Issues", () => {
+    const command = resolveCodingAgent("claude").buildExecCommand("prompt");
+
+    expect(command).not.toContain("--continue");
+    expect(command).not.toContain("--resume");
+  });
+
+  test("rejects an unknown Agent Backend name instead of silently defaulting", () => {
+    expect(() => resolveCodingAgent("gemini" as never)).toThrow(
+      "Unknown Agent Backend \"gemini\"; expected one of: codex, claude."
+    );
+  });
+
+  test("exposes the selectable Agent Backend names for CLI validation", () => {
+    expect(AGENT_NAMES).toEqual(["codex", "claude"]);
+  });
+});

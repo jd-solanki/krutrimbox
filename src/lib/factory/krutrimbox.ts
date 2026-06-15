@@ -2,10 +2,12 @@ import path from "node:path";
 import {
   createExecFileCommandRunner,
   createGitHubCliClient,
+  type CommandRunner,
   type GitHubClient,
   type GitHubIssue
 } from "../github";
-import { DEFAULT_SANDBOX_TEMPLATE, FACTORY_OWNER } from "./constants";
+import { resolveCodingAgent, type AgentName, type CodingAgent } from "./coding-agent";
+import { FACTORY_OWNER } from "./constants";
 import {
   FactoryRun,
   type FactoryRunDependencies,
@@ -18,6 +20,9 @@ import { BundledTemplateRenderer, type TemplateRenderer } from "./template-rende
 
 export interface KrutrimboxDependencies {
   github?: GitHubClient;
+  // A pre-built SandboxRunner. When provided (e.g. a test fake) it is used for
+  // every run regardless of agent; otherwise a per-agent CommandSandboxRunner is
+  // built at dispatch time, once the run's Agent Backend is known.
   sandbox?: SandboxRunner;
   lockStore?: TargetIssueLockStore;
   templates?: TemplateRenderer;
@@ -39,33 +44,33 @@ export class Krutrimbox {
   private readonly lockStore: TargetIssueLockStore;
   private readonly logger: Pick<Console, "log">;
   private readonly openRunLog: RunLogFactory;
-  private readonly runDependencies: FactoryRunDependencies;
+  private readonly templates: TemplateRenderer;
+  // Held so a per-agent CommandSandboxRunner can be built at dispatch time, once
+  // the run's Agent Backend is known.
+  private readonly cwd: string;
+  private readonly commandRunner: CommandRunner;
+  private readonly injectedSandbox?: SandboxRunner;
+  private readonly sandboxTemplateOverride?: string;
 
   public constructor(githubOrDependencies: GitHubClient | KrutrimboxDependencies = {}) {
     const dependencies = isGitHubClient(githubOrDependencies)
       ? { github: githubOrDependencies }
       : githubOrDependencies;
     const cwd = path.resolve(dependencies.cwd ?? process.cwd());
-    const commandRunner = createExecFileCommandRunner();
 
     this.github = dependencies.github ?? createGitHubCliClient();
     this.lockStore = dependencies.lockStore ?? new FileTargetIssueLockStore(cwd);
     this.logger = dependencies.logger ?? console;
     this.openRunLog = dependencies.openRunLog ?? createFileRunLogFactory(cwd, this.logger);
-
-    const sandbox =
-      dependencies.sandbox
-      ?? new CommandSandboxRunner(
-        commandRunner,
-        cwd,
-        dependencies.sandboxTemplate ?? process.env.KRUTRIMBOX_SANDBOX_TEMPLATE ?? DEFAULT_SANDBOX_TEMPLATE
-      );
-    const templates = dependencies.templates ?? new BundledTemplateRenderer();
-
-    this.runDependencies = { github: this.github, sandbox, templates, logger: this.logger };
+    this.templates = dependencies.templates ?? new BundledTemplateRenderer();
+    this.cwd = cwd;
+    this.commandRunner = createExecFileCommandRunner();
+    this.injectedSandbox = dependencies.sandbox;
+    this.sandboxTemplateOverride = dependencies.sandboxTemplate;
   }
 
-  public async runExplicit(issueNumber: number): Promise<void> {
+  public async runExplicit(issueNumber: number, agentName: AgentName): Promise<void> {
+    const agent = resolveCodingAgent(agentName);
     await this.github.ensureRequiredLabels();
 
     const targetIssue = await this.github.getIssue(issueNumber);
@@ -77,13 +82,18 @@ export class Krutrimbox {
       return;
     }
 
-    this.logger.log(`krutrimbox: starting Explicit Run for Target Issue #${targetIssue.number}.`);
+    this.logger.log(
+      `krutrimbox: starting Explicit Run for Target Issue #${targetIssue.number} with the ${agent.name} Agent Backend.`
+    );
     this.logger.log(`krutrimbox: processing only Factory-Owned Target Issues by ${FACTORY_OWNER}.`);
-    await this.dispatch(targetIssue);
+    await this.dispatch(targetIssue, agent);
   }
 
-  public async runBatch(): Promise<void> {
-    this.logger.log("krutrimbox: starting Batch Run for ready Target Issues.");
+  public async runBatch(agentName: AgentName): Promise<void> {
+    const agent = resolveCodingAgent(agentName);
+    this.logger.log(
+      `krutrimbox: starting Batch Run for ready Target Issues with the ${agent.name} Agent Backend.`
+    );
     await this.github.ensureRequiredLabels();
     this.logger.log(`krutrimbox: discovering Factory-Owned Target Issues by ${FACTORY_OWNER}.`);
 
@@ -92,7 +102,7 @@ export class Krutrimbox {
     const outcomes: DispatchOutcome[] = [];
 
     for (const targetIssue of targetIssues) {
-      outcomes.push(await this.dispatch(targetIssue));
+      outcomes.push(await this.dispatch(targetIssue, agent));
     }
 
     this.logBatchSummary(outcomes);
@@ -102,7 +112,7 @@ export class Krutrimbox {
   // it (open state + lock) before a Factory Run ever exists. Holding the lock
   // across `process()` keeps the run's invariant intact: a FactoryRun owns its
   // deterministic branch and sandbox.
-  private async dispatch(targetIssue: GitHubIssue): Promise<DispatchOutcome> {
+  private async dispatch(targetIssue: GitHubIssue, agent: CodingAgent): Promise<DispatchOutcome> {
     if (targetIssue.state !== "OPEN") {
       this.logger.log(
         `krutrimbox: skipping Target Issue #${targetIssue.number}; issue is ${targetIssue.state}.`
@@ -122,15 +132,37 @@ export class Krutrimbox {
       this.logger.log(`krutrimbox: writing Target Issue #${targetIssue.number} logs to ${runLog.filePath}.`);
     }
 
+    const runDependencies: FactoryRunDependencies = {
+      github: this.github,
+      sandbox: this.buildSandbox(agent),
+      agent,
+      templates: this.templates,
+      logger: runLog,
+      output: runLog.stream
+    };
+
     try {
-      return await new FactoryRun(
-        { ...this.runDependencies, logger: runLog, output: runLog.stream },
-        targetIssue
-      ).process();
+      return await new FactoryRun(runDependencies, targetIssue).process();
     } finally {
       await runLog.close();
       await lock.release();
     }
+  }
+
+  // Builds the SandboxRunner for one run's Agent Backend. An injected sandbox
+  // (test fake) wins; otherwise the template resolves as explicit override ??
+  // env override ?? the agent's default template (ADR-0012).
+  private buildSandbox(agent: CodingAgent): SandboxRunner {
+    if (this.injectedSandbox) {
+      return this.injectedSandbox;
+    }
+
+    const templateImage =
+      this.sandboxTemplateOverride
+      ?? process.env.KRUTRIMBOX_SANDBOX_TEMPLATE
+      ?? agent.defaultTemplate;
+
+    return new CommandSandboxRunner(this.commandRunner, this.cwd, agent, templateImage);
   }
 
   private logBatchSummary(outcomes: DispatchOutcome[]): void {

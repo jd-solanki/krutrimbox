@@ -30,7 +30,7 @@ If a Target Issue is already locked, krutrimbox skips it and continues.
 
 krutrimbox uses Docker Sandbox clone mode for Target Issue Sandboxes. The host repository is the launch/source repository, but Target Issue Branch checkout, file changes, commits, and pushes happen inside the Target Issue Sandbox private clone rather than the host working tree.
 
-Target Issue Sandboxes are created from the krutrimbox Sandbox Template, currently `docker.io/library/krutrimbox-codex:pnpm`, so Sandboxed Agents have repository-required tooling such as `pnpm` available before implementation starts. See `docs/sandbox-template.md` for machine setup and template loading instructions.
+Target Issue Sandboxes are created from the krutrimbox Sandbox Template for the run's Agent Backend (`docker.io/library/krutrimbox-codex:pnpm` or `docker.io/library/krutrimbox-claude:pnpm`), so Sandboxed Agents have repository-required tooling such as `pnpm` available before implementation starts. See `docs/sandbox-template.md` for machine setup and template loading instructions.
 
 The outer TypeScript krutrimbox runs implementation git commands inside the Target Issue Sandbox, not on the host. This includes branch checkout, staging, committing, and pushing.
 
@@ -46,15 +46,15 @@ The MVP does not use an `in-progress` issue label. Strict sequential execution u
 2. An open HITL Issue causes krutrimbox to comment on the Target Issue, tag the Target Issue Author, and exit.
 3. Before launching a Sandboxed Agent for an open AFK Issue, the outer krutrimbox checks whether any Blocking Issues named in the current issue's `Blocked by` section are resolved.
 4. If the outer check finds an unresolved Blocking Issue, krutrimbox comments on the current AFK Issue with a helpful idempotent error comment, leaves the issue open, and exits the Factory Run.
-5. An open AFK Issue whose Blocking Issues are resolved is delegated to a fresh non-resumed Codex session inside a Docker sandbox.
-6. The sandboxed Codex session receives the Target Issue body and the current Implementation Issue body as its task context.
-7. Before implementation, the sandboxed Codex session verifies Blocking Issues again with Read-Only GitHub Access.
-8. If a Blocking Issue is not resolved, the sandboxed Codex session throws an error; krutrimbox catches that error, comments on the current AFK Issue with a helpful idempotent error comment, leaves the issue open, and exits the Factory Run.
-9. If Blocking Issues are resolved, the sandboxed Codex session checks out or creates the Target Issue Branch and implements the AFK Issue.
+5. An open AFK Issue whose Blocking Issues are resolved is delegated to a fresh non-resumed Sandboxed Agent session (the run's Agent Backend) inside a Docker sandbox.
+6. The Sandboxed Agent session receives the Target Issue body and the current Implementation Issue body as its task context.
+7. Before implementation, the Sandboxed Agent session verifies Blocking Issues again with Read-Only GitHub Access.
+8. If a Blocking Issue is not resolved, the Sandboxed Agent session throws an error; krutrimbox catches that error, comments on the current AFK Issue with a helpful idempotent error comment, leaves the issue open, and exits the Factory Run.
+9. If Blocking Issues are resolved, the Sandboxed Agent session checks out or creates the Target Issue Branch and implements the AFK Issue.
 10. After the Sandboxed Agent exits successfully, the outer krutrimbox creates a commit with a fixed commit message, includes `Refs #<issue-number>`, pushes the Target Issue Branch, and creates or reuses the Target Issue Pull Request using the Authenticated GitHub User.
 11. krutrimbox does not close the completed issue. The branch footer moves it into the Done Set, and GitHub closes it only when the pull request merges.
 
-Sandbox Success trusts the sandboxed Codex session's successful process exit followed by the outer krutrimbox committing and pushing the resulting changes. Agent verification can be tightened later.
+Sandbox Success trusts the Sandboxed Agent session's successful process exit followed by the outer krutrimbox committing and pushing the resulting changes. Agent verification can be tightened later.
 
 The fixed commit message is:
 
@@ -68,11 +68,11 @@ krutrimbox creates one commit per completed AFK Issue, even when multiple AFK Is
 
 The outer krutrimbox stages all working tree changes inside the Target Issue Sandbox private clone after the Sandboxed Agent succeeds. The outer krutrimbox is responsible for committing, pushing the Target Issue Branch, creating or updating the Target Issue Pull Request, and changing the Target Issue Pull Request from draft to ready for review.
 
-The MVP treats a successful `codex exec` process exit as the Sandboxed Agent's completion signal. Structured output can be introduced later if the completion signal proves too loose or difficult for krutrimbox to interpret.
+The MVP treats a successful Sandboxed Agent process exit (`codex exec` or `claude -p`, per the run's Agent Backend) as the completion signal. Structured output can be introduced later if the completion signal proves too loose or difficult for krutrimbox to interpret.
 
-Each AFK Issue gets a fresh Codex context window. The Factory Run may reuse the Target Issue Branch for code continuity, but it must not resume a previous Codex conversation between Implementation Issues.
+Each AFK Issue gets a fresh Sandboxed Agent context window. The Factory Run may reuse the Target Issue Branch for code continuity, but it must not resume a previous agent conversation between Implementation Issues.
 
-Sandboxed Codex sessions are launched with explicit non-interactive settings: `--ephemeral --dangerously-bypass-approvals-and-sandbox`. Docker Sandbox clone mode provides the outer isolation boundary; the inner Codex process must not pause for approvals because no human is attached to the AFK Issue session.
+Sandboxed Agent sessions are launched with explicit non-interactive settings per Agent Backend: `codex exec --ephemeral --dangerously-bypass-approvals-and-sandbox` or `claude -p --dangerously-skip-permissions`. Docker Sandbox clone mode provides the outer isolation boundary; the inner agent process must not pause for approvals because no human is attached to the AFK Issue session.
 
 Only the outer krutrimbox owns GitHub orchestration state and git commit/push operations. The Sandboxed Agent implements the AFK Issue and reports completion, and may use Read-Only GitHub Access for inspection, but must not create commits, push branches, close issues, create or edit the Target Issue Pull Request, change labels, post comments, or change Target Issue state.
 
@@ -92,7 +92,7 @@ When reusing an existing Target Issue Pull Request, krutrimbox identifies it by 
 
 ## Sandboxed Agent Prompt
 
-For each AFK Issue, krutrimbox generates a strict per-issue prompt for the fresh Codex session. The prompt includes the full Target Issue body, the current AFK Issue body, earlier Implementation Issue numbers, titles, and current state, lightweight future Implementation Issue context, the Target Issue Branch name, and explicit boundaries that the Sandboxed Agent may inspect GitHub with read-only commands but must not mutate GitHub state, create commits, push branches, or process future Implementation Issues. Lightweight future context includes issue numbers, titles, type, and blocked-by relationships, not full future issue bodies.
+For each AFK Issue, krutrimbox generates a strict per-issue prompt for the fresh Sandboxed Agent session. The prompt includes the full Target Issue body, the current AFK Issue body, earlier Implementation Issue numbers, titles, and current state, lightweight future Implementation Issue context, the Target Issue Branch name, and explicit boundaries that the Sandboxed Agent may inspect GitHub with read-only commands but must not mutate GitHub state, create commits, push branches, or process future Implementation Issues. Lightweight future context includes issue numbers, titles, type, and blocked-by relationships, not full future issue bodies.
 
 The custom prompt must instruct the Sandboxed Agent to work on exactly one AFK Issue: the current issue. The Sandboxed Agent must not implement future Implementation Issues, even when future issue metadata is included for awareness.
 
@@ -116,7 +116,7 @@ Factory Run logs are written to per-Target-Issue log files under `.krutrimbox/lo
 
 ## Final Review
 
-When every Implementation Issue in the Implementation Sequence is in the Done Set, krutrimbox starts a fresh non-resumed `codex exec` session inside the same Target Issue Sandbox to review the Target Issue Pull Request diff against the Target Issue and Implementation Issue intent. The review session outputs a Markdown review body, and the outer krutrimbox posts it as a normal pull request comment using `templates/final-review-comment.md`. The final review comment uses a Factory Comment Marker so repeated Factory Runs update or skip the existing comment.
+When every Implementation Issue in the Implementation Sequence is in the Done Set, krutrimbox starts a fresh non-resumed Sandboxed Agent session (the run's Agent Backend) inside the same Target Issue Sandbox to review the Target Issue Pull Request diff against the Target Issue and Implementation Issue intent. The review session outputs a Markdown review body, and the outer krutrimbox posts it as a normal pull request comment using `templates/final-review-comment.md`. The final review comment uses a Factory Comment Marker so repeated Factory Runs update or skip the existing comment.
 
 The final review session may use read-only `gh` commands for inspection, but it must not mutate files or GitHub state. The outer krutrimbox captures the review Markdown, posts or updates the pull request comment through host `gh`, marks the Target Issue Pull Request ready for review, and routes or tags the Final Reviewer.
 

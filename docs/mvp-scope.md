@@ -6,7 +6,7 @@ The MVP proves the krutrimbox orchestration loop for Factory-Owned Target Issues
 
 - Run krutrimbox against one explicit Target Issue when the issue is authored by `jd-solanki`.
 - Run krutrimbox in Batch Run mode to discover open Target Issues authored by `jd-solanki`, labeled `ready-for-agent`, and lacking a parent issue.
-- Provide `kb run --issue <number>` for Explicit Runs and `kb run` for Batch Runs.
+- Provide `kb run --issue <number> --agent <codex|claude>` for Explicit Runs and `kb run --agent <codex|claude>` for Batch Runs. `--agent` is required and is the only Agent Backend selector.
 - Assume the CLI is run from the target repository root.
 - Use Docker Sandbox clone mode so Target Issue Branch checkout, file changes, commits, and pushes happen inside the Target Issue Sandbox rather than the host working tree.
 - Use GitHub CLI as the GitHub integration layer. Missing required external commands fail naturally through command execution.
@@ -16,10 +16,10 @@ The MVP proves the krutrimbox orchestration loop for Factory-Owned Target Issues
 - Rebuild the Done Set from `Refs #<issue-number>` commit footers on the Target Issue Branch.
 - Skip Implementation Issues that are already in the Done Set.
 - Stop on an open HITL Issue with an idempotent Target Issue comment that asks the human to push a `Refs #<issue-number>` commit.
-- Run each open AFK Issue in a fresh non-resumed `codex exec` session inside one reusable Target Issue Sandbox.
+- Run each open AFK Issue in a fresh non-resumed session of the run's Agent Backend (Codex or Claude Code) inside one reusable Target Issue Sandbox per agent.
 - Use one Target Issue Branch and one draft Target Issue Pull Request for the Target Issue.
 - Keep issues open during the run; close them only through `Closes #<issue-number>` keywords when the pull request merges.
-- Run a final fresh Codex review session after all Implementation Issues are in the Done Set.
+- Run a final fresh review session with the run's Agent Backend after all Implementation Issues are in the Done Set.
 - Mark the Target Issue Pull Request ready for review and route or tag the Final Reviewer.
 - Remove the Target Issue Sandbox after successful completion.
 - Use per-run log files for operational output and GitHub comments only for actionable states.

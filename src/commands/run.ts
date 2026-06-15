@@ -1,11 +1,12 @@
 import { Command, Option } from "commander";
+import { AGENT_NAMES, type AgentName } from "../lib/factory/coding-agent";
 import { runKrutrimbox } from "../lib/factory/index";
 
 // Injection seam: the CLI layer only needs these two entry points, so tests can
 // pass a fake dispatch instead of the real Krutrimbox orchestration.
 export interface CliDispatch {
-  runExplicit(issueNumber: number): Promise<void> | void;
-  runBatch(): Promise<void> | void;
+  runExplicit(issueNumber: number, agent: AgentName): Promise<void> | void;
+  runBatch(agent: AgentName): Promise<void> | void;
 }
 
 export function createRunCommand(dispatch: CliDispatch = runKrutrimbox): Command {
@@ -16,13 +17,20 @@ export function createRunCommand(dispatch: CliDispatch = runKrutrimbox): Command
         parseIssueNumber
       )
     )
-    .action(async (options: { issue?: number }) => {
+    .addOption(
+      // Required and the only selector: every run states its Agent Backend
+      // explicitly — no environment-variable fallback and no default (ADR-0016).
+      new Option("--agent <agent>", "the Agent Backend that implements the run")
+        .choices([...AGENT_NAMES])
+        .makeOptionMandatory()
+    )
+    .action(async (options: { issue?: number; agent: AgentName }) => {
       if (typeof options.issue === "number") {
-        await dispatch.runExplicit(options.issue);
+        await dispatch.runExplicit(options.issue, options.agent);
         return;
       }
 
-      await dispatch.runBatch();
+      await dispatch.runBatch(options.agent);
     });
 }
 

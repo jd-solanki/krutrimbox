@@ -1,4 +1,5 @@
 import type { GitHubClient, GitHubIssue } from "../github";
+import type { CodingAgent } from "./coding-agent";
 import { fetchDoneSet } from "./done-set";
 import { formatEarlierIssues, formatLaterIssues } from "./format";
 import { TargetIssuePullRequest } from "./target-issue-pull-request";
@@ -24,6 +25,9 @@ export type FactoryRunOutcome = "completed" | "paused" | "issue-error";
 export interface FactoryRunDependencies {
   github: GitHubClient;
   sandbox: SandboxRunner;
+  // The Agent Backend chosen for this run. It scopes the Target Issue Sandbox
+  // name; the SandboxRunner is already wired to the same agent.
+  agent: CodingAgent;
   templates: TemplateRenderer;
   logger: Pick<Console, "log">;
   // Where the sandbox/agent output stream is sent for this run. Omitted in tests
@@ -63,7 +67,7 @@ export class FactoryRun {
     this.logger = dependencies.logger;
     this.output = dependencies.output;
     this.branchName = deterministicTargetIssueBranch(targetIssue.number);
-    this.sandboxName = deterministicTargetIssueSandbox(targetIssue.number);
+    this.sandboxName = deterministicTargetIssueSandbox(targetIssue.number, dependencies.agent.name);
     this.targetIssuePullRequest = new TargetIssuePullRequest(
       this.github,
       this.templates,

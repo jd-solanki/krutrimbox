@@ -1,4 +1,5 @@
 import type { GitHubIssue } from "../github";
+import type { AgentName } from "./coding-agent";
 import {
   AFK_LABEL,
   HITL_LABEL,
@@ -84,8 +85,22 @@ export function deterministicTargetIssueBranch(targetIssueNumber: number): strin
   return `${TARGET_ISSUE_BRANCH_PREFIX}${targetIssueNumber}`;
 }
 
-export function deterministicTargetIssueSandbox(targetIssueNumber: number): string {
+// The agent-blind slug for a Target Issue's local artifacts (e.g. the per-run
+// log file). Keyed only on the Target Issue, since those artifacts are shared
+// across whichever Agent Backend a run uses.
+export function deterministicTargetIssueSlug(targetIssueNumber: number): string {
   return `${TARGET_ISSUE_SANDBOX_PREFIX}${targetIssueNumber}`;
+}
+
+// The Target Issue Sandbox name is keyed on (Target Issue, Agent Backend) so a
+// run with one agent never reuses a sandbox built for another agent's CLI and
+// template image (ADR-0007). The Target Issue Branch stays agent-blind, so the
+// Done Set and HITL resume are unaffected when the agent changes between runs.
+export function deterministicTargetIssueSandbox(
+  targetIssueNumber: number,
+  agentName: AgentName
+): string {
+  return `${deterministicTargetIssueSlug(targetIssueNumber)}-${agentName}`;
 }
 
 export function parseBlockingIssueNumbers(body: string): number[] {

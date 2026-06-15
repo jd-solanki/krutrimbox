@@ -13,7 +13,7 @@ import {
   parseDoneSetFromCommitMessages,
   parseBlockingIssueNumbers,
   TargetIssuePullRequest,
-  SANDBOX_CODEX_EXEC_FLAGS,
+  resolveCodingAgent,
   type TargetIssueLock,
   type TargetIssueLockStore,
   type SandboxRunner,
@@ -172,14 +172,6 @@ describe("Done Set ledger", () => {
   });
 });
 
-describe("SANDBOX_CODEX_EXEC_FLAGS", () => {
-  test("uses current non-interactive Codex exec options for isolated runners", () => {
-    expect(SANDBOX_CODEX_EXEC_FLAGS).toContain("--ephemeral");
-    expect(SANDBOX_CODEX_EXEC_FLAGS).toContain("--dangerously-bypass-approvals-and-sandbox");
-    expect(SANDBOX_CODEX_EXEC_FLAGS).not.toContain("--ask-for-approval");
-  });
-});
-
 describe("Krutrimbox", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -197,7 +189,7 @@ describe("Krutrimbox", () => {
     });
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
-    await factory.runExplicit(1);
+    await factory.runExplicit(1, "codex");
 
     expect(github.ensureRequiredLabels).toHaveBeenCalledOnce();
     expect(github.getIssue).toHaveBeenCalledWith(1);
@@ -217,7 +209,7 @@ describe("Krutrimbox", () => {
       templates: fixtureTemplates
     });
 
-    await factory.runExplicit(1);
+    await factory.runExplicit(1, "codex");
 
     expect(lockStore.acquire).toHaveBeenCalledWith(1);
     expect(github.getAttachedSubIssues).not.toHaveBeenCalled();
@@ -259,7 +251,7 @@ describe("Krutrimbox", () => {
       templates: fixtureTemplates
     });
 
-    await factory.runExplicit(1);
+    await factory.runExplicit(1, "codex");
 
     const updatedBody = github.updateIssueComment.mock.calls[0]?.[1] ?? "";
     expect(github.updateIssueComment).toHaveBeenCalledWith(
@@ -305,7 +297,7 @@ describe("Krutrimbox", () => {
       templates: fixtureTemplates
     });
 
-    await factory.runExplicit(1);
+    await factory.runExplicit(1, "codex");
 
     expect(github.createIssueComment).toHaveBeenCalledWith(
       4,
@@ -332,7 +324,7 @@ describe("Krutrimbox", () => {
       templates: fixtureTemplates
     });
 
-    await factory.runExplicit(1);
+    await factory.runExplicit(1, "codex");
 
     expect(github.getAttachedSubIssues).toHaveBeenCalledWith(1);
     expect(github.getIssue).toHaveBeenCalledWith(3);
@@ -340,7 +332,7 @@ describe("Krutrimbox", () => {
       "Standalone target issue body"
     );
     expect(sandbox.commitAndPush).toHaveBeenCalledWith({
-      sandboxName: "krutrimbox-issue-1",
+      sandboxName: "krutrimbox-issue-1-codex",
       branchName: "krutrimbox/issue-1",
       issueNumber: 1
     });
@@ -392,7 +384,7 @@ describe("Krutrimbox", () => {
       templates: fixtureTemplates
     });
 
-    await factory.runExplicit(1);
+    await factory.runExplicit(1, "codex");
 
     expect(sandbox.calls.map((call) => call.name)).toEqual([
       "ensureSandbox",
@@ -407,9 +399,9 @@ describe("Krutrimbox", () => {
       "runFinalReview",
       "removeSandbox"
     ]);
-    expect(sandbox.calls[0].input).toEqual({ sandboxName: "krutrimbox-issue-1" });
+    expect(sandbox.calls[0].input).toEqual({ sandboxName: "krutrimbox-issue-1-codex" });
     expect(sandbox.calls[1].input).toEqual({
-      sandboxName: "krutrimbox-issue-1",
+      sandboxName: "krutrimbox-issue-1-codex",
       branchName: "krutrimbox/issue-1"
     });
     expect(String(sandbox.calls[2].input.prompt)).toContain("Full parent Target Issue body");
@@ -470,7 +462,7 @@ describe("Krutrimbox", () => {
       templates: fixtureTemplates
     });
 
-    await factory.runExplicit(1);
+    await factory.runExplicit(1, "codex");
 
     expect(github.listBranchCommitMessages).toHaveBeenCalledWith("krutrimbox/issue-1");
     expect(sandbox.commitAndPush.mock.calls.map(([input]) => input.issueNumber)).toEqual([5]);
@@ -509,7 +501,7 @@ describe("Krutrimbox", () => {
       templates: fixtureTemplates
     });
 
-    await factory.runExplicit(1);
+    await factory.runExplicit(1, "codex");
 
     expect(github.createIssueComment).not.toHaveBeenCalledWith(
       1,
@@ -517,7 +509,7 @@ describe("Krutrimbox", () => {
     );
     expect(sandbox.runAfkIssue).toHaveBeenCalledOnce();
     expect(sandbox.commitAndPush).toHaveBeenCalledWith({
-      sandboxName: "krutrimbox-issue-1",
+      sandboxName: "krutrimbox-issue-1-codex",
       branchName: "krutrimbox/issue-1",
       issueNumber: 5
     });
@@ -564,7 +556,7 @@ describe("Krutrimbox", () => {
       templates: fixtureTemplates
     });
 
-    await factory.runExplicit(1);
+    await factory.runExplicit(1, "codex");
 
     expect(github.updateIssueComment).toHaveBeenCalledWith(
       "100",
@@ -598,7 +590,7 @@ describe("Krutrimbox", () => {
       templates: fixtureTemplates
     });
 
-    await factory.runExplicit(1);
+    await factory.runExplicit(1, "codex");
 
     expect(github.createDraftPullRequest).not.toHaveBeenCalled();
     expect(github.updatePullRequestBody).toHaveBeenCalledWith(
@@ -631,7 +623,7 @@ describe("Krutrimbox", () => {
       templates: fixtureTemplates
     });
 
-    await factory.runExplicit(1);
+    await factory.runExplicit(1, "codex");
 
     expect(sandbox.calls.map((call) => call.name)).toEqual([
       "ensureSandbox",
@@ -644,7 +636,7 @@ describe("Krutrimbox", () => {
     expect(String(reviewCall?.input.prompt)).toContain("- #4 - Factory loop (CLOSED)");
     expect(github.markPullRequestReadyForReview).toHaveBeenCalledWith(10);
     expect(github.requestPullRequestReview).toHaveBeenCalledWith(10, "jd-solanki");
-    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: "krutrimbox-issue-1" });
+    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: "krutrimbox-issue-1-codex" });
   });
 
   test("skips final review when the Target Issue Pull Request is already ready for review", async () => {
@@ -664,7 +656,7 @@ describe("Krutrimbox", () => {
       templates: fixtureTemplates
     });
 
-    await factory.runExplicit(1);
+    await factory.runExplicit(1, "codex");
 
     expect(sandbox.ensureSandbox).not.toHaveBeenCalled();
     expect(sandbox.runFinalReview).not.toHaveBeenCalled();
@@ -701,7 +693,7 @@ describe("Krutrimbox", () => {
       templates: fixtureTemplates
     });
 
-    await factory.runExplicit(1);
+    await factory.runExplicit(1, "codex");
 
     expect(github.updateIssueComment).toHaveBeenCalledWith(
       "200",
@@ -730,7 +722,7 @@ describe("Krutrimbox", () => {
       templates: fixtureTemplates
     });
 
-    await factory.runExplicit(1);
+    await factory.runExplicit(1, "codex");
 
     expect(github.requestPullRequestReview).toHaveBeenCalledWith(10, "jd-solanki");
     expect(github.createIssueComment).not.toHaveBeenCalledWith(
@@ -756,7 +748,7 @@ describe("Krutrimbox", () => {
       templates: fixtureTemplates
     });
 
-    await factory.runExplicit(1);
+    await factory.runExplicit(1, "codex");
 
     expect(github.requestPullRequestReview).not.toHaveBeenCalled();
     expect(github.createIssueComment).toHaveBeenCalledWith(
@@ -782,9 +774,9 @@ describe("Krutrimbox", () => {
       templates: fixtureTemplates
     });
 
-    await factory.runExplicit(1);
+    await factory.runExplicit(1, "codex");
 
-    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: "krutrimbox-issue-1" });
+    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: "krutrimbox-issue-1-codex" });
   });
 
   test("never merges the Target Issue Pull Request during final review routing", async () => {
@@ -803,7 +795,7 @@ describe("Krutrimbox", () => {
       templates: fixtureTemplates
     });
 
-    await factory.runExplicit(1);
+    await factory.runExplicit(1, "codex");
 
     expect(github.markPullRequestReadyForReview).toHaveBeenCalledOnce();
     expect("mergePullRequest" in github).toBe(false);
@@ -825,7 +817,7 @@ describe("Krutrimbox", () => {
       templates: fixtureTemplates
     });
 
-    await factory.runExplicit(1);
+    await factory.runExplicit(1, "codex");
 
     expect(sandbox.runFinalReview).not.toHaveBeenCalled();
     expect(github.markPullRequestReadyForReview).not.toHaveBeenCalled();
@@ -865,7 +857,7 @@ describe("Krutrimbox", () => {
       templates: fixtureTemplates
     });
 
-    await factory.runBatch();
+    await factory.runBatch("codex");
 
     expect(github.getAttachedSubIssues).toHaveBeenCalledWith(1);
     expect(github.getAttachedSubIssues).toHaveBeenCalledWith(2);
@@ -937,7 +929,7 @@ describe("Krutrimbox MVP smoke", () => {
       logger: { log: vi.fn() }
     });
 
-    await factory.runExplicit(1);
+    await factory.runExplicit(1, "codex");
 
     expect(lockStore.acquired).toEqual([1]);
     expect(lockStore.released).toEqual([1]);
@@ -984,7 +976,7 @@ describe("Krutrimbox MVP smoke", () => {
     );
     expect(github.markPullRequestReadyForReview).toHaveBeenCalledWith(10);
     expect(github.requestPullRequestReview).toHaveBeenCalledWith(10, "jd-solanki");
-    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: "krutrimbox-issue-1" });
+    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: "krutrimbox-issue-1-codex" });
 
     const reviewOrder = sandbox.runFinalReview.mock.invocationCallOrder[0];
     const readyOrder = github.markPullRequestReadyForReview.mock.invocationCallOrder[0];
@@ -1055,7 +1047,7 @@ describe("Krutrimbox MVP smoke", () => {
       logger: { log: vi.fn() }
     });
 
-    await factory.runBatch();
+    await factory.runBatch("codex");
 
     expect(github.listReadyTargetIssues).toHaveBeenCalledWith("jd-solanki");
     expect(lockStore.acquired).toEqual([3, 5, 9]);
@@ -1070,7 +1062,7 @@ describe("Krutrimbox MVP smoke", () => {
       expect.stringContaining("krutrimbox is paused for Target Issue #3.")
     );
     expect(sandbox.commitAndPush).toHaveBeenCalledWith({
-      sandboxName: "krutrimbox-issue-5",
+      sandboxName: "krutrimbox-issue-5-codex",
       branchName: "krutrimbox/issue-5",
       issueNumber: 50
     });
@@ -1093,7 +1085,7 @@ describe("FactoryRun", () => {
     sandbox: FakeSandboxRunner,
     logger: Pick<Console, "log"> = silentLogger()
   ) {
-    return { github, sandbox, templates: fixtureTemplates, logger };
+    return { github, sandbox, agent: resolveCodingAgent("codex"), templates: fixtureTemplates, logger };
   }
 
   test("process() returns \"paused\" at the first HITL Issue without touching the sandbox", async () => {
@@ -1169,7 +1161,7 @@ describe("FactoryRun", () => {
     const run = new FactoryRun(runDependencies(github, sandbox), targetIssue());
 
     await expect(run.process()).resolves.toBe("completed");
-    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: "krutrimbox-issue-1" });
+    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: "krutrimbox-issue-1-codex" });
   });
 
   test("exposes the deterministic Target Issue branch and sandbox as run invariants", () => {
@@ -1180,7 +1172,7 @@ describe("FactoryRun", () => {
     );
 
     expect(run.branchName).toBe("krutrimbox/issue-7");
-    expect(run.sandboxName).toBe("krutrimbox-issue-7");
+    expect(run.sandboxName).toBe("krutrimbox-issue-7-codex");
   });
 });
 
@@ -1196,7 +1188,7 @@ describe("TargetIssuePullRequest", () => {
       { log: vi.fn() },
       targetIssue(),
       "krutrimbox/issue-1",
-      "krutrimbox-issue-1"
+      "krutrimbox-issue-1-codex"
     );
   }
 
@@ -1529,9 +1521,10 @@ function implementationIssue({
   };
 }
 
-test("deterministic Target Issue branch and sandbox names stay stable", () => {
+test("the Target Issue branch is agent-blind while the sandbox is scoped per Agent Backend", () => {
   expect(deterministicTargetIssueBranch(42)).toBe("krutrimbox/issue-42");
-  expect(deterministicTargetIssueSandbox(42)).toBe("krutrimbox-issue-42");
+  expect(deterministicTargetIssueSandbox(42, "codex")).toBe("krutrimbox-issue-42-codex");
+  expect(deterministicTargetIssueSandbox(42, "claude")).toBe("krutrimbox-issue-42-claude");
 });
 
 test("file locks use the deterministic Target Issue slug", async () => {
@@ -1603,7 +1596,7 @@ describe("run logging end-to-end", () => {
         openRunLog: createFileRunLogFactory(workdir, { log: () => undefined })
       });
 
-      await factory.runExplicit(1);
+      await factory.runExplicit(1, "codex");
 
       const logsDir = join(workdir, ".krutrimbox", "logs");
       const files = await readdir(logsDir);

@@ -4,6 +4,7 @@
 // template classes behind their injection seams (the Pick<Class, ...> types each
 // module exports).
 export * from "./constants";
+export * from "./coding-agent";
 export * from "./sequence";
 export * from "./done-set";
 export * from "./format";

@@ -1,3 +1,5 @@
-# Reuse one Target Issue sandbox per Target Issue
+# Reuse one Target Issue sandbox per Target Issue per Agent Backend
 
-krutrimbox reuses one Target Issue Sandbox across the AFK Issues for a Target Issue, while starting a fresh non-resumed Codex session for each AFK Issue. This keeps the Codex context window fresh per issue while preserving dependency caches, branch checkout state, and cumulative code changes inside one sandbox that can be cleaned up deterministically when the Target Issue completes.
+krutrimbox reuses one Target Issue Sandbox across the AFK Issues for a Target Issue, while starting a fresh non-resumed Sandboxed Agent session for each AFK Issue. This keeps the agent's context window fresh per issue while preserving dependency caches, branch checkout state, and cumulative code changes inside one sandbox that can be cleaned up deterministically when the Target Issue completes.
+
+Because the Agent Backend is selected per Factory Run (see ADR-0016) and each agent has its own template image and CLI, the deterministic sandbox name is keyed on (Target Issue, Agent Backend) — `krutrimbox-issue-<n>-<agent>` — not on the Target Issue alone. This preserves intra-run reuse, prevents running one agent's CLI inside another agent's image, and avoids an agent-blind `git add -A` merging a different agent's uncommitted work. The Target Issue Branch stays agent-blind (`krutrimbox/issue-<n>`), so the Done Set and HITL resume are unaffected when the agent changes between runs.

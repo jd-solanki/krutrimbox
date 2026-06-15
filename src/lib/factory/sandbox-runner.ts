@@ -1,5 +1,5 @@
 import type { CommandRunner } from "../github";
-import { SANDBOX_CODEX_EXEC_FLAGS } from "./constants";
+import type { CodingAgent } from "./coding-agent";
 
 export interface SandboxInput {
   sandboxName: string;
@@ -28,13 +28,15 @@ interface SandboxExecOptions {
 }
 
 // Drives one Target Issue Sandbox through `sbx`: create/reuse, branch checkout,
-// the inner Codex AFK and final-review runs, commit/push, and teardown. All
-// sandbox state lives behind these methods so Factory Runs never shell out
-// directly.
+// the inner AFK and final-review runs, commit/push, and teardown. All sandbox
+// state lives behind these methods so Factory Runs never shell out directly. The
+// Agent Backend supplies the only agent-specific bits — the `sbx create` agent
+// name and the non-interactive exec command — so this class is agent-agnostic.
 export class CommandSandboxRunner {
   public constructor(
     private readonly runner: CommandRunner,
     private readonly workspacePath: string,
+    private readonly agent: CodingAgent,
     private readonly templateImage: string
   ) {}
 
@@ -49,7 +51,7 @@ export class CommandSandboxRunner {
         this.templateImage,
         "--name",
         input.sandboxName,
-        "codex",
+        this.agent.sbxAgentName,
         this.workspacePath
       ]);
     }
@@ -90,11 +92,15 @@ export class CommandSandboxRunner {
   }
 
   public async runAfkIssue(input: SandboxAfkInput): Promise<void> {
-    await this.exec(input.sandboxName, this.codexExecCommand(input.prompt), { output: input.output });
+    await this.exec(input.sandboxName, this.agent.buildExecCommand(input.prompt), {
+      output: input.output
+    });
   }
 
   public async runFinalReview(input: SandboxFinalReviewInput): Promise<string> {
-    return this.exec(input.sandboxName, this.codexExecCommand(input.prompt), { output: input.output });
+    return this.exec(input.sandboxName, this.agent.buildExecCommand(input.prompt), {
+      output: input.output
+    });
   }
 
   public async removeSandbox(input: SandboxInput): Promise<void> {
@@ -123,10 +129,6 @@ export class CommandSandboxRunner {
     args.push(sandboxName, "--", ...command);
 
     return this.runner("sbx", args, { output: options.output });
-  }
-
-  private codexExecCommand(prompt: string): string[] {
-    return ["codex", "exec", ...SANDBOX_CODEX_EXEC_FLAGS, prompt];
   }
 }
 

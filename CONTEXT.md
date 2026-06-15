@@ -9,8 +9,12 @@ A GitHub-driven orchestrator that finds agent-ready Target Issues, implements th
 _Avoid_: autonomous krutrimbox, factory, coding agent
 
 **Sandboxed Agent**:
-The fresh Codex session delegated to implement one AFK Issue inside the Target Issue Sandbox. It changes code and reports completion, but does not own GitHub issue state.
-_Avoid_: worker, implementer, inner agent
+The fresh coding-agent session — provided by the selected Agent Backend (Codex or Claude Code) — delegated to implement one AFK Issue inside the Target Issue Sandbox. It changes code and reports completion, but does not own GitHub issue state.
+_Avoid_: worker, implementer, inner agent, Codex session
+
+**Agent Backend**:
+The swappable coding agent that backs a Factory Run, selected per run by the required `--agent` flag (`codex` or `claude`). An Agent Backend encapsulates the three things that differ between agents: the Docker Sandboxes agent name passed to `sbx create`, the non-interactive exec command built from a Sandboxed Agent prompt, and the default krutrimbox Sandbox Template. It does not own GitHub state or git operations.
+_Avoid_: agent type, model, provider, Sandboxed Agent
 
 **Read-Only GitHub Access**:
 Permission for a Sandboxed Agent to inspect GitHub state with non-mutating GitHub CLI commands while leaving issue, pull request, and label mutations to krutrimbox.
@@ -121,11 +125,11 @@ The condition where a sandboxed agent session exits successfully after implement
 _Avoid_: agent done, run passed, implementation complete
 
 **Target Issue Sandbox**:
-The Docker sandbox used by krutrimbox while delivering one Target Issue. It may be reused across AFK Issues for code and dependency continuity, while Codex sessions inside it remain fresh per issue.
+The Docker sandbox used by krutrimbox while delivering one Target Issue. It may be reused across AFK Issues for code and dependency continuity, while Sandboxed Agent sessions inside it remain fresh per issue.
 _Avoid_: container, VM, issue sandbox
 
 **krutrimbox Sandbox Template**:
-The custom Docker Sandboxes template image used for Target Issue Sandboxes. It extends Docker's Codex sandbox template with repository-required tools, currently `pnpm`, so fresh Sandboxed Agent sessions have the same package-manager surface krutrimbox expects.
+The custom Docker Sandboxes template image used for Target Issue Sandboxes, one per Agent Backend. Each is built from a single parameterized `Dockerfile.sandbox` that extends the Agent Backend's stock Docker template (`docker/sandbox-templates:codex` or `docker/sandbox-templates:claude`) with repository-required tools, currently `pnpm`, so fresh Sandboxed Agent sessions have the same package-manager surface krutrimbox expects.
 _Avoid_: Dockerfile, base image, custom container
 
 **Sandbox Template Store**:
@@ -151,6 +155,7 @@ _Avoid_: comment tag, marker, dedupe token
 - A **Target Issue** has exactly one **Target Issue Branch**, one **Target Issue Pull Request**, one **Target Issue Sandbox**, and one **Target Issue Lock**.
 - An **Implementation Issue** is in the **Done Set** once it has an **Issue Reference Footer** commit on the **Target Issue Branch**; the **Target Issue Pull Request** auto-closes every Done Set issue (and the Target Issue) on merge.
 - A **Factory Run** processes a **Target Issue**, pauses at the first **HITL Issue**, and routes the **Target Issue Pull Request** to the **Final Reviewer** once every **Implementation Issue** is Resolved.
+- A **Factory Run** runs against exactly one **Agent Backend**, chosen by the required `--agent` flag; the Agent Backend supplies the **Sandboxed Agent** session and the **krutrimbox Sandbox Template** for that run's **Target Issue Sandbox**.
 
 ## Flagged ambiguities
 
