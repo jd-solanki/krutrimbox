@@ -10,9 +10,9 @@ export type PrdLock = {
 export class FilePrdLockStore {
   public constructor(private readonly cwd: string) {}
 
-  public async acquire(prdNumber: number): Promise<PrdLock | null> {
+  public async acquire(targetIssueNumber: number): Promise<PrdLock | null> {
     const locksDir = path.join(this.cwd, ".krutrimbox", "locks");
-    const lockDir = path.join(locksDir, `prd-${prdNumber}.lock`);
+    const lockDir = path.join(locksDir, `issue-${targetIssueNumber}.lock`);
 
     await mkdir(locksDir, { recursive: true });
 

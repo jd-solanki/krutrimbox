@@ -4,8 +4,8 @@ import { PrdPullRequest } from "./prd-pull-request";
 import type { SandboxRunner } from "./sandbox-runner";
 import {
   buildImplementationSequence,
-  deterministicPrdBranch,
-  deterministicPrdSandbox,
+  deterministicTargetIssueBranch,
+  deterministicTargetIssueSandbox,
   parseBlockingIssueNumbers,
   type ImplementationIssue,
   type ImplementationSequence,
@@ -61,8 +61,8 @@ export class FactoryRun {
     this.templates = dependencies.templates;
     this.logger = dependencies.logger;
     this.output = dependencies.output;
-    this.branchName = deterministicPrdBranch(prd.number);
-    this.sandboxName = deterministicPrdSandbox(prd.number);
+    this.branchName = deterministicTargetIssueBranch(prd.number);
+    this.sandboxName = deterministicTargetIssueSandbox(prd.number);
     this.prdPullRequest = new PrdPullRequest(
       this.github,
       this.templates,

@@ -3,8 +3,8 @@ import {
   AFK_LABEL,
   HITL_LABEL,
   IMPLEMENTATION_LABEL,
-  PRD_BRANCH_PREFIX,
-  PRD_SANDBOX_PREFIX
+  TARGET_ISSUE_BRANCH_PREFIX,
+  TARGET_ISSUE_SANDBOX_PREFIX
 } from "./constants";
 
 export interface ImplementationIssue {
@@ -79,12 +79,12 @@ export function buildImplementationSequence(
   };
 }
 
-export function deterministicPrdBranch(prdNumber: number): string {
-  return `${PRD_BRANCH_PREFIX}${prdNumber}`;
+export function deterministicTargetIssueBranch(targetIssueNumber: number): string {
+  return `${TARGET_ISSUE_BRANCH_PREFIX}${targetIssueNumber}`;
 }
 
-export function deterministicPrdSandbox(prdNumber: number): string {
-  return `${PRD_SANDBOX_PREFIX}${prdNumber}`;
+export function deterministicTargetIssueSandbox(targetIssueNumber: number): string {
+  return `${TARGET_ISSUE_SANDBOX_PREFIX}${targetIssueNumber}`;
 }
 
 export function parseBlockingIssueNumbers(body: string): number[] {

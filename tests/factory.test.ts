@@ -4,9 +4,10 @@ import { join } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   buildImplementationSequence,
+  FilePrdLockStore,
   Krutrimbox,
-  deterministicPrdBranch,
-  deterministicPrdSandbox,
+  deterministicTargetIssueBranch,
+  deterministicTargetIssueSandbox,
   FactoryRun,
   parseBlockingIssueNumbers,
   PrdPullRequest,
@@ -112,7 +113,7 @@ describe("Krutrimbox", () => {
     vi.restoreAllMocks();
   });
 
-  test("explicit runs skip PRDs not authored by the factory owner", async () => {
+  test("explicit runs skip Target Issues not authored by the factory owner", async () => {
     const github = new FakeGitHubClient({
       prds: [prdIssue({ author: "someone-else" })]
     });
@@ -130,7 +131,7 @@ describe("Krutrimbox", () => {
     expect(github.getIssue).toHaveBeenCalledWith(1);
     expect(github.getAttachedSubIssues).not.toHaveBeenCalled();
     expect(log).toHaveBeenCalledWith(
-      "krutrimbox: skipping PRD #1; author someone-else is not jd-solanki."
+      "krutrimbox: skipping Target Issue #1; author someone-else is not jd-solanki."
     );
   });
 
@@ -289,10 +290,10 @@ describe("Krutrimbox", () => {
       "runFinalReview",
       "removeSandbox"
     ]);
-    expect(sandbox.calls[0].input).toEqual({ sandboxName: "krutrimbox-prd-1" });
+    expect(sandbox.calls[0].input).toEqual({ sandboxName: "krutrimbox-issue-1" });
     expect(sandbox.calls[1].input).toEqual({
-      sandboxName: "krutrimbox-prd-1",
-      branchName: "krutrimbox/prd-1"
+      sandboxName: "krutrimbox-issue-1",
+      branchName: "krutrimbox/issue-1"
     });
     expect(String(sandbox.calls[2].input.prompt)).toContain("Full parent PRD body");
     expect(String(sandbox.calls[2].input.prompt)).toContain("Current issue body");
@@ -304,24 +305,24 @@ describe("Krutrimbox", () => {
       "Do not create commits or push branches."
     );
     expect(github.createDraftPullRequest).toHaveBeenCalledWith({
-      title: "krutrimbox PRD #1: PRD: krutrimbox MVP",
+      title: "krutrimbox #1: PRD: krutrimbox MVP",
       body: expect.stringContaining("- [x] #4 - Factory loop"),
-      head: "krutrimbox/prd-1",
+      head: "krutrimbox/issue-1",
       base: "main",
-      labels: ["PRD"]
+      labels: ["krutrimbox"]
     });
     expect(github.pullRequestBodies.at(-1)).toContain("- [x] #3 - Bootstrap");
     expect(github.pullRequestBodies.at(-1)).toContain("- [x] #4 - Factory loop");
     expect(github.pullRequestBodies.at(-1)).toContain("- [x] #5 - Final review");
-    expect(github.setPullRequestLabels).toHaveBeenCalledWith(10, ["PRD"]);
+    expect(github.setPullRequestLabels).toHaveBeenCalledWith(10, ["krutrimbox"]);
     expect(github.closeIssue).toHaveBeenCalledWith(4);
     expect(github.closeIssue).toHaveBeenCalledWith(5);
   });
 
-  test("reuses an existing PRD Pull Request by deterministic branch", async () => {
+  test("reuses an existing Target Issue Pull Request by deterministic branch", async () => {
     const github = new FakeGitHubClient({
       prds: [prdIssue()],
-      pullRequests: [{ number: 12, labels: [{ name: "PRD" }, { name: "extra" }] }],
+      pullRequests: [{ number: 12, isDraft: true, labels: [{ name: "krutrimbox" }, { name: "extra" }] }],
       subIssuesByPrd: new Map([
         [
           1,
@@ -346,15 +347,15 @@ describe("Krutrimbox", () => {
     expect(github.createDraftPullRequest).not.toHaveBeenCalled();
     expect(github.updatePullRequestBody).toHaveBeenCalledWith(
       12,
-      expect.stringContaining("Branch: `krutrimbox/prd-1`")
+      expect.stringContaining("Branch: `krutrimbox/issue-1`")
     );
-    expect(github.setPullRequestLabels).toHaveBeenCalledWith(12, ["PRD"]);
+    expect(github.setPullRequestLabels).toHaveBeenCalledWith(12, ["krutrimbox"]);
   });
 
   test("runs final review when all Implementation Issues are already resolved at run start", async () => {
     const github = new FakeGitHubClient({
       prds: [prdIssue({ body: "Full PRD body" })],
-      pullRequests: [{ number: 10, labels: [{ name: "PRD" }] }],
+      pullRequests: [{ number: 10, isDraft: true, labels: [{ name: "krutrimbox" }] }],
       subIssuesByPrd: new Map([
         [
           1,
@@ -386,13 +387,13 @@ describe("Krutrimbox", () => {
     expect(String(reviewCall?.input.prompt)).toContain("- #4 - Factory loop (CLOSED)");
     expect(github.markPullRequestReadyForReview).toHaveBeenCalledWith(10);
     expect(github.requestPullRequestReview).toHaveBeenCalledWith(10, "jd-solanki");
-    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: "krutrimbox-prd-1" });
+    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: "krutrimbox-issue-1" });
   });
 
   test("updates an existing final review comment idempotently", async () => {
     const github = new FakeGitHubClient({
       prds: [prdIssue()],
-      pullRequests: [{ number: 10, labels: [{ name: "PRD" }] }],
+      pullRequests: [{ number: 10, isDraft: true, labels: [{ name: "krutrimbox" }] }],
       subIssuesByPrd: new Map([
         [1, [implementationIssue({ number: 3, title: "Bootstrap", state: "CLOSED", labels: ["PRD-sub-issue"] })]]
       ]),
@@ -431,7 +432,7 @@ describe("Krutrimbox", () => {
   test("requests review from PRD Author when they differ from PR Author", async () => {
     const github = new FakeGitHubClient({
       prds: [prdIssue({ author: "jd-solanki" })],
-      pullRequests: [{ number: 10, labels: [{ name: "PRD" }] }],
+      pullRequests: [{ number: 10, isDraft: true, labels: [{ name: "krutrimbox" }] }],
       subIssuesByPrd: new Map([
         [1, [implementationIssue({ number: 3, state: "CLOSED", labels: ["PRD-sub-issue"] })]]
       ])
@@ -456,7 +457,7 @@ describe("Krutrimbox", () => {
   test("tags PRD Author in a comment instead of requesting self-review when authors match", async () => {
     const github = new FakeGitHubClient({
       prds: [prdIssue({ author: "jd-solanki" })],
-      pullRequests: [{ number: 10, labels: [{ name: "PRD" }] }],
+      pullRequests: [{ number: 10, isDraft: true, labels: [{ name: "krutrimbox" }] }],
       subIssuesByPrd: new Map([
         [1, [implementationIssue({ number: 3, state: "CLOSED", labels: ["PRD-sub-issue"] })]]
       ])
@@ -481,7 +482,7 @@ describe("Krutrimbox", () => {
   test("removes the PRD Sandbox after final review routing succeeds", async () => {
     const github = new FakeGitHubClient({
       prds: [prdIssue()],
-      pullRequests: [{ number: 10, labels: [{ name: "PRD" }] }],
+      pullRequests: [{ number: 10, isDraft: true, labels: [{ name: "krutrimbox" }] }],
       subIssuesByPrd: new Map([
         [1, [implementationIssue({ number: 3, state: "CLOSED", labels: ["PRD-sub-issue"] })]]
       ])
@@ -496,13 +497,13 @@ describe("Krutrimbox", () => {
 
     await factory.runExplicit(1);
 
-    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: "krutrimbox-prd-1" });
+    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: "krutrimbox-issue-1" });
   });
 
-  test("never merges the PRD Pull Request during final review routing", async () => {
+  test("never merges the Target Issue Pull Request during final review routing", async () => {
     const github = new FakeGitHubClient({
       prds: [prdIssue()],
-      pullRequests: [{ number: 10, labels: [{ name: "PRD" }] }],
+      pullRequests: [{ number: 10, isDraft: true, labels: [{ name: "krutrimbox" }] }],
       subIssuesByPrd: new Map([
         [1, [implementationIssue({ number: 3, state: "CLOSED", labels: ["PRD-sub-issue"] })]]
       ])
@@ -520,7 +521,7 @@ describe("Krutrimbox", () => {
     expect("mergePullRequest" in github).toBe(false);
   });
 
-  test("skips final review when no PRD Pull Request exists", async () => {
+  test("skips final review when no Target Issue Pull Request exists", async () => {
     const github = new FakeGitHubClient({
       prds: [prdIssue()],
       subIssuesByPrd: new Map([
@@ -667,8 +668,8 @@ describe("Krutrimbox MVP smoke", () => {
     expect(sandbox.runAfkIssue).toHaveBeenCalledTimes(2);
     expect(sandbox.calls.filter((call) => call.name.toLowerCase().includes("resume"))).toEqual([]);
     expect(sandbox.runAfkIssue.mock.calls.map(([input]) => input.branchName)).toEqual([
-      "krutrimbox/prd-1",
-      "krutrimbox/prd-1"
+      "krutrimbox/issue-1",
+      "krutrimbox/issue-1"
     ]);
     expect(String(sandbox.runAfkIssue.mock.calls[0]?.[0].prompt)).toContain("Full parent PRD smoke fixture");
     expect(String(sandbox.runAfkIssue.mock.calls[0]?.[0].prompt)).toContain("- #6 - Final review (afk, blocked by #4)");
@@ -677,16 +678,16 @@ describe("Krutrimbox MVP smoke", () => {
     expect(sandbox.commitAndPush.mock.calls.map(([input]) => input.issueNumber)).toEqual([4, 6]);
     expect(github.closeIssue.mock.calls.map(([issueNumber]) => issueNumber)).toEqual([4, 6]);
     expect(github.createDraftPullRequest).toHaveBeenCalledWith({
-      title: "krutrimbox PRD #1: PRD: krutrimbox MVP",
+      title: "krutrimbox #1: PRD: krutrimbox MVP",
       body: expect.stringContaining("Closes #1"),
-      head: "krutrimbox/prd-1",
+      head: "krutrimbox/issue-1",
       base: "main",
-      labels: ["PRD"]
+      labels: ["krutrimbox"]
     });
     expect(github.pullRequestBodies.at(-1)).toContain("- [x] #2 - Bootstrap CLI");
     expect(github.pullRequestBodies.at(-1)).toContain("- [x] #4 - Factory loop");
     expect(github.pullRequestBodies.at(-1)).toContain("- [x] #6 - Final review");
-    expect(github.setPullRequestLabels).toHaveBeenLastCalledWith(10, ["PRD"]);
+    expect(github.setPullRequestLabels).toHaveBeenLastCalledWith(10, ["krutrimbox"]);
     expect(String(sandbox.runFinalReview.mock.calls[0]?.[0].prompt)).toContain("--- a/foo");
     expect(github.updateIssueComment).toHaveBeenCalledWith(
       "existing-final-review",
@@ -694,7 +695,7 @@ describe("Krutrimbox MVP smoke", () => {
     );
     expect(github.markPullRequestReadyForReview).toHaveBeenCalledWith(10);
     expect(github.requestPullRequestReview).toHaveBeenCalledWith(10, "jd-solanki");
-    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: "krutrimbox-prd-1" });
+    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: "krutrimbox-issue-1" });
 
     const firstCommitOrder = sandbox.commitAndPush.mock.invocationCallOrder[0];
     const firstCloseOrder = github.closeIssue.mock.invocationCallOrder[0];
@@ -704,7 +705,7 @@ describe("Krutrimbox MVP smoke", () => {
     expect(reviewOrder).toBeLessThan(readyOrder);
   });
 
-  test("batch run orders discovered PRDs and continues after PRD-local stops", async () => {
+  test("batch run orders discovered Target Issues and continues after Target-Issue-local stops", async () => {
     const pausedPrd = prdIssue({ number: 3 });
     const completedPrd = prdIssue({ number: 5 });
     const lockedPrd = prdIssue({ number: 9 });
@@ -770,7 +771,7 @@ describe("Krutrimbox MVP smoke", () => {
 
     await factory.runBatch();
 
-    expect(github.listReadyPrds).toHaveBeenCalledWith("jd-solanki");
+    expect(github.listReadyTargetIssues).toHaveBeenCalledWith("jd-solanki");
     expect(lockStore.acquired).toEqual([3, 5, 9]);
     expect(lockStore.released).toEqual([3, 5]);
     expect(github.getAttachedSubIssues.mock.calls.map(([prdNumber]) => prdNumber)).toEqual([3, 5]);
@@ -783,8 +784,8 @@ describe("Krutrimbox MVP smoke", () => {
       expect.stringContaining("krutrimbox is paused for PRD #3.")
     );
     expect(sandbox.commitAndPush).toHaveBeenCalledWith({
-      sandboxName: "krutrimbox-prd-5",
-      branchName: "krutrimbox/prd-5",
+      sandboxName: "krutrimbox-issue-5",
+      branchName: "krutrimbox/issue-5",
       issueNumber: 50
     });
     expect(github.closeIssue).toHaveBeenCalledWith(50);
@@ -872,7 +873,7 @@ describe("FactoryRun", () => {
   test("process() returns \"completed\" when every Implementation Issue is already resolved", async () => {
     const github = new FakeGitHubClient({
       prds: [prdIssue()],
-      pullRequests: [{ number: 10, labels: [{ name: "PRD" }] }],
+      pullRequests: [{ number: 10, isDraft: true, labels: [{ name: "krutrimbox" }] }],
       subIssuesByPrd: new Map([
         [1, [implementationIssue({ number: 3, state: "CLOSED", labels: ["PRD-sub-issue"] })]]
       ])
@@ -881,18 +882,18 @@ describe("FactoryRun", () => {
     const run = new FactoryRun(runDependencies(github, sandbox), prdIssue());
 
     await expect(run.process()).resolves.toBe("completed");
-    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: "krutrimbox-prd-1" });
+    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: "krutrimbox-issue-1" });
   });
 
-  test("exposes the deterministic PRD Branch and PRD Sandbox as run invariants", () => {
+  test("exposes the deterministic Target Issue branch and sandbox as run invariants", () => {
     const github = new FakeGitHubClient({ prds: [prdIssue({ number: 7 })] });
     const run = new FactoryRun(
       runDependencies(github, new FakeSandboxRunner()),
       prdIssue({ number: 7 })
     );
 
-    expect(run.branchName).toBe("krutrimbox/prd-7");
-    expect(run.sandboxName).toBe("krutrimbox-prd-7");
+    expect(run.branchName).toBe("krutrimbox/issue-7");
+    expect(run.sandboxName).toBe("krutrimbox-issue-7");
   });
 });
 
@@ -907,30 +908,30 @@ describe("PrdPullRequest", () => {
       fixtureTemplates,
       { log: vi.fn() },
       prdIssue(),
-      "krutrimbox/prd-1",
-      "krutrimbox-prd-1"
+      "krutrimbox/issue-1",
+      "krutrimbox-issue-1"
     );
   }
 
-  test("ensureReflectsSequence creates a draft PRD Pull Request and applies only the PRD label", async () => {
+  test("ensureReflectsSequence creates a draft Target Issue Pull Request and applies only the krutrimbox label", async () => {
     const github = new FakeGitHubClient({ prds: [prdIssue()] });
 
     await prModule(github).ensureReflectsSequence(sequence, new Set([3]));
 
     expect(github.createDraftPullRequest).toHaveBeenCalledWith({
-      title: "krutrimbox PRD #1: PRD: krutrimbox MVP",
+      title: "krutrimbox #1: PRD: krutrimbox MVP",
       body: expect.stringContaining("- [x] #3 - Bootstrap"),
-      head: "krutrimbox/prd-1",
+      head: "krutrimbox/issue-1",
       base: "main",
-      labels: ["PRD"]
+      labels: ["krutrimbox"]
     });
-    expect(github.setPullRequestLabels).toHaveBeenCalledWith(10, ["PRD"]);
+    expect(github.setPullRequestLabels).toHaveBeenCalledWith(10, ["krutrimbox"]);
   });
 
-  test("ensureReflectsSequence updates an existing PRD Pull Request and re-applies only the PRD label", async () => {
+  test("ensureReflectsSequence updates an existing Target Issue Pull Request and re-applies only the krutrimbox label", async () => {
     const github = new FakeGitHubClient({
       prds: [prdIssue()],
-      pullRequests: [{ number: 12, labels: [{ name: "PRD" }, { name: "extra" }] }]
+      pullRequests: [{ number: 12, isDraft: true, labels: [{ name: "krutrimbox" }, { name: "extra" }] }]
     });
 
     await prModule(github).ensureReflectsSequence(sequence, new Set([3]));
@@ -940,7 +941,7 @@ describe("PrdPullRequest", () => {
       12,
       expect.stringContaining("- [x] #3 - Bootstrap")
     );
-    expect(github.setPullRequestLabels).toHaveBeenCalledWith(12, ["PRD"]);
+    expect(github.setPullRequestLabels).toHaveBeenCalledWith(12, ["krutrimbox"]);
   });
 
   test("routeForReview requests review from the PRD Author when distinct from the PR Author", async () => {
@@ -982,7 +983,7 @@ class FakeGitHubClient implements GitHubClient {
   public readonly getIssueUrl = vi.fn(async (issueNumber: number) => {
     return `https://github.com/jd-solanki/krutrimbox/issues/${issueNumber}`;
   });
-  public readonly listReadyPrds = vi.fn(async () => this.prds);
+  public readonly listReadyTargetIssues = vi.fn(async () => this.prds);
   public readonly getAttachedSubIssues = vi.fn(async (prdNumber: number) => {
     return this.subIssuesByPrd.get(prdNumber) ?? [];
   });
@@ -1023,7 +1024,7 @@ class FakeGitHubClient implements GitHubClient {
   public readonly findPullRequestByHead = vi.fn(async () => this.pullRequests[0] ?? null);
   public readonly createDraftPullRequest = vi.fn(async (input: CreatePullRequestInput) => {
     this.pullRequestBodies.push(input.body);
-    const pullRequest = { number: 10, labels: input.labels.map((name) => ({ name })) };
+    const pullRequest = { number: 10, isDraft: true, labels: input.labels.map((name) => ({ name })) };
     this.pullRequests.push(pullRequest);
     return pullRequest;
   });
@@ -1183,7 +1184,7 @@ function prdIssue({
     body,
     state: "OPEN",
     author: { login: author },
-    labels: [{ name: "PRD" }, { name: "ready-for-agent" }],
+    labels: [{ name: "ready-for-agent" }],
     parentNumber: null
   };
 }
@@ -1234,9 +1235,25 @@ function implementationIssue({
   };
 }
 
-test("deterministic PRD branch and sandbox names stay stable", () => {
-  expect(deterministicPrdBranch(42)).toBe("krutrimbox/prd-42");
-  expect(deterministicPrdSandbox(42)).toBe("krutrimbox-prd-42");
+test("deterministic Target Issue branch and sandbox names stay stable", () => {
+  expect(deterministicTargetIssueBranch(42)).toBe("krutrimbox/issue-42");
+  expect(deterministicTargetIssueSandbox(42)).toBe("krutrimbox-issue-42");
+});
+
+test("file locks use the deterministic Target Issue slug", async () => {
+  const workdir = await mkdtemp(join(tmpdir(), "krutrimbox-locks-"));
+  try {
+    const store = new FilePrdLockStore(workdir);
+    const lock = await store.acquire(42);
+
+    await expect(readdir(join(workdir, ".krutrimbox", "locks"))).resolves.toEqual([
+      "issue-42.lock"
+    ]);
+
+    await lock?.release();
+  } finally {
+    await rm(workdir, { recursive: true, force: true });
+  }
 });
 
 // End-to-end check that a real Factory Run lands both its status lines and the
@@ -1297,7 +1314,7 @@ describe("run logging end-to-end", () => {
       const logsDir = join(workdir, ".krutrimbox", "logs");
       const files = await readdir(logsDir);
       expect(files).toHaveLength(1);
-      expect(files[0]).toMatch(/^krutrimbox-prd-1--[\d_-]+\.log$/);
+      expect(files[0]).toMatch(/^krutrimbox-issue-1--[\d_-]+\.log$/);
 
       const content = await readFile(join(logsDir, files[0]), "utf8");
       expect(content).toContain("[codex] implementing the issue");

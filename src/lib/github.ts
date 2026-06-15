@@ -2,9 +2,9 @@ import { spawn } from "node:child_process";
 
 export const REQUIRED_LABELS = [
   {
-    name: "PRD",
-    color: "FEF2C0",
-    description: "This issue has a PRD attached"
+    name: "krutrimbox",
+    color: "5319E7",
+    description: "Pull requests authored by krutrimbox"
   },
   {
     name: "ready-for-agent",
@@ -39,7 +39,7 @@ export interface GitHubClient {
   ensureRequiredLabels(): Promise<void>;
   getIssue(issueNumber: number): Promise<GitHubIssue>;
   getIssueUrl(issueNumber: number): Promise<string>;
-  listReadyPrds(author: string): Promise<GitHubIssue[]>;
+  listReadyTargetIssues(author: string): Promise<GitHubIssue[]>;
   getAttachedSubIssues(prdNumber: number): Promise<GitHubIssue[]>;
   listIssueComments(issueNumber: number): Promise<GitHubComment[]>;
   createIssueComment(issueNumber: number, body: string): Promise<GitHubComment>;
@@ -76,6 +76,7 @@ export interface GitHubComment {
 
 export interface GitHubPullRequest {
   number: number;
+  isDraft: boolean;
   labels: Array<{
     name: string;
   }>;
@@ -121,7 +122,7 @@ export function createGitHubCliClient(
         "--limit",
         "10",
         "--json",
-        "number,labels"
+        "number,isDraft,labels"
       ])
     );
 
@@ -176,31 +177,23 @@ export function createGitHubCliClient(
       return `https://github.com/${formatRepository(repo)}/issues/${issueNumber}`;
     },
 
-    async listReadyPrds(author: string): Promise<GitHubIssue[]> {
+    async listReadyTargetIssues(author: string): Promise<GitHubIssue[]> {
       const repo = await getRepository();
-      const issues = parseJson<RawGhIssue[]>(
+      const searchQuery = `repo:${formatRepository(repo)} is:issue is:open author:${author} label:${AFK_LABEL_NAME}`;
+      const response = parseJson<TargetIssuesGraphqlResponse>(
         await runGh([
-          "issue",
-          "list",
-          "--repo",
-          formatRepository(repo),
-          "--state",
-          "open",
-          "--author",
-          author,
-          "--label",
-          "PRD",
-          "--label",
-          "ready-for-agent",
-          "--limit",
-          "100",
-          "--json",
-          "number,title,body,state,author,labels"
+          "api",
+          "graphql",
+          "-f",
+          `query=${TARGET_ISSUES_QUERY}`,
+          "-F",
+          `queryString=${searchQuery}`
         ])
       );
 
-      return issues
-        .map(parseIssue)
+      return response.data.search.nodes
+        .map(parseSearchIssue)
+        .filter((issue) => issue.parentNumber === null)
         .sort((left, right) => left.number - right.number);
     },
 
@@ -331,7 +324,7 @@ export function createGitHubCliClient(
     async setPullRequestLabels(pullRequestNumber: number, labels: string[]): Promise<void> {
       const current = parsePullRequest(
         parseJson<RawPullRequest>(
-          await runGh(["pr", "view", String(pullRequestNumber), "--json", "number,labels"])
+          await runGh(["pr", "view", String(pullRequestNumber), "--json", "number,isDraft,labels"])
         )
       );
       const desired = new Set(labels);
@@ -436,9 +429,18 @@ interface RawComment {
 
 interface RawPullRequest {
   number: number;
+  isDraft?: boolean;
   labels: Array<{
     name: string;
   }>;
+}
+
+interface TargetIssuesGraphqlResponse {
+  data: {
+    search: {
+      nodes: RawGraphqlSearchNode[];
+    };
+  };
 }
 
 interface SubIssuesGraphqlResponse {
@@ -470,6 +472,38 @@ interface RawGraphqlIssue {
     number: number;
   } | null;
 }
+
+type RawGraphqlSearchNode = RawGraphqlIssue & {
+  __typename: string;
+};
+
+const AFK_LABEL_NAME = "ready-for-agent";
+
+const TARGET_ISSUES_QUERY = `
+query($queryString: String!) {
+  search(type: ISSUE, query: $queryString, first: 100) {
+    nodes {
+      ... on Issue {
+        __typename
+        number
+        title
+        body
+        state
+        author {
+          login
+        }
+        labels(first: 100) {
+          nodes {
+            name
+          }
+        }
+        parent {
+          number
+        }
+      }
+    }
+  }
+}`;
 
 const SUB_ISSUES_QUERY = `
 query($owner: String!, $repo: String!, $number: Int!) {
@@ -528,9 +562,18 @@ function parseGraphqlIssue(issue: RawGraphqlIssue): GitHubIssue {
   };
 }
 
+function parseSearchIssue(issue: RawGraphqlSearchNode): GitHubIssue {
+  if (issue.__typename !== "Issue") {
+    throw new Error(`Unexpected GitHub search result type: ${issue.__typename}`);
+  }
+
+  return parseGraphqlIssue(issue);
+}
+
 function parsePullRequest(pullRequest: RawPullRequest): GitHubPullRequest {
   return {
     number: pullRequest.number,
+    isDraft: pullRequest.isDraft ?? false,
     labels: pullRequest.labels.map((label) => ({ name: label.name }))
   };
 }

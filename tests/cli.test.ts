@@ -10,17 +10,25 @@ function createTestDispatch(): CliDispatch {
 }
 
 describe("krutrimbox CLI", () => {
-  test("dispatches an Explicit Run with a numeric PRD number", async () => {
+  test("dispatches an Explicit Run with a numeric Target Issue number", async () => {
     const dispatch = createTestDispatch();
     const program = createTestProgram(dispatch);
 
-    await program.parseAsync(["node", "kb", "run", "--prd", "42"]);
+    await program.parseAsync(["node", "kb", "run", "--issue", "42"]);
 
     expect(dispatch.runExplicit).toHaveBeenCalledWith(42);
     expect(dispatch.runBatch).not.toHaveBeenCalled();
   });
 
-  test("dispatches a Batch Run when no PRD number is provided", async () => {
+  test("does not expose the retired --prd option", () => {
+    const program = createTestProgram(createTestDispatch());
+    const runCommand = program.commands.find((command) => command.name() === "run");
+
+    expect(runCommand?.options.map((option) => option.long)).toContain("--issue");
+    expect(runCommand?.options.map((option) => option.long)).not.toContain("--prd");
+  });
+
+  test("dispatches a Batch Run when no Target Issue number is provided", async () => {
     const dispatch = createTestDispatch();
     const program = createTestProgram(dispatch);
 

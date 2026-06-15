@@ -57,7 +57,19 @@ describe("GitHubCliClient", () => {
       new Map([
         [
           commandKey("gh", ["label", "list", "--limit", "200", "--json", "name"]),
-          JSON.stringify([{ name: "PRD" }, { name: "ready-for-agent" }])
+          JSON.stringify([{ name: "ready-for-agent" }])
+        ],
+        [
+          commandKey("gh", [
+            "label",
+            "create",
+            "krutrimbox",
+            "--color",
+            "5319E7",
+            "--description",
+            "Pull requests authored by krutrimbox"
+          ]),
+          ""
         ],
         [
           commandKey("gh", [
@@ -87,6 +99,18 @@ describe("GitHubCliClient", () => {
         args: [
           "label",
           "create",
+          "krutrimbox",
+          "--color",
+          "5319E7",
+          "--description",
+          "Pull requests authored by krutrimbox"
+        ]
+      },
+      {
+        command: "gh",
+        args: [
+          "label",
+          "create",
           "ready-for-human",
           "--color",
           "1D76DB",
@@ -97,7 +121,7 @@ describe("GitHubCliClient", () => {
     ]);
   });
 
-  test("discovers Factory-Owned PRDs through gh issue list fixture data", async () => {
+  test("discovers Factory-Owned Target Issues with no parent through GraphQL parent links", async () => {
     const runner = fixtureRunner(
       new Map([
         [
@@ -105,61 +129,38 @@ describe("GitHubCliClient", () => {
           JSON.stringify({ owner: { login: "jd-solanki" }, name: "krutrimbox" })
         ],
         [
-          commandKey("gh", [
-            "issue",
-            "list",
-            "--repo",
-            "jd-solanki/krutrimbox",
-            "--state",
-            "open",
-            "--author",
-            "jd-solanki",
-            "--label",
-            "PRD",
-            "--label",
-            "ready-for-agent",
-            "--limit",
-            "100",
-            "--json",
-            "number,title,body,state,author,labels"
-          ]),
-          JSON.stringify([
-            issueFixture({ number: 9, title: "PRD B" }),
-            issueFixture({ number: 3, title: "PRD A" })
-          ])
+          "graphql",
+          JSON.stringify({
+            data: {
+              search: {
+                nodes: [
+                  issueFixture({ number: 9, title: "Target B" }),
+                  issueFixture({ number: 7, title: "Child issue", parentNumber: 3 }),
+                  issueFixture({ number: 3, title: "Target A" })
+                ]
+              }
+            }
+          })
         ]
       ])
     );
     const client = createGitHubCliClient(runner);
 
-    const prds = await client.listReadyPrds("jd-solanki");
+    const targetIssues = await client.listReadyTargetIssues("jd-solanki");
 
-    expect(prds.map((issue) => issue.number)).toEqual([3, 9]);
+    expect(targetIssues.map((issue) => issue.number)).toEqual([3, 9]);
     expect(runner.calls[0]).toEqual({
       command: "gh",
       args: ["repo", "view", "--json", "owner,name"]
     });
-    expect(runner.calls[1]).toEqual({
-      command: "gh",
-      args: [
-        "issue",
-        "list",
-        "--repo",
-        "jd-solanki/krutrimbox",
-        "--state",
-        "open",
-        "--author",
-        "jd-solanki",
-        "--label",
-        "PRD",
-        "--label",
-        "ready-for-agent",
-        "--limit",
-        "100",
-        "--json",
-        "number,title,body,state,author,labels"
-      ]
-    });
+    expect(runner.calls[1].args).toEqual([
+      "api",
+      "graphql",
+      "-f",
+      expect.stringMatching(/^query=/),
+      "-F",
+      "queryString=repo:jd-solanki/krutrimbox is:issue is:open author:jd-solanki label:ready-for-agent"
+    ]);
   });
 
   test("fetches attached sub-issues through gh api GraphQL fixture data", async () => {
@@ -321,7 +322,7 @@ describe("GitHubCliClient", () => {
     ]);
   });
 
-  test("creates a draft PRD Pull Request and finds it by deterministic branch", async () => {
+  test("creates a draft Target Issue Pull Request and finds it by deterministic branch", async () => {
     const runner = fixtureRunner(
       new Map([
         [
@@ -330,15 +331,15 @@ describe("GitHubCliClient", () => {
             "create",
             "--draft",
             "--title",
-            "krutrimbox PRD #1: PRD",
+            "krutrimbox #1: PRD",
             "--body",
             "body",
             "--base",
             "main",
             "--head",
-            "krutrimbox/prd-1",
+            "krutrimbox/issue-1",
             "--label",
-            "PRD"
+            "krutrimbox"
           ]),
           "https://github.com/jd-solanki/krutrimbox/pull/8\n"
         ],
@@ -349,13 +350,13 @@ describe("GitHubCliClient", () => {
             "--state",
             "all",
             "--head",
-            "krutrimbox/prd-1",
+            "krutrimbox/issue-1",
             "--limit",
             "10",
             "--json",
-            "number,labels"
+            "number,isDraft,labels"
           ]),
-          JSON.stringify([{ number: 8, labels: [{ name: "PRD" }] }])
+          JSON.stringify([{ number: 8, isDraft: true, labels: [{ name: "krutrimbox" }] }])
         ]
       ])
     );
@@ -363,13 +364,13 @@ describe("GitHubCliClient", () => {
 
     await expect(
       client.createDraftPullRequest({
-        title: "krutrimbox PRD #1: PRD",
+        title: "krutrimbox #1: PRD",
         body: "body",
         base: "main",
-        head: "krutrimbox/prd-1",
-        labels: ["PRD"]
+        head: "krutrimbox/issue-1",
+        labels: ["krutrimbox"]
       })
-    ).resolves.toEqual({ number: 8, labels: [{ name: "PRD" }] });
+    ).resolves.toEqual({ number: 8, isDraft: true, labels: [{ name: "krutrimbox" }] });
 
     expect(runner.calls).toEqual([
       {
@@ -379,15 +380,15 @@ describe("GitHubCliClient", () => {
           "create",
           "--draft",
           "--title",
-          "krutrimbox PRD #1: PRD",
+          "krutrimbox #1: PRD",
           "--body",
           "body",
           "--base",
           "main",
           "--head",
-          "krutrimbox/prd-1",
+          "krutrimbox/issue-1",
           "--label",
-          "PRD"
+          "krutrimbox"
         ]
       },
       {
@@ -398,11 +399,11 @@ describe("GitHubCliClient", () => {
           "--state",
           "all",
           "--head",
-          "krutrimbox/prd-1",
+          "krutrimbox/issue-1",
           "--limit",
           "10",
           "--json",
-          "number,labels"
+          "number,isDraft,labels"
         ]
       }
     ]);
@@ -461,7 +462,7 @@ describe("GitHubCliClient", () => {
     });
   });
 
-  test("updates a PRD Pull Request body and applies only the PRD label", async () => {
+  test("updates a Target Issue Pull Request body and applies only the krutrimbox label", async () => {
     const runner = fixtureRunner(
       new Map([
         [
@@ -469,10 +470,11 @@ describe("GitHubCliClient", () => {
           ""
         ],
         [
-          commandKey("gh", ["pr", "view", "8", "--json", "number,labels"]),
+          commandKey("gh", ["pr", "view", "8", "--json", "number,isDraft,labels"]),
           JSON.stringify({
             number: 8,
-            labels: [{ name: "PRD" }, { name: "ready-for-agent" }]
+            isDraft: false,
+            labels: [{ name: "krutrimbox" }, { name: "ready-for-agent" }]
           })
         ],
         [
@@ -481,7 +483,7 @@ describe("GitHubCliClient", () => {
             "edit",
             "8",
             "--add-label",
-            "PRD",
+            "krutrimbox",
             "--remove-label",
             "ready-for-agent"
           ]),
@@ -492,7 +494,7 @@ describe("GitHubCliClient", () => {
     const client = createGitHubCliClient(runner);
 
     await client.updatePullRequestBody(8, "new body");
-    await client.setPullRequestLabels(8, ["PRD"]);
+    await client.setPullRequestLabels(8, ["krutrimbox"]);
 
     expect(runner.calls).toEqual([
       {
@@ -501,7 +503,7 @@ describe("GitHubCliClient", () => {
       },
       {
         command: "gh",
-        args: ["pr", "view", "8", "--json", "number,labels"]
+        args: ["pr", "view", "8", "--json", "number,isDraft,labels"]
       },
       {
         command: "gh",
@@ -510,7 +512,7 @@ describe("GitHubCliClient", () => {
           "edit",
           "8",
           "--add-label",
-          "PRD",
+          "krutrimbox",
           "--remove-label",
           "ready-for-agent"
         ]
@@ -521,18 +523,22 @@ describe("GitHubCliClient", () => {
 
 function issueFixture({
   number,
-  title
+  title,
+  parentNumber = null
 }: {
   number: number;
   title: string;
+  parentNumber?: number | null;
 }): unknown {
   return {
+    __typename: "Issue",
     number,
     title,
-    body: "## Parent\n\nParent PRD: #1",
+    body: "Target Issue body",
     state: "OPEN",
     author: { login: "jd-solanki" },
-    labels: [{ name: "PRD" }, { name: "ready-for-agent" }]
+    labels: { nodes: [{ name: "ready-for-agent" }] },
+    parent: parentNumber === null ? null : { number: parentNumber }
   };
 }
 

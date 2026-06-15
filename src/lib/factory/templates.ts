@@ -31,7 +31,7 @@ The next required issue is HITL:
 Please resolve the HITL issue and close it, then rerun krutrimbox for this PRD.
 
 \`\`\`sh
-kb run --prd {{prd_number}}
+kb run --issue {{prd_number}}
 \`\`\`
 `,
   "templates/afk-error-comment.md": `<!-- krutrimbox:afk-error-issue-{{issue_number}} -->
@@ -53,7 +53,7 @@ Factory context:
 The issue remains open. Inspect the sandbox if needed, then rerun:
 
 \`\`\`sh
-kb run --prd {{prd_number}}
+kb run --issue {{prd_number}}
 \`\`\`
 
 Cleanup, if you decide the sandbox is no longer needed:

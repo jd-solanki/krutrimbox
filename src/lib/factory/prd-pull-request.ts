@@ -4,7 +4,7 @@ import type {
   GitHubIssue,
   GitHubPullRequest
 } from "../github";
-import { PRD_LABEL } from "./constants";
+import { KRUTRIMBOX_LABEL } from "./constants";
 import { formatImplementationChecklist } from "./format";
 import type { ImplementationSequence } from "./sequence";
 import type { TemplateRenderer } from "./template-renderer";
@@ -42,18 +42,18 @@ export class PrdPullRequest {
 
     if (existing) {
       await this.github.updatePullRequestBody(existing.number, body);
-      await this.github.setPullRequestLabels(existing.number, [PRD_LABEL]);
+      await this.github.setPullRequestLabels(existing.number, [KRUTRIMBOX_LABEL]);
       return;
     }
 
     const created = await this.github.createDraftPullRequest({
-      title: `krutrimbox PRD #${this.prd.number}: ${this.prd.title}`,
+      title: `krutrimbox #${this.prd.number}: ${this.prd.title}`,
       body,
       head: this.branchName,
       base: await this.github.getDefaultBranch(),
-      labels: [PRD_LABEL]
+      labels: [KRUTRIMBOX_LABEL]
     } satisfies CreatePullRequestInput);
-    await this.github.setPullRequestLabels(created.number, [PRD_LABEL]);
+    await this.github.setPullRequestLabels(created.number, [KRUTRIMBOX_LABEL]);
   }
 
   public async routeForReview(pullRequestNumber: number, prdAuthor: string): Promise<void> {
