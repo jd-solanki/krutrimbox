@@ -76,7 +76,7 @@ Sandboxed Agent sessions are launched with explicit non-interactive settings per
 
 Only the outer krutrimbox owns GitHub orchestration state and git commit/push operations. The Sandboxed Agent implements the AFK Issue and reports completion, and may use Read-Only GitHub Access for inspection, but must not create commits, push branches, close issues, create or edit the Target Issue Pull Request, change labels, post comments, or change Target Issue state.
 
-krutrimbox maintains a deterministic Target Issue Pull Request Body from current GitHub state using `templates/pr-body.md`. The body contains `Closes #<issue-number>` keywords for the Target Issue and every Implementation Issue, lists the Implementation Issues as a Done Set checklist, and includes krutrimbox branch and sandbox metadata. The Sandboxed Agent does not edit the Target Issue Pull Request Body.
+krutrimbox maintains a deterministic Target Issue Pull Request Body from current GitHub state using the built-in `templates/pull-request-body.md` (overridable via the `pullRequestBody` Template Slot). The body contains `Closes #<issue-number>` keywords for the Target Issue and every Implementation Issue, lists the Implementation Issues as a Done Set checklist, and includes krutrimbox branch and sandbox metadata. The Sandboxed Agent does not edit the Target Issue Pull Request Body.
 
 The Target Issue Pull Request is created as a draft and remains draft while any Implementation Issue remains open.
 
@@ -104,7 +104,7 @@ When a Factory Run stops at a HITL Issue, a human resolves the issue outside kru
 
 krutrimbox does not remove `ready-for-agent` from the Target Issue when it stops at a HITL Issue. If the Target Issue is discovered again before the HITL footer exists, the next Factory Run reaches the same open HITL Issue and exits again.
 
-HITL comments on the Target Issue use `templates/hitlpause-comment.md` with a Factory Comment Marker keyed by the Target Issue and HITL Issue. Repeated Factory Runs update or skip the existing marked comment instead of posting duplicate comments.
+HITL comments on the Target Issue use the built-in `templates/hitl-pause-comment.md` (overridable via the `hitlPauseComment` Template Slot) with a Factory Comment Marker keyed by the Target Issue and HITL Issue. krutrimbox injects the marker outside the template body, so a custom comment template cannot break idempotency: repeated Factory Runs update or skip the existing marked comment instead of posting duplicate comments.
 
 Helpful error comments on AFK Issues use `templates/afk-error-comment.md` with Factory Comment Markers keyed by the issue and error class, so repeated Factory Runs update or skip the existing marked comment instead of posting duplicate comments.
 

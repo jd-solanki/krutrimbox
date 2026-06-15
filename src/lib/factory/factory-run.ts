@@ -219,7 +219,7 @@ export class FactoryRun {
     priorIssues: ResolvedIssue[],
     laterIssues: ImplementationIssue[]
   ): Promise<string> {
-    return this.templates.render("prompts/afk-issue.md", {
+    return this.templates.renderPrompt("afkIssue", {
       target_issue_branch: this.branchName,
       target_issue_body: this.targetIssue.body,
       issue_body: issue.body,
@@ -229,7 +229,7 @@ export class FactoryRun {
   }
 
   private async pauseAtHitl(issue: ImplementationIssue): Promise<void> {
-    const body = await this.templates.render("templates/hitlpause-comment.md", {
+    const body = await this.templates.renderTemplate("hitlPauseComment", {
       target_issue_number: this.targetIssue.number,
       target_issue_author: this.targetIssue.author.login,
       issue_number: issue.number,
@@ -243,7 +243,7 @@ export class FactoryRun {
   }
 
   private async postAfkErrorComment(issue: ImplementationIssue, errors: string[]): Promise<string> {
-    const body = await this.templates.render("templates/afk-error-comment.md", {
+    const body = await this.templates.renderTemplate("afkErrorComment", {
       target_issue_number: this.targetIssue.number,
       issue_number: issue.number,
       error_summary: errors.join("\n"),
@@ -286,7 +286,7 @@ export class FactoryRun {
       output: this.output
     });
 
-    const commentBody = await this.templates.render("templates/final-review-comment.md", {
+    const commentBody = await this.templates.renderTemplate("finalReviewComment", {
       target_issue_number: targetIssue.number,
       review_body: reviewBody
     });
@@ -302,22 +302,27 @@ export class FactoryRun {
     sequence: ImplementationSequence,
     diff: string
   ): Promise<string> {
-    return this.templates.render("prompts/final-review.md", {
+    return this.templates.renderPrompt("finalReview", {
       target_issue_body: this.targetIssue.body,
       implementation_issues: formatEarlierIssues(sequence.resolvedIssues),
       pr_diff: diff
     });
   }
 
+  // krutrimbox owns the Factory Comment Marker, not the template author: the
+  // marker is injected here, outside the (possibly project-overridden) template
+  // body, so a custom comment template can never break idempotent comment
+  // updates. The same marker locates the existing comment and prefixes the body.
   private async upsertComment(issueNumber: number, marker: string, body: string) {
+    const markedBody = `${marker}\n\n${body}`;
     const comments = await this.github.listIssueComments(issueNumber);
     const existing = comments.find((comment) => comment.body.includes(marker));
 
     if (existing) {
-      return this.github.updateIssueComment(existing.id, body);
+      return this.github.updateIssueComment(existing.id, markedBody);
     }
 
-    return this.github.createIssueComment(issueNumber, body);
+    return this.github.createIssueComment(issueNumber, markedBody);
   }
 }
 

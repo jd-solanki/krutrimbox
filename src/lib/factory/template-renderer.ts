@@ -1,30 +1,51 @@
-import { PROMPTS } from "./prompts";
-import { TEMPLATES } from "./templates";
+import { loadBuiltInAsset } from "./asset-store";
+import { loadProjectConfig, type ResolvedProjectConfig } from "./project-config";
+import { PROMPT_ASSETS, TEMPLATE_SLOTS, type PromptName, type TemplateSlot } from "./template-slots";
 
-// All bundled templates and prompts, keyed by their historical file paths so
-// callers keep using `render("templates/pr-body.md", ...)` unchanged.
-const BUNDLED: Record<string, string> = { ...TEMPLATES, ...PROMPTS };
+// Renders krutrimbox's prompts and templates by substituting `{{key}}`
+// placeholders. Built-in content loads from the Markdown assets shipped with the
+// package (ADR-0013); templates may be partially overridden by committed Project
+// Configuration, while prompts are always built in. Factory Comment Markers are
+// injected by the Factory Run outside these templates, so a custom template body
+// can never break idempotent comment updates.
 
-// Renders bundled templates by substituting `{{key}}` placeholders. The content
-// is compiled into the package, so rendering never touches the filesystem and
-// works no matter what directory the CLI is invoked from.
-export class BundledTemplateRenderer {
-  public async render(
-    templatePath: string,
-    values: Record<string, string | number>
-  ): Promise<string> {
-    const template = BUNDLED[templatePath];
+type RenderValues = Record<string, string | number>;
 
-    if (template === undefined) {
-      throw new Error(`Unknown template: ${templatePath}`);
-    }
+export class ProjectTemplateRenderer {
+  private readonly templateOverrides: Map<TemplateSlot, string>;
 
-    return template.replace(/{{(\w+)}}/g, (_match, key: string) => {
-      const value = values[key];
-      return typeof value === "undefined" ? "" : String(value);
-    });
+  public constructor(config: ResolvedProjectConfig = { templateOverrides: new Map() }) {
+    this.templateOverrides = config.templateOverrides;
+  }
+
+  // Builds a renderer for a project directory, loading and validating its
+  // committed `.krutrimbox/config.json`. Invalid configuration throws here, so
+  // the run fails fast before any GitHub or sandbox work begins.
+  public static fromProjectDir(projectDir: string): ProjectTemplateRenderer {
+    return new ProjectTemplateRenderer(loadProjectConfig(projectDir));
+  }
+
+  // Renders an overridable Template Slot: the project's configured override when
+  // present, otherwise the built-in Markdown default.
+  public async renderTemplate(slot: TemplateSlot, values: RenderValues): Promise<string> {
+    const source = this.templateOverrides.get(slot) ?? (await loadBuiltInAsset(TEMPLATE_SLOTS[slot]));
+    return substitute(source, values);
+  }
+
+  // Renders a built-in Sandboxed Agent prompt. Prompts are never overridable.
+  public async renderPrompt(name: PromptName, values: RenderValues): Promise<string> {
+    return substitute(await loadBuiltInAsset(PROMPT_ASSETS[name]), values);
   }
 }
 
-// Injection seam: the public surface of BundledTemplateRenderer, so fakes need no separate contract.
-export type TemplateRenderer = Pick<BundledTemplateRenderer, "render">;
+// Substitutes `{{key}}` placeholders. A missing value renders as an empty string,
+// preserving the established placeholder substitution semantics.
+function substitute(template: string, values: RenderValues): string {
+  return template.replace(/{{(\w+)}}/g, (_match, key: string) => {
+    const value = values[key];
+    return typeof value === "undefined" ? "" : String(value);
+  });
+}
+
+// Injection seam: the public surface of ProjectTemplateRenderer, so fakes need no separate contract.
+export type TemplateRenderer = Pick<ProjectTemplateRenderer, "renderTemplate" | "renderPrompt">;

@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -13,6 +13,7 @@ import {
   parseDoneSetFromCommitMessages,
   parseBlockingIssueNumbers,
   TargetIssuePullRequest,
+  ProjectTemplateRenderer,
   resolveCodingAgent,
   type TargetIssueLock,
   type TargetIssueLockStore,
@@ -827,6 +828,55 @@ describe("Krutrimbox", () => {
     expect(github.markPullRequestReadyForReview).not.toHaveBeenCalled();
   });
 
+  test("injects the Factory Comment Marker even when a custom comment template omits it", async () => {
+    const workdir = await mkdtemp(join(tmpdir(), "krutrimbox-marker-"));
+    try {
+      await mkdir(join(workdir, ".krutrimbox", "templates"), { recursive: true });
+      await writeFile(
+        join(workdir, ".krutrimbox", "templates", "review.md"),
+        "Custom review wrapper:\n\n{{review_body}}",
+        "utf8"
+      );
+      await writeFile(
+        join(workdir, ".krutrimbox", "config.json"),
+        JSON.stringify({ templates: { finalReviewComment: "templates/review.md" } }),
+        "utf8"
+      );
+
+      const github = new FakeGitHubClient({
+        targetIssues: [targetIssue()],
+        pullRequests: [{ number: 10, isDraft: true, labels: [{ name: "krutrimbox" }] }],
+        subIssuesByTargetIssue: new Map([
+          [1, [implementationIssue({ number: 3, labels: ["ready-for-agent"] })]]
+        ]),
+        branchCommitMessages: ["Bootstrap\n\nRefs #3"]
+      });
+      const factory = new Krutrimbox({
+        github,
+        sandbox: new FakeSandboxRunner(),
+        lockStore: fakeLockStore(),
+        templates: ProjectTemplateRenderer.fromProjectDir(workdir)
+      });
+
+      await factory.runExplicit(1, "codex");
+
+      // First run creates the comment: krutrimbox injects the marker outside the
+      // custom template body so the comment stays idempotently updatable.
+      const created = github.createIssueComment.mock.calls.find(([number]) => number === 10);
+      expect(created?.[1]).toContain("<!-- krutrimbox:final-review-issue-1 -->");
+      expect(created?.[1]).toContain("Custom review wrapper:");
+
+      // Second run finds the marked comment and updates it rather than duplicating.
+      await factory.runExplicit(1, "codex");
+      expect(github.updateIssueComment).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.stringContaining("<!-- krutrimbox:final-review-issue-1 -->")
+      );
+    } finally {
+      await rm(workdir, { recursive: true, force: true });
+    }
+  });
+
   test("batch runs continue after a Target-Issue-local HITL pause", async () => {
     const firstTargetIssue = targetIssue({ number: 1 });
     const secondTargetIssue = targetIssue({ number: 2 });
@@ -1433,31 +1483,10 @@ function recordingLockStore({ lockedTargetIssues = new Set<number>() }: { locked
   return store satisfies TargetIssueLockStore & { acquired: number[]; released: number[] };
 }
 
-const fixtureTemplates: TemplateRenderer = {
-  async render(templatePath, values) {
-    const templates: Record<string, string> = {
-      "templates/hitlpause-comment.md":
-        "<!-- krutrimbox:hitl-issue-{{target_issue_number}}-implementation-{{issue_number}} -->\n\n@{{target_issue_author}} krutrimbox is paused for Target Issue #{{target_issue_number}}.\n\nThe next required issue is HITL:\n\n- #{{issue_number}} - {{issue_title}}\n\n> [!IMPORTANT]\n> When the HITL work is finished, push a `Refs #{{issue_number}}` commit to the Target Issue Branch `{{target_issue_branch}}`.\n> An empty commit is acceptable for non-code work. Then rerun krutrimbox:\n\n```sh\nkb run --issue {{target_issue_number}} --agent {{agent_name}}\n```\n\nSandbox: `{{target_issue_sandbox}}`",
-      "templates/afk-error-comment.md":
-        "<!-- krutrimbox:afk-error-issue-{{issue_number}} -->\n\n{{error_summary}}\n\nTarget Issue: #{{target_issue_number}}\nBranch: `{{target_issue_branch}}`\nSandbox: `{{target_issue_sandbox}}`\n\n```sh\nkb run --issue {{target_issue_number}} --agent {{agent_name}}\n```",
-      "templates/pr-body.md":
-        "## Target Issue Closure\n\n{{closing_keywords}}\n\n## Implementation Issues\n\n{{implementation_issue_checklist}}\n\n## krutrimbox\n\nBranch: `{{target_issue_branch}}`\nSandbox: `{{target_issue_sandbox}}`",
-      "prompts/afk-issue.md":
-        "Do not create commits or push branches.\nWork on Target Issue Branch `{{target_issue_branch}}`.\n\n## Target Issue\n{{target_issue_body}}\n\n## Current AFK Issue\n{{issue_body}}\n\n## Earlier Implementation Issues\n{{earlier_issues}}\n\n## Later Implementation Issues\n{{later_issues}}",
-      "templates/final-review-comment.md":
-        "<!-- krutrimbox:final-review-issue-{{target_issue_number}} -->\n\n{{review_body}}",
-      "prompts/final-review.md":
-        "## Target Issue\n{{target_issue_body}}\n\n## Implementation Issues\n{{implementation_issues}}\n\n## Pull Request Diff\n{{pr_diff}}"
-    };
-    const template = templates[templatePath];
-
-    if (!template) {
-      throw new Error(`No template fixture for ${templatePath}`);
-    }
-
-    return template.replace(/{{(\w+)}}/g, (_match, key: string) => String(values[key] ?? ""));
-  }
-};
+// The factory tests run through the real renderer with no Project Configuration,
+// so they exercise built-in Markdown loading and Factory Comment Marker
+// injection end to end rather than asserting against a hand-written fixture.
+const fixtureTemplates: TemplateRenderer = new ProjectTemplateRenderer();
 
 function targetIssue({
   number = 1,
