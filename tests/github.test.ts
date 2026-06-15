@@ -180,12 +180,12 @@ describe("GitHubCliClient", () => {
                     nodes: [
                       {
                         number: 3,
-                        title: "Discover PRDs",
+                        title: "Discover target issues",
                         body: "Implementation issue body",
                         state: "OPEN",
                         author: { login: "jd-solanki" },
                         labels: {
-                          nodes: [{ name: "PRD-sub-issue" }, { name: "ready-for-agent" }]
+                          nodes: [{ name: "ready-for-agent" }]
                         },
                         parent: { number: 1 }
                       }
@@ -205,8 +205,8 @@ describe("GitHubCliClient", () => {
     expect(subIssues).toHaveLength(1);
     expect(subIssues[0]).toMatchObject({
       number: 3,
-      title: "Discover PRDs",
-      labels: [{ name: "PRD-sub-issue" }, { name: "ready-for-agent" }],
+      title: "Discover target issues",
+      labels: [{ name: "ready-for-agent" }],
       parentNumber: 1
     });
     expect(runner.calls[1].args).toEqual([
@@ -331,7 +331,7 @@ describe("GitHubCliClient", () => {
             "create",
             "--draft",
             "--title",
-            "krutrimbox #1: PRD",
+            "krutrimbox #1: Target Issue",
             "--body",
             "body",
             "--base",
@@ -364,7 +364,7 @@ describe("GitHubCliClient", () => {
 
     await expect(
       client.createDraftPullRequest({
-        title: "krutrimbox #1: PRD",
+        title: "krutrimbox #1: Target Issue",
         body: "body",
         base: "main",
         head: "krutrimbox/issue-1",
@@ -380,7 +380,7 @@ describe("GitHubCliClient", () => {
           "create",
           "--draft",
           "--title",
-          "krutrimbox #1: PRD",
+          "krutrimbox #1: Target Issue",
           "--body",
           "body",
           "--base",

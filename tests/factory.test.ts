@@ -41,18 +41,18 @@ vi.mock("../src/lib/factory/run-log", () => ({
 
 describe("buildImplementationSequence", () => {
   test("treats a standalone Target Issue as a sequence-of-one AFK Implementation Issue", () => {
-    const targetIssue = prdIssue({
+    const issue = targetIssue({
       number: 9,
       body: "Standalone body\n\n## Blocked by\n\n- #3"
     });
 
-    const sequence = buildImplementationSequence(targetIssue, [], new Set());
+    const sequence = buildImplementationSequence(issue, [], new Set());
 
     expect(sequence.resolvedIssues).toEqual([]);
     expect(sequence.openIssues).toEqual([
       {
         number: 9,
-        title: "PRD: krutrimbox MVP",
+        title: "Target Issue: krutrimbox MVP",
         body: "Standalone body\n\n## Blocked by\n\n- #3",
         state: "OPEN",
         kind: "afk",
@@ -62,7 +62,7 @@ describe("buildImplementationSequence", () => {
   });
 
   test("validates, orders, and skips Implementation Issues in the Done Set", () => {
-    const sequence = buildImplementationSequence(prdIssue(), [
+    const sequence = buildImplementationSequence(targetIssue(), [
       implementationIssue({
         number: 5,
         title: "Human input",
@@ -101,7 +101,7 @@ describe("buildImplementationSequence", () => {
 
   test("rejects open Implementation Issues without exactly one state label", () => {
     expect(() =>
-      buildImplementationSequence(prdIssue(), [
+      buildImplementationSequence(targetIssue(), [
         implementationIssue({
           number: 7,
           labels: []
@@ -112,7 +112,7 @@ describe("buildImplementationSequence", () => {
     );
 
     expect(() =>
-      buildImplementationSequence(prdIssue(), [
+      buildImplementationSequence(targetIssue(), [
         implementationIssue({
           number: 8,
           labels: ["ready-for-agent", "ready-for-human"]
@@ -187,7 +187,7 @@ describe("Krutrimbox", () => {
 
   test("explicit runs skip Target Issues not authored by the factory owner", async () => {
     const github = new FakeGitHubClient({
-      prds: [prdIssue({ author: "someone-else" })]
+      targetIssues: [targetIssue({ author: "someone-else" })]
     });
     const factory = new Krutrimbox({
       github,
@@ -208,7 +208,7 @@ describe("Krutrimbox", () => {
   });
 
   test("skips an already locked Target Issue before reading sub-issues", async () => {
-    const github = new FakeGitHubClient({ prds: [prdIssue()] });
+    const github = new FakeGitHubClient({ targetIssues: [targetIssue()] });
     const lockStore = fakeLockStore({ locked: true });
     const factory = new Krutrimbox({
       github,
@@ -225,15 +225,15 @@ describe("Krutrimbox", () => {
 
   test("updates an idempotent HITL pause comment and does not create a sandbox", async () => {
     const github = new FakeGitHubClient({
-      prds: [prdIssue()],
-      subIssuesByPrd: new Map([
+      targetIssues: [targetIssue()],
+      subIssuesByTargetIssue: new Map([
         [
           1,
           [
             implementationIssue({
               number: 4,
               title: "Human checkpoint",
-              labels: ["PRD-sub-issue", "ready-for-human"]
+              labels: ["ready-for-human"]
             })
           ]
         ]
@@ -276,22 +276,22 @@ describe("Krutrimbox", () => {
 
   test("posts an AFK error comment when a blocking issue is unresolved", async () => {
     const github = new FakeGitHubClient({
-      prds: [prdIssue()],
+      targetIssues: [targetIssue()],
       issues: [
         blockerIssue({
           number: 3,
-          title: "Discover PRDs",
+          title: "Discover target issues",
           state: "OPEN"
         })
       ],
-      subIssuesByPrd: new Map([
+      subIssuesByTargetIssue: new Map([
         [
           1,
           [
             implementationIssue({
               number: 4,
-              body: "## Parent\n\nParent PRD: #1\n\n## Blocked by\n\n- #3",
-              labels: ["PRD-sub-issue", "ready-for-agent"]
+              body: "## Parent\n\nParent Target Issue: #1\n\n## Blocked by\n\n- #3",
+              labels: ["ready-for-agent"]
             })
           ]
         ]
@@ -309,7 +309,7 @@ describe("Krutrimbox", () => {
 
     expect(github.createIssueComment).toHaveBeenCalledWith(
       4,
-      expect.stringContaining("#3 - Discover PRDs (OPEN)")
+      expect.stringContaining("#3 - Discover target issues (OPEN)")
     );
     expect(sandbox.ensureSandbox).not.toHaveBeenCalled();
     expect(github.closeIssue).not.toHaveBeenCalled();
@@ -317,8 +317,8 @@ describe("Krutrimbox", () => {
 
   test("implements a standalone Target Issue through sandbox, commit, and PR without closing it", async () => {
     const github = new FakeGitHubClient({
-      prds: [
-        prdIssue({
+      targetIssues: [
+        targetIssue({
           body: "Standalone target issue body\n\n## Blocked by\n\n- #3"
         })
       ],
@@ -345,8 +345,8 @@ describe("Krutrimbox", () => {
       issueNumber: 1
     });
     expect(github.createDraftPullRequest).toHaveBeenCalledWith({
-      title: "krutrimbox #1: PRD: krutrimbox MVP",
-      body: expect.stringContaining("- [x] #1 - PRD: krutrimbox MVP"),
+      title: "krutrimbox #1: Target Issue: krutrimbox MVP",
+      body: expect.stringContaining("- [x] #1 - Target Issue: krutrimbox MVP"),
       head: "krutrimbox/issue-1",
       base: "main",
       labels: ["krutrimbox"]
@@ -357,28 +357,28 @@ describe("Krutrimbox", () => {
 
   test("runs AFK issues through sandbox, commit, and PR maintenance without closing issues", async () => {
     const github = new FakeGitHubClient({
-      prds: [prdIssue({ body: "Full parent PRD body" })],
+      targetIssues: [targetIssue({ body: "Full parent Target Issue body" })],
       branchCommitMessages: ["Bootstrap\n\nRefs #3"],
-      subIssuesByPrd: new Map([
+      subIssuesByTargetIssue: new Map([
         [
           1,
           [
             implementationIssue({
               number: 3,
               title: "Bootstrap",
-              labels: ["PRD-sub-issue", "ready-for-agent"]
+              labels: ["ready-for-agent"]
             }),
             implementationIssue({
               number: 4,
               title: "Factory loop",
-              body: "## Parent\n\nParent PRD: #1\n\nCurrent issue body",
-              labels: ["PRD-sub-issue", "ready-for-agent"]
+              body: "## Parent\n\nParent Target Issue: #1\n\nCurrent issue body",
+              labels: ["ready-for-agent"]
             }),
             implementationIssue({
               number: 5,
               title: "Final review",
-              body: "## Parent\n\nParent PRD: #1\n\n## Blocked by\n\n- #4",
-              labels: ["PRD-sub-issue", "ready-for-agent"]
+              body: "## Parent\n\nParent Target Issue: #1\n\n## Blocked by\n\n- #4",
+              labels: ["ready-for-agent"]
             })
           ]
         ]
@@ -412,7 +412,7 @@ describe("Krutrimbox", () => {
       sandboxName: "krutrimbox-issue-1",
       branchName: "krutrimbox/issue-1"
     });
-    expect(String(sandbox.calls[2].input.prompt)).toContain("Full parent PRD body");
+    expect(String(sandbox.calls[2].input.prompt)).toContain("Full parent Target Issue body");
     expect(String(sandbox.calls[2].input.prompt)).toContain("Current issue body");
     expect(String(sandbox.calls[2].input.prompt)).toContain("- #3 - Bootstrap (CLOSED)");
     expect(String(sandbox.calls[2].input.prompt)).toContain(
@@ -422,7 +422,7 @@ describe("Krutrimbox", () => {
       "Do not create commits or push branches."
     );
     expect(github.createDraftPullRequest).toHaveBeenCalledWith({
-      title: "krutrimbox #1: PRD: krutrimbox MVP",
+      title: "krutrimbox #1: Target Issue: krutrimbox MVP",
       body: expect.stringContaining("- [x] #4 - Factory loop"),
       head: "krutrimbox/issue-1",
       base: "main",
@@ -441,22 +441,22 @@ describe("Krutrimbox", () => {
 
   test("resumes from the Done Set instead of GitHub issue closed state", async () => {
     const github = new FakeGitHubClient({
-      prds: [prdIssue()],
+      targetIssues: [targetIssue()],
       branchCommitMessages: ["Completed first issue\n\nRefs #4"],
-      subIssuesByPrd: new Map([
+      subIssuesByTargetIssue: new Map([
         [
           1,
           [
             implementationIssue({
               number: 4,
               title: "Already committed",
-              labels: ["PRD-sub-issue", "ready-for-agent"]
+              labels: ["ready-for-agent"]
             }),
             implementationIssue({
               number: 5,
               title: "Closed but not committed",
               state: "CLOSED",
-              labels: ["PRD-sub-issue", "ready-for-agent"]
+              labels: ["ready-for-agent"]
             })
           ]
         ]
@@ -481,9 +481,9 @@ describe("Krutrimbox", () => {
 
   test("resumes past a HITL Implementation Issue once its Refs footer is on the branch", async () => {
     const github = new FakeGitHubClient({
-      prds: [prdIssue()],
+      targetIssues: [targetIssue()],
       branchCommitMessages: ["Human checkpoint complete\n\nRefs #4"],
-      subIssuesByPrd: new Map([
+      subIssuesByTargetIssue: new Map([
         [
           1,
           [
@@ -525,8 +525,8 @@ describe("Krutrimbox", () => {
 
   test("re-pauses at the same HITL Implementation Issue until its Refs footer exists", async () => {
     const github = new FakeGitHubClient({
-      prds: [prdIssue()],
-      subIssuesByPrd: new Map([
+      targetIssues: [targetIssue()],
+      subIssuesByTargetIssue: new Map([
         [
           1,
           [
@@ -577,15 +577,15 @@ describe("Krutrimbox", () => {
 
   test("reuses an existing Target Issue Pull Request by deterministic branch", async () => {
     const github = new FakeGitHubClient({
-      prds: [prdIssue()],
+      targetIssues: [targetIssue()],
       pullRequests: [{ number: 12, isDraft: true, labels: [{ name: "krutrimbox" }, { name: "extra" }] }],
-      subIssuesByPrd: new Map([
+      subIssuesByTargetIssue: new Map([
         [
           1,
           [
             implementationIssue({
               number: 4,
-              labels: ["PRD-sub-issue", "ready-for-agent"]
+              labels: ["ready-for-agent"]
             })
           ]
         ]
@@ -610,14 +610,14 @@ describe("Krutrimbox", () => {
 
   test("runs final review when all Implementation Issues are already resolved at run start", async () => {
     const github = new FakeGitHubClient({
-      prds: [prdIssue({ body: "Full PRD body" })],
+      targetIssues: [targetIssue({ body: "Full Target Issue body" })],
       pullRequests: [{ number: 10, isDraft: true, labels: [{ name: "krutrimbox" }] }],
-      subIssuesByPrd: new Map([
+      subIssuesByTargetIssue: new Map([
         [
           1,
           [
-            implementationIssue({ number: 3, title: "Bootstrap", labels: ["PRD-sub-issue", "ready-for-agent"] }),
-            implementationIssue({ number: 4, title: "Factory loop", labels: ["PRD-sub-issue", "ready-for-agent"] })
+            implementationIssue({ number: 3, title: "Bootstrap", labels: ["ready-for-agent"] }),
+            implementationIssue({ number: 4, title: "Factory loop", labels: ["ready-for-agent"] })
           ]
         ]
       ]),
@@ -639,7 +639,7 @@ describe("Krutrimbox", () => {
       "removeSandbox"
     ]);
     const reviewCall = sandbox.calls.find((call) => call.name === "runFinalReview");
-    expect(String(reviewCall?.input.prompt)).toContain("Full PRD body");
+    expect(String(reviewCall?.input.prompt)).toContain("Full Target Issue body");
     expect(String(reviewCall?.input.prompt)).toContain("- #3 - Bootstrap (CLOSED)");
     expect(String(reviewCall?.input.prompt)).toContain("- #4 - Factory loop (CLOSED)");
     expect(github.markPullRequestReadyForReview).toHaveBeenCalledWith(10);
@@ -649,10 +649,10 @@ describe("Krutrimbox", () => {
 
   test("skips final review when the Target Issue Pull Request is already ready for review", async () => {
     const github = new FakeGitHubClient({
-      prds: [prdIssue()],
+      targetIssues: [targetIssue()],
       pullRequests: [{ number: 10, isDraft: false, labels: [{ name: "krutrimbox" }] }],
-      subIssuesByPrd: new Map([
-        [1, [implementationIssue({ number: 3, labels: ["PRD-sub-issue", "ready-for-agent"] })]]
+      subIssuesByTargetIssue: new Map([
+        [1, [implementationIssue({ number: 3, labels: ["ready-for-agent"] })]]
       ]),
       branchCommitMessages: ["Bootstrap\n\nRefs #3"]
     });
@@ -675,10 +675,10 @@ describe("Krutrimbox", () => {
 
   test("updates an existing final review comment idempotently", async () => {
     const github = new FakeGitHubClient({
-      prds: [prdIssue()],
+      targetIssues: [targetIssue()],
       pullRequests: [{ number: 10, isDraft: true, labels: [{ name: "krutrimbox" }] }],
-      subIssuesByPrd: new Map([
-        [1, [implementationIssue({ number: 3, title: "Bootstrap", labels: ["PRD-sub-issue", "ready-for-agent"] })]]
+      subIssuesByTargetIssue: new Map([
+        [1, [implementationIssue({ number: 3, title: "Bootstrap", labels: ["ready-for-agent"] })]]
       ]),
       branchCommitMessages: ["Bootstrap\n\nRefs #3"],
       comments: new Map([
@@ -715,10 +715,10 @@ describe("Krutrimbox", () => {
 
   test("requests review from Target Issue Author when they differ from PR Author", async () => {
     const github = new FakeGitHubClient({
-      prds: [prdIssue({ author: "jd-solanki" })],
+      targetIssues: [targetIssue({ author: "jd-solanki" })],
       pullRequests: [{ number: 10, isDraft: true, labels: [{ name: "krutrimbox" }] }],
-      subIssuesByPrd: new Map([
-        [1, [implementationIssue({ number: 3, labels: ["PRD-sub-issue", "ready-for-agent"] })]]
+      subIssuesByTargetIssue: new Map([
+        [1, [implementationIssue({ number: 3, labels: ["ready-for-agent"] })]]
       ]),
       branchCommitMessages: ["Bootstrap\n\nRefs #3"]
     });
@@ -741,10 +741,10 @@ describe("Krutrimbox", () => {
 
   test("tags Target Issue Author in a comment instead of requesting self-review when authors match", async () => {
     const github = new FakeGitHubClient({
-      prds: [prdIssue({ author: "jd-solanki" })],
+      targetIssues: [targetIssue({ author: "jd-solanki" })],
       pullRequests: [{ number: 10, isDraft: true, labels: [{ name: "krutrimbox" }] }],
-      subIssuesByPrd: new Map([
-        [1, [implementationIssue({ number: 3, labels: ["PRD-sub-issue", "ready-for-agent"] })]]
+      subIssuesByTargetIssue: new Map([
+        [1, [implementationIssue({ number: 3, labels: ["ready-for-agent"] })]]
       ]),
       branchCommitMessages: ["Bootstrap\n\nRefs #3"]
     });
@@ -767,10 +767,10 @@ describe("Krutrimbox", () => {
 
   test("removes the Target Issue Sandbox after final review routing succeeds", async () => {
     const github = new FakeGitHubClient({
-      prds: [prdIssue()],
+      targetIssues: [targetIssue()],
       pullRequests: [{ number: 10, isDraft: true, labels: [{ name: "krutrimbox" }] }],
-      subIssuesByPrd: new Map([
-        [1, [implementationIssue({ number: 3, labels: ["PRD-sub-issue", "ready-for-agent"] })]]
+      subIssuesByTargetIssue: new Map([
+        [1, [implementationIssue({ number: 3, labels: ["ready-for-agent"] })]]
       ]),
       branchCommitMessages: ["Bootstrap\n\nRefs #3"]
     });
@@ -789,10 +789,10 @@ describe("Krutrimbox", () => {
 
   test("never merges the Target Issue Pull Request during final review routing", async () => {
     const github = new FakeGitHubClient({
-      prds: [prdIssue()],
+      targetIssues: [targetIssue()],
       pullRequests: [{ number: 10, isDraft: true, labels: [{ name: "krutrimbox" }] }],
-      subIssuesByPrd: new Map([
-        [1, [implementationIssue({ number: 3, labels: ["PRD-sub-issue", "ready-for-agent"] })]]
+      subIssuesByTargetIssue: new Map([
+        [1, [implementationIssue({ number: 3, labels: ["ready-for-agent"] })]]
       ]),
       branchCommitMessages: ["Bootstrap\n\nRefs #3"]
     });
@@ -811,9 +811,9 @@ describe("Krutrimbox", () => {
 
   test("skips final review when no Target Issue Pull Request exists", async () => {
     const github = new FakeGitHubClient({
-      prds: [prdIssue()],
-      subIssuesByPrd: new Map([
-        [1, [implementationIssue({ number: 3, labels: ["PRD-sub-issue", "ready-for-agent"] })]]
+      targetIssues: [targetIssue()],
+      subIssuesByTargetIssue: new Map([
+        [1, [implementationIssue({ number: 3, labels: ["ready-for-agent"] })]]
       ]),
       branchCommitMessages: ["Bootstrap\n\nRefs #3"]
     });
@@ -832,17 +832,17 @@ describe("Krutrimbox", () => {
   });
 
   test("batch runs continue after a Target-Issue-local HITL pause", async () => {
-    const firstPrd = prdIssue({ number: 1 });
-    const secondPrd = prdIssue({ number: 2 });
+    const firstTargetIssue = targetIssue({ number: 1 });
+    const secondTargetIssue = targetIssue({ number: 2 });
     const github = new FakeGitHubClient({
-      prds: [firstPrd, secondPrd],
-      subIssuesByPrd: new Map([
+      targetIssues: [firstTargetIssue, secondTargetIssue],
+      subIssuesByTargetIssue: new Map([
         [
           1,
           [
             implementationIssue({
               number: 4,
-              labels: ["PRD-sub-issue", "ready-for-human"]
+              labels: ["ready-for-human"]
             })
           ]
         ],
@@ -852,7 +852,7 @@ describe("Krutrimbox", () => {
             implementationIssue({
               number: 5,
               parentNumber: 2,
-              labels: ["PRD-sub-issue", "ready-for-agent"]
+              labels: ["ready-for-agent"]
             })
           ]
         ]
@@ -884,32 +884,32 @@ describe("Krutrimbox MVP smoke", () => {
 
   test("explicit run completes ordered AFK issues through PR, final review, and cleanup seams", async () => {
     const github = new FakeGitHubClient({
-      prds: [prdIssue({ body: "Full parent PRD smoke fixture" })],
+      targetIssues: [targetIssue({ body: "Full parent Target Issue smoke fixture" })],
       branchCommitMessages: ["Bootstrap CLI\n\nRefs #2"],
       issues: [
         blockerIssue({ number: 2, title: "Bootstrap CLI", state: "CLOSED" }),
         blockerIssue({ number: 4, title: "Factory loop", state: "CLOSED" })
       ],
-      subIssuesByPrd: new Map([
+      subIssuesByTargetIssue: new Map([
         [
           1,
           [
             implementationIssue({
               number: 6,
               title: "Final review",
-              body: "## Parent\n\nParent PRD: #1\n\n## Blocked by\n\n- #4",
-              labels: ["PRD-sub-issue", "ready-for-agent"]
+              body: "## Parent\n\nParent Target Issue: #1\n\n## Blocked by\n\n- #4",
+              labels: ["ready-for-agent"]
             }),
             implementationIssue({
               number: 4,
               title: "Factory loop",
-              body: "## Parent\n\nParent PRD: #1\n\n## Blocked by\n\n- #2",
-              labels: ["PRD-sub-issue", "ready-for-agent"]
+              body: "## Parent\n\nParent Target Issue: #1\n\n## Blocked by\n\n- #2",
+              labels: ["ready-for-agent"]
             }),
             implementationIssue({
               number: 2,
               title: "Bootstrap CLI",
-              labels: ["PRD-sub-issue", "ready-for-agent"]
+              labels: ["ready-for-agent"]
             })
           ]
         ]
@@ -960,14 +960,14 @@ describe("Krutrimbox MVP smoke", () => {
       "krutrimbox/issue-1",
       "krutrimbox/issue-1"
     ]);
-    expect(String(sandbox.runAfkIssue.mock.calls[0]?.[0].prompt)).toContain("Full parent PRD smoke fixture");
+    expect(String(sandbox.runAfkIssue.mock.calls[0]?.[0].prompt)).toContain("Full parent Target Issue smoke fixture");
     expect(String(sandbox.runAfkIssue.mock.calls[0]?.[0].prompt)).toContain("- #6 - Final review (afk, blocked by #4)");
     expect(String(sandbox.runAfkIssue.mock.calls[1]?.[0].prompt)).toContain("- #4 - Factory loop (CLOSED)");
     expect(String(sandbox.runAfkIssue.mock.calls[1]?.[0].prompt)).not.toContain("Final review (afk");
     expect(sandbox.commitAndPush.mock.calls.map(([input]) => input.issueNumber)).toEqual([4, 6]);
     expect(github.closeIssue).not.toHaveBeenCalled();
     expect(github.createDraftPullRequest).toHaveBeenCalledWith({
-      title: "krutrimbox #1: PRD: krutrimbox MVP",
+      title: "krutrimbox #1: Target Issue: krutrimbox MVP",
       body: expect.stringContaining("Closes #1"),
       head: "krutrimbox/issue-1",
       base: "main",
@@ -992,12 +992,12 @@ describe("Krutrimbox MVP smoke", () => {
   });
 
   test("batch run orders discovered Target Issues and continues after Target-Issue-local stops", async () => {
-    const pausedPrd = prdIssue({ number: 3 });
-    const completedPrd = prdIssue({ number: 5 });
-    const lockedPrd = prdIssue({ number: 9 });
+    const pausedTargetIssue = targetIssue({ number: 3 });
+    const completedTargetIssue = targetIssue({ number: 5 });
+    const lockedTargetIssue = targetIssue({ number: 9 });
     const github = new FakeGitHubClient({
-      prds: [lockedPrd, completedPrd, pausedPrd],
-      subIssuesByPrd: new Map([
+      targetIssues: [lockedTargetIssue, completedTargetIssue, pausedTargetIssue],
+      subIssuesByTargetIssue: new Map([
         [
           3,
           [
@@ -1005,7 +1005,7 @@ describe("Krutrimbox MVP smoke", () => {
               number: 30,
               parentNumber: 3,
               title: "Human checkpoint",
-              labels: ["PRD-sub-issue", "ready-for-human"]
+              labels: ["ready-for-human"]
             })
           ]
         ],
@@ -1016,7 +1016,7 @@ describe("Krutrimbox MVP smoke", () => {
               number: 50,
               parentNumber: 5,
               title: "Batch AFK",
-              labels: ["PRD-sub-issue", "ready-for-agent"]
+              labels: ["ready-for-agent"]
             })
           ]
         ],
@@ -1027,7 +1027,7 @@ describe("Krutrimbox MVP smoke", () => {
               number: 90,
               parentNumber: 9,
               title: "Should not run",
-              labels: ["PRD-sub-issue", "ready-for-agent"]
+              labels: ["ready-for-agent"]
             })
           ]
         ]
@@ -1046,7 +1046,7 @@ describe("Krutrimbox MVP smoke", () => {
       ])
     });
     const sandbox = new FakeSandboxRunner();
-    const lockStore = recordingLockStore({ lockedPrds: new Set([9]) });
+    const lockStore = recordingLockStore({ lockedTargetIssues: new Set([9]) });
     const factory = new Krutrimbox({
       github,
       sandbox,
@@ -1060,7 +1060,7 @@ describe("Krutrimbox MVP smoke", () => {
     expect(github.listReadyTargetIssues).toHaveBeenCalledWith("jd-solanki");
     expect(lockStore.acquired).toEqual([3, 5, 9]);
     expect(lockStore.released).toEqual([3, 5]);
-    expect(github.getAttachedSubIssues.mock.calls.map(([prdNumber]) => prdNumber)).toEqual([3, 5]);
+    expect(github.getAttachedSubIssues.mock.calls.map(([targetIssueNumber]) => targetIssueNumber)).toEqual([3, 5]);
     expect(github.updateIssueComment).toHaveBeenCalledWith(
       "existing-hitl",
       expect.stringContaining("krutrimbox is paused for Target Issue #3.")
@@ -1098,13 +1098,13 @@ describe("FactoryRun", () => {
 
   test("process() returns \"paused\" at the first HITL Issue without touching the sandbox", async () => {
     const github = new FakeGitHubClient({
-      prds: [prdIssue()],
-      subIssuesByPrd: new Map([
-        [1, [implementationIssue({ number: 4, labels: ["PRD-sub-issue", "ready-for-human"] })]]
+      targetIssues: [targetIssue()],
+      subIssuesByTargetIssue: new Map([
+        [1, [implementationIssue({ number: 4, labels: ["ready-for-human"] })]]
       ])
     });
     const sandbox = new FakeSandboxRunner();
-    const run = new FactoryRun(runDependencies(github, sandbox), prdIssue());
+    const run = new FactoryRun(runDependencies(github, sandbox), targetIssue());
 
     await expect(run.process()).resolves.toBe("paused");
     expect(sandbox.ensureSandbox).not.toHaveBeenCalled();
@@ -1112,23 +1112,23 @@ describe("FactoryRun", () => {
 
   test("process() returns \"issue-error\" when an AFK Issue has an unresolved blocker", async () => {
     const github = new FakeGitHubClient({
-      prds: [prdIssue()],
-      issues: [blockerIssue({ number: 3, title: "Discover PRDs", state: "OPEN" })],
-      subIssuesByPrd: new Map([
+      targetIssues: [targetIssue()],
+      issues: [blockerIssue({ number: 3, title: "Discover target issues", state: "OPEN" })],
+      subIssuesByTargetIssue: new Map([
         [
           1,
           [
             implementationIssue({
               number: 4,
               body: "## Blocked by\n\n- #3",
-              labels: ["PRD-sub-issue", "ready-for-agent"]
+              labels: ["ready-for-agent"]
             })
           ]
         ]
       ])
     });
     const sandbox = new FakeSandboxRunner();
-    const run = new FactoryRun(runDependencies(github, sandbox), prdIssue());
+    const run = new FactoryRun(runDependencies(github, sandbox), targetIssue());
 
     await expect(run.process()).resolves.toBe("issue-error");
     expect(github.closeIssue).not.toHaveBeenCalled();
@@ -1137,18 +1137,18 @@ describe("FactoryRun", () => {
 
   test("logs the AFK failure comment URL when an AFK Issue fails", async () => {
     const github = new FakeGitHubClient({
-      prds: [prdIssue()],
-      subIssuesByPrd: new Map([
+      targetIssues: [targetIssue()],
+      subIssuesByTargetIssue: new Map([
         [
           1,
-          [implementationIssue({ number: 4, labels: ["PRD-sub-issue", "ready-for-agent"] })]
+          [implementationIssue({ number: 4, labels: ["ready-for-agent"] })]
         ]
       ])
     });
     const sandbox = new FakeSandboxRunner();
     sandbox.runAfkIssue.mockRejectedValueOnce(new Error("boom"));
     const logger = { log: vi.fn() };
-    const run = new FactoryRun(runDependencies(github, sandbox, logger), prdIssue());
+    const run = new FactoryRun(runDependencies(github, sandbox, logger), targetIssue());
 
     await expect(run.process()).resolves.toBe("issue-error");
     expect(logger.log).toHaveBeenCalledWith(
@@ -1158,25 +1158,25 @@ describe("FactoryRun", () => {
 
   test("process() returns \"completed\" when every Implementation Issue is already resolved", async () => {
     const github = new FakeGitHubClient({
-      prds: [prdIssue()],
+      targetIssues: [targetIssue()],
       pullRequests: [{ number: 10, isDraft: true, labels: [{ name: "krutrimbox" }] }],
-      subIssuesByPrd: new Map([
-        [1, [implementationIssue({ number: 3, labels: ["PRD-sub-issue", "ready-for-agent"] })]]
+      subIssuesByTargetIssue: new Map([
+        [1, [implementationIssue({ number: 3, labels: ["ready-for-agent"] })]]
       ]),
       branchCommitMessages: ["Bootstrap\n\nRefs #3"]
     });
     const sandbox = new FakeSandboxRunner();
-    const run = new FactoryRun(runDependencies(github, sandbox), prdIssue());
+    const run = new FactoryRun(runDependencies(github, sandbox), targetIssue());
 
     await expect(run.process()).resolves.toBe("completed");
     expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: "krutrimbox-issue-1" });
   });
 
   test("exposes the deterministic Target Issue branch and sandbox as run invariants", () => {
-    const github = new FakeGitHubClient({ prds: [prdIssue({ number: 7 })] });
+    const github = new FakeGitHubClient({ targetIssues: [targetIssue({ number: 7 })] });
     const run = new FactoryRun(
       runDependencies(github, new FakeSandboxRunner()),
-      prdIssue({ number: 7 })
+      targetIssue({ number: 7 })
     );
 
     expect(run.branchName).toBe("krutrimbox/issue-7");
@@ -1185,8 +1185,8 @@ describe("FactoryRun", () => {
 });
 
 describe("PrdPullRequest", () => {
-  const sequence = buildImplementationSequence(prdIssue(), [
-    implementationIssue({ number: 3, title: "Bootstrap", labels: ["PRD-sub-issue", "ready-for-agent"] })
+  const sequence = buildImplementationSequence(targetIssue(), [
+    implementationIssue({ number: 3, title: "Bootstrap", labels: ["ready-for-agent"] })
   ], new Set([3]));
 
   function prModule(github: FakeGitHubClient) {
@@ -1194,19 +1194,19 @@ describe("PrdPullRequest", () => {
       github,
       fixtureTemplates,
       { log: vi.fn() },
-      prdIssue(),
+      targetIssue(),
       "krutrimbox/issue-1",
       "krutrimbox-issue-1"
     );
   }
 
   test("ensureReflectsSequence creates a draft Target Issue Pull Request and applies only the krutrimbox label", async () => {
-    const github = new FakeGitHubClient({ prds: [prdIssue()] });
+    const github = new FakeGitHubClient({ targetIssues: [targetIssue()] });
 
     await prModule(github).ensureReflectsSequence(sequence, new Set([3]));
 
     expect(github.createDraftPullRequest).toHaveBeenCalledWith({
-      title: "krutrimbox #1: PRD: krutrimbox MVP",
+      title: "krutrimbox #1: Target Issue: krutrimbox MVP",
       body: expect.stringContaining("- [x] #3 - Bootstrap"),
       head: "krutrimbox/issue-1",
       base: "main",
@@ -1219,7 +1219,7 @@ describe("PrdPullRequest", () => {
 
   test("ensureReflectsSequence updates an existing Target Issue Pull Request and re-applies only the krutrimbox label", async () => {
     const github = new FakeGitHubClient({
-      prds: [prdIssue()],
+      targetIssues: [targetIssue()],
       pullRequests: [{ number: 12, isDraft: true, labels: [{ name: "krutrimbox" }, { name: "extra" }] }]
     });
 
@@ -1234,7 +1234,7 @@ describe("PrdPullRequest", () => {
   });
 
   test("routeForReview requests review from the Target Issue Author when distinct from the PR Author", async () => {
-    const github = new FakeGitHubClient({ prds: [prdIssue()] });
+    const github = new FakeGitHubClient({ targetIssues: [targetIssue()] });
     github.getAuthenticatedUser.mockResolvedValue("factory-bot");
 
     await prModule(github).routeForReview(10, "jd-solanki");
@@ -1245,7 +1245,7 @@ describe("PrdPullRequest", () => {
   });
 
   test("routeForReview tags the Target Issue Author for self-review when they are the PR Author", async () => {
-    const github = new FakeGitHubClient({ prds: [prdIssue()] });
+    const github = new FakeGitHubClient({ targetIssues: [targetIssue()] });
     github.getAuthenticatedUser.mockResolvedValue("jd-solanki");
 
     await prModule(github).routeForReview(10, "jd-solanki");
@@ -1272,9 +1272,9 @@ class FakeGitHubClient implements GitHubClient {
   public readonly getIssueUrl = vi.fn(async (issueNumber: number) => {
     return `https://github.com/jd-solanki/krutrimbox/issues/${issueNumber}`;
   });
-  public readonly listReadyTargetIssues = vi.fn(async () => this.prds);
-  public readonly getAttachedSubIssues = vi.fn(async (prdNumber: number) => {
-    return this.subIssuesByPrd.get(prdNumber) ?? [];
+  public readonly listReadyTargetIssues = vi.fn(async () => this.targetIssues);
+  public readonly getAttachedSubIssues = vi.fn(async (targetIssueNumber: number) => {
+    return this.subIssuesByTargetIssue.get(targetIssueNumber) ?? [];
   });
   public readonly listIssueComments = vi.fn(async (issueNumber: number) => {
     return this.comments.get(issueNumber) ?? [];
@@ -1327,44 +1327,44 @@ class FakeGitHubClient implements GitHubClient {
   public readonly markPullRequestReadyForReview = vi.fn(async () => undefined);
   public readonly requestPullRequestReview = vi.fn(async () => undefined);
 
-  public readonly prds: GitHubIssue[];
+  public readonly targetIssues: GitHubIssue[];
   public readonly issues = new Map<number, GitHubIssue>();
-  public readonly subIssuesByPrd: Map<number, GitHubIssue[]>;
+  public readonly subIssuesByTargetIssue: Map<number, GitHubIssue[]>;
   public readonly comments: Map<number, GitHubComment[]>;
   public readonly pullRequests: GitHubPullRequest[];
   public readonly branchCommitMessages: string[];
   public readonly pullRequestBodies: string[] = [];
 
   public constructor({
-    prds,
+    targetIssues,
     issues = [],
-    subIssuesByPrd = new Map(),
+    subIssuesByTargetIssue = new Map(),
     comments = new Map(),
     pullRequests = [],
     branchCommitMessages = []
   }: {
-    prds: GitHubIssue[];
+    targetIssues: GitHubIssue[];
     issues?: GitHubIssue[];
-    subIssuesByPrd?: Map<number, GitHubIssue[]>;
+    subIssuesByTargetIssue?: Map<number, GitHubIssue[]>;
     comments?: Map<number, GitHubComment[]>;
     pullRequests?: GitHubPullRequest[];
     branchCommitMessages?: string[];
   }) {
-    this.prds = prds;
-    this.subIssuesByPrd = subIssuesByPrd;
+    this.targetIssues = targetIssues;
+    this.subIssuesByTargetIssue = subIssuesByTargetIssue;
     this.comments = comments;
     this.pullRequests = pullRequests;
     this.branchCommitMessages = branchCommitMessages;
 
-    for (const prd of prds) {
-      this.issues.set(prd.number, prd);
+    for (const targetIssue of targetIssues) {
+      this.issues.set(targetIssue.number, targetIssue);
     }
 
     for (const issue of issues) {
       this.issues.set(issue.number, issue);
     }
 
-    for (const subIssues of subIssuesByPrd.values()) {
+    for (const subIssues of subIssuesByTargetIssue.values()) {
       for (const issue of subIssues) {
         this.issues.set(issue.number, issue);
       }
@@ -1414,20 +1414,20 @@ function fakeLockStore({ locked = false }: { locked?: boolean } = {}): PrdLockSt
   };
 }
 
-function recordingLockStore({ lockedPrds = new Set<number>() }: { lockedPrds?: Set<number> } = {}) {
+function recordingLockStore({ lockedTargetIssues = new Set<number>() }: { lockedTargetIssues?: Set<number> } = {}) {
   const store = {
     acquired: [] as number[],
     released: [] as number[],
-    acquire: vi.fn(async (prdNumber: number) => {
-      store.acquired.push(prdNumber);
+    acquire: vi.fn(async (targetIssueNumber: number) => {
+      store.acquired.push(targetIssueNumber);
 
-      if (lockedPrds.has(prdNumber)) {
+      if (lockedTargetIssues.has(targetIssueNumber)) {
         return null;
       }
 
       const lock: PrdLock = {
         release: vi.fn(async () => {
-          store.released.push(prdNumber);
+          store.released.push(targetIssueNumber);
         })
       };
       return lock;
@@ -1463,7 +1463,7 @@ const fixtureTemplates: TemplateRenderer = {
   }
 };
 
-function prdIssue({
+function targetIssue({
   number = 1,
   author = "jd-solanki",
   body = ""
@@ -1474,7 +1474,7 @@ function prdIssue({
 } = {}): GitHubIssue {
   return {
     number,
-    title: "PRD: krutrimbox MVP",
+    title: "Target Issue: krutrimbox MVP",
     body,
     state: "OPEN",
     author: { login: author },
@@ -1560,16 +1560,16 @@ describe("run logging end-to-end", () => {
       await vi.importActual<typeof import("../src/lib/factory/run-log")>("../src/lib/factory/run-log");
 
     const github = new FakeGitHubClient({
-      prds: [prdIssue({ body: "Full parent PRD body" })],
-      subIssuesByPrd: new Map([
+      targetIssues: [targetIssue({ body: "Full parent Target Issue body" })],
+      subIssuesByTargetIssue: new Map([
         [
           1,
           [
             implementationIssue({
               number: 4,
               title: "Factory loop",
-              body: "## Parent\n\nParent PRD: #1\n\nCurrent issue body",
-              labels: ["PRD-sub-issue", "ready-for-agent"]
+              body: "## Parent\n\nParent Target Issue: #1\n\nCurrent issue body",
+              labels: ["ready-for-agent"]
             })
           ]
         ]
