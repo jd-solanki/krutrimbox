@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
-import { createProgram, type CliDispatch } from "../src/index";
+import { Command } from "commander";
+import { createRunCommand, type CliDispatch } from "../src/commands/run";
 
 function createTestDispatch(): CliDispatch {
   return {
@@ -11,7 +12,7 @@ function createTestDispatch(): CliDispatch {
 describe("krutrimbox CLI", () => {
   test("dispatches an Explicit Run with a numeric PRD number", async () => {
     const dispatch = createTestDispatch();
-    const program = createProgram(dispatch);
+    const program = createTestProgram(dispatch);
 
     await program.parseAsync(["node", "kb", "run", "--prd", "42"]);
 
@@ -21,7 +22,7 @@ describe("krutrimbox CLI", () => {
 
   test("dispatches a Batch Run when no PRD number is provided", async () => {
     const dispatch = createTestDispatch();
-    const program = createProgram(dispatch);
+    const program = createTestProgram(dispatch);
 
     await program.parseAsync(["node", "kb", "run"]);
 
@@ -29,3 +30,9 @@ describe("krutrimbox CLI", () => {
     expect(dispatch.runExplicit).not.toHaveBeenCalled();
   });
 });
+
+function createTestProgram(dispatch: CliDispatch): Command {
+  const program = new Command("kb");
+  program.addCommand(createRunCommand(dispatch));
+  return program;
+}
