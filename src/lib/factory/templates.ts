@@ -22,17 +22,21 @@ Sandbox: \`{{prd_sandbox}}\`
 `,
   "templates/hitlpause-comment.md": `<!-- krutrimbox:hitl-prd-{{prd_number}}-issue-{{issue_number}} -->
 
-@{{prd_author}} krutrimbox is paused for PRD #{{prd_number}}.
+@{{prd_author}} krutrimbox is paused for Target Issue #{{prd_number}}.
 
 The next required issue is HITL:
 
 - #{{issue_number}} - {{issue_title}}
 
-Please resolve the HITL issue and close it, then rerun krutrimbox for this PRD.
+> [!IMPORTANT]
+> When the HITL work is finished, push a \`Refs #{{issue_number}}\` commit to the Target Issue Branch \`{{prd_branch}}\`.
+> An empty commit is acceptable for non-code work. Then rerun krutrimbox:
 
 \`\`\`sh
 kb run --issue {{prd_number}}
 \`\`\`
+
+Sandbox: \`{{prd_sandbox}}\`
 `,
   "templates/afk-error-comment.md": `<!-- krutrimbox:afk-error-issue-{{issue_number}} -->
 

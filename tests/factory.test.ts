@@ -261,10 +261,15 @@ describe("Krutrimbox", () => {
 
     await factory.runExplicit(1);
 
+    const updatedBody = github.updateIssueComment.mock.calls[0]?.[1] ?? "";
     expect(github.updateIssueComment).toHaveBeenCalledWith(
       "100",
-      expect.stringContaining("@jd-solanki krutrimbox is paused for PRD #1.")
+      expect.stringContaining("> [!IMPORTANT]")
     );
+    expect(updatedBody).toContain("push a `Refs #4` commit");
+    expect(updatedBody).toContain("empty commit is acceptable");
+    expect(updatedBody).toContain("Target Issue Branch `krutrimbox/issue-1`");
+    expect(updatedBody).toContain("kb run --issue 1");
     expect(github.createIssueComment).not.toHaveBeenCalled();
     expect(sandbox.ensureSandbox).not.toHaveBeenCalled();
   });
@@ -472,6 +477,102 @@ describe("Krutrimbox", () => {
     expect(github.pullRequestBodies.at(-1)).toContain("- [x] #4 - Already committed");
     expect(github.pullRequestBodies.at(-1)).toContain("- [x] #5 - Closed but not committed");
     expect(github.closeIssue).not.toHaveBeenCalled();
+  });
+
+  test("resumes past a HITL Implementation Issue once its Refs footer is on the branch", async () => {
+    const github = new FakeGitHubClient({
+      prds: [prdIssue()],
+      branchCommitMessages: ["Human checkpoint complete\n\nRefs #4"],
+      subIssuesByPrd: new Map([
+        [
+          1,
+          [
+            implementationIssue({
+              number: 4,
+              title: "Human checkpoint",
+              labels: ["ready-for-human"]
+            }),
+            implementationIssue({
+              number: 5,
+              title: "Continue after HITL",
+              labels: ["ready-for-agent"]
+            })
+          ]
+        ]
+      ])
+    });
+    const sandbox = new FakeSandboxRunner();
+    const factory = new Krutrimbox({
+      github,
+      sandbox,
+      lockStore: fakeLockStore(),
+      templates: fixtureTemplates
+    });
+
+    await factory.runExplicit(1);
+
+    expect(github.createIssueComment).not.toHaveBeenCalledWith(
+      1,
+      expect.stringContaining("krutrimbox is paused")
+    );
+    expect(sandbox.runAfkIssue).toHaveBeenCalledOnce();
+    expect(sandbox.commitAndPush).toHaveBeenCalledWith({
+      sandboxName: "krutrimbox-issue-1",
+      branchName: "krutrimbox/issue-1",
+      issueNumber: 5
+    });
+  });
+
+  test("re-pauses at the same HITL Implementation Issue until its Refs footer exists", async () => {
+    const github = new FakeGitHubClient({
+      prds: [prdIssue()],
+      subIssuesByPrd: new Map([
+        [
+          1,
+          [
+            implementationIssue({
+              number: 4,
+              title: "Human checkpoint",
+              labels: ["ready-for-human"]
+            }),
+            implementationIssue({
+              number: 5,
+              title: "Dependent AFK work",
+              labels: ["ready-for-agent"]
+            })
+          ]
+        ]
+      ]),
+      comments: new Map([
+        [
+          1,
+          [
+            {
+              id: "100",
+              body: "<!-- krutrimbox:hitl-prd-1-issue-4 -->\nold body",
+              url: "https://github.com/jd-solanki/krutrimbox/issues/1#issuecomment-100"
+            }
+          ]
+        ]
+      ])
+    });
+    const sandbox = new FakeSandboxRunner();
+    const factory = new Krutrimbox({
+      github,
+      sandbox,
+      lockStore: fakeLockStore(),
+      templates: fixtureTemplates
+    });
+
+    await factory.runExplicit(1);
+
+    expect(github.updateIssueComment).toHaveBeenCalledWith(
+      "100",
+      expect.stringContaining("push a `Refs #4` commit")
+    );
+    expect(github.createIssueComment).not.toHaveBeenCalled();
+    expect(sandbox.runAfkIssue).not.toHaveBeenCalled();
+    expect(sandbox.commitAndPush).not.toHaveBeenCalled();
   });
 
   test("reuses an existing Target Issue Pull Request by deterministic branch", async () => {
@@ -770,7 +871,7 @@ describe("Krutrimbox", () => {
     expect(github.getAttachedSubIssues).toHaveBeenCalledWith(2);
     expect(github.createIssueComment).toHaveBeenCalledWith(
       1,
-      expect.stringContaining("krutrimbox is paused for PRD #1.")
+      expect.stringContaining("krutrimbox is paused for Target Issue #1.")
     );
     expect(github.closeIssue).not.toHaveBeenCalled();
   });
@@ -962,11 +1063,11 @@ describe("Krutrimbox MVP smoke", () => {
     expect(github.getAttachedSubIssues.mock.calls.map(([prdNumber]) => prdNumber)).toEqual([3, 5]);
     expect(github.updateIssueComment).toHaveBeenCalledWith(
       "existing-hitl",
-      expect.stringContaining("krutrimbox is paused for PRD #3.")
+      expect.stringContaining("krutrimbox is paused for Target Issue #3.")
     );
     expect(github.createIssueComment).not.toHaveBeenCalledWith(
       3,
-      expect.stringContaining("krutrimbox is paused for PRD #3.")
+      expect.stringContaining("krutrimbox is paused for Target Issue #3.")
     );
     expect(sandbox.commitAndPush).toHaveBeenCalledWith({
       sandboxName: "krutrimbox-issue-5",
@@ -1340,7 +1441,7 @@ const fixtureTemplates: TemplateRenderer = {
   async render(templatePath, values) {
     const templates: Record<string, string> = {
       "templates/hitlpause-comment.md":
-        "<!-- krutrimbox:hitl-prd-{{prd_number}}-issue-{{issue_number}} -->\n\n@{{prd_author}} krutrimbox is paused for PRD #{{prd_number}}.\n\n- #{{issue_number}} - {{issue_title}}\n\nBranch: `{{prd_branch}}`\nSandbox: `{{prd_sandbox}}`",
+        "<!-- krutrimbox:hitl-prd-{{prd_number}}-issue-{{issue_number}} -->\n\n@{{prd_author}} krutrimbox is paused for Target Issue #{{prd_number}}.\n\nThe next required issue is HITL:\n\n- #{{issue_number}} - {{issue_title}}\n\n> [!IMPORTANT]\n> When the HITL work is finished, push a `Refs #{{issue_number}}` commit to the Target Issue Branch `{{prd_branch}}`.\n> An empty commit is acceptable for non-code work. Then rerun krutrimbox:\n\n```sh\nkb run --issue {{prd_number}}\n```\n\nSandbox: `{{prd_sandbox}}`",
       "templates/afk-error-comment.md":
         "<!-- krutrimbox:afk-error-issue-{{issue_number}} -->\n\n{{error_summary}}\n\nPRD: #{{prd_number}}\nBranch: `{{prd_branch}}`\nSandbox: `{{prd_sandbox}}`",
       "templates/pr-body.md":
