@@ -129,7 +129,7 @@ The Docker sandbox used by krutrimbox while delivering one Target Issue. It may 
 _Avoid_: container, VM, issue sandbox
 
 **krutrimbox Sandbox Template**:
-The custom Docker Sandboxes template image used for Target Issue Sandboxes, one per Agent Backend. Each is built from a single parameterized `Dockerfile.sandbox` that extends the Agent Backend's stock Docker template (`docker/sandbox-templates:codex` or `docker/sandbox-templates:claude`) with repository-required tools, currently `pnpm`, so fresh Sandboxed Agent sessions have the same package-manager surface krutrimbox expects.
+The custom Docker Sandboxes template image used for Target Issue Sandboxes, one per Agent Backend. Each is built from a single parameterized `Dockerfile.sandbox` that extends the Agent Backend's stock Docker template (`docker/sandbox-templates:codex` or `docker/sandbox-templates:claude-code`) with repository-required tools, currently `pnpm`, so fresh Sandboxed Agent sessions have the same package-manager surface krutrimbox expects.
 _Avoid_: Dockerfile, base image, custom container
 
 **Sandbox Template Store**:

@@ -22,7 +22,7 @@
     "sandbox:build-template:codex": "docker build -f Dockerfile.sandbox --build-arg BASE=docker/sandbox-templates:codex -t krutrimbox-codex:pnpm .",
     "sandbox:load-template:codex": "docker image save krutrimbox-codex:pnpm -o /tmp/krutrimbox-codex-pnpm.tar && sbx template load /tmp/krutrimbox-codex-pnpm.tar",
     "sandbox:prepare-template:codex": "pnpm sandbox:build-template:codex && pnpm sandbox:load-template:codex",
-    "sandbox:build-template:claude": "docker build -f Dockerfile.sandbox --build-arg BASE=docker/sandbox-templates:claude -t krutrimbox-claude:pnpm .",
+    "sandbox:build-template:claude": "docker build -f Dockerfile.sandbox --build-arg BASE=docker/sandbox-templates:claude-code -t krutrimbox-claude:pnpm .",
     "sandbox:load-template:claude": "docker image save krutrimbox-claude:pnpm -o /tmp/krutrimbox-claude-pnpm.tar && sbx template load /tmp/krutrimbox-claude-pnpm.tar",
     "sandbox:prepare-template:claude": "pnpm sandbox:build-template:claude && pnpm sandbox:load-template:claude",
     "sandbox:prepare-template": "pnpm sandbox:prepare-template:codex && pnpm sandbox:prepare-template:claude",

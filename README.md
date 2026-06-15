@@ -177,7 +177,7 @@ sbx policy log
 
 Docker's stock agent sandbox images include the agent CLI and Node.js tooling, but this repository expects `pnpm` to be available directly inside the sandbox. We use a custom Docker Sandboxes template per Agent Backend so every fresh Target Issue Sandbox has the same toolchain.
 
-A single parameterized `Dockerfile.sandbox` installs `pnpm@10.23.0` on top of the agent's stock template, selected by the `BASE` build argument (`docker/sandbox-templates:codex` or `docker/sandbox-templates:claude`).
+A single parameterized `Dockerfile.sandbox` installs `pnpm@10.23.0` on top of the agent's stock template, selected by the `BASE` build argument (`docker/sandbox-templates:codex` or `docker/sandbox-templates:claude-code`).
 
 Prepare only the agents you run. For Codex:
 
