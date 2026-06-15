@@ -5,7 +5,7 @@ import type {
   GitHubPullRequest
 } from "../github";
 import { KRUTRIMBOX_LABEL } from "./constants";
-import { formatImplementationChecklist } from "./format";
+import { formatClosingKeywords, formatImplementationChecklist } from "./format";
 import type { ImplementationSequence } from "./sequence";
 import type { TemplateRenderer } from "./template-renderer";
 
@@ -35,9 +35,9 @@ export class PrdPullRequest {
 
   public async ensureReflectsSequence(
     sequence: ImplementationSequence,
-    closedIssueNumbers: Set<number>
+    doneSet: Set<number>
   ): Promise<void> {
-    const body = await this.renderBody(sequence, closedIssueNumbers);
+    const body = await this.renderBody(sequence, doneSet);
     const existing = await this.github.findPullRequestByHead(this.branchName);
 
     if (existing) {
@@ -81,13 +81,14 @@ export class PrdPullRequest {
 
   private async renderBody(
     sequence: ImplementationSequence,
-    closedIssueNumbers: Set<number>
+    doneSet: Set<number>
   ): Promise<string> {
     return this.templates.render("templates/pr-body.md", {
       prd_number: this.prd.number,
       prd_branch: this.branchName,
       prd_sandbox: this.sandboxName,
-      implementation_issue_checklist: formatImplementationChecklist(sequence, closedIssueNumbers)
+      closing_keywords: formatClosingKeywords(this.prd.number, sequence),
+      implementation_issue_checklist: formatImplementationChecklist(sequence, doneSet)
     });
   }
 }

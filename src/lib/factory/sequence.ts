@@ -30,7 +30,8 @@ export interface ImplementationSequence {
 
 export function buildImplementationSequence(
   prdNumber: number,
-  attachedSubIssues: GitHubIssue[]
+  attachedSubIssues: GitHubIssue[],
+  doneSet: Set<number>
 ): ImplementationSequence {
   const openIssues: ImplementationIssue[] = [];
   const resolvedIssues: ResolvedIssue[] = [];
@@ -42,7 +43,7 @@ export function buildImplementationSequence(
       continue;
     }
 
-    if (issue.state === "CLOSED") {
+    if (doneSet.has(issue.number)) {
       resolvedIssues.push({
         number: issue.number,
         title: issue.title,

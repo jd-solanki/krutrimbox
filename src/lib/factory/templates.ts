@@ -9,7 +9,7 @@ export const TEMPLATES: Record<string, string> = {
 
 ## Parent PRD
 
-Closes #{{prd_number}}
+{{closing_keywords}}
 
 ## Implementation Issues
 

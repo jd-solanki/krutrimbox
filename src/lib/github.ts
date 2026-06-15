@@ -44,7 +44,6 @@ export interface GitHubClient {
   listIssueComments(issueNumber: number): Promise<GitHubComment[]>;
   createIssueComment(issueNumber: number, body: string): Promise<GitHubComment>;
   updateIssueComment(commentId: string, body: string): Promise<GitHubComment>;
-  closeIssue(issueNumber: number): Promise<void>;
   getDefaultBranch(): Promise<string>;
   findPullRequestByHead(branchName: string): Promise<GitHubPullRequest | null>;
   listBranchCommitMessages(branchName: string): Promise<string[]>;
@@ -272,10 +271,6 @@ export function createGitHubCliClient(
         body: comment.body ?? "",
         url: comment.html_url ?? `https://github.com/${formatRepository(repo)}/issues/comments/${commentId}`
       };
-    },
-
-    async closeIssue(issueNumber: number): Promise<void> {
-      await runGh(["issue", "close", String(issueNumber)]);
     },
 
     async getDefaultBranch(): Promise<string> {

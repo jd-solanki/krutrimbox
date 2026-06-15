@@ -40,7 +40,7 @@ vi.mock("../src/lib/factory/run-log", () => ({
 }));
 
 describe("buildImplementationSequence", () => {
-  test("validates, orders, and skips resolved Implementation Issues", () => {
+  test("validates, orders, and skips Implementation Issues in the Done Set", () => {
     const sequence = buildImplementationSequence(1, [
       implementationIssue({
         number: 5,
@@ -50,8 +50,7 @@ describe("buildImplementationSequence", () => {
       implementationIssue({
         number: 3,
         title: "Bootstrap",
-        state: "CLOSED",
-        labels: ["PRD-sub-issue"]
+        labels: ["PRD-sub-issue", "ready-for-agent"]
       }),
       implementationIssue({
         number: 4,
@@ -69,7 +68,7 @@ describe("buildImplementationSequence", () => {
         title: "Not an implementation issue",
         labels: ["ready-for-agent"]
       })
-    ]);
+    ], new Set([3]));
 
     expect(sequence.openIssues.map((issue) => [issue.number, issue.kind])).toEqual([
       [4, "afk"],
@@ -85,7 +84,7 @@ describe("buildImplementationSequence", () => {
           number: 8,
           labels: ["PRD-sub-issue", "ready-for-agent", "ready-for-human"]
         })
-      ])
+      ], new Set())
     ).toThrow(
       "Implementation Issue #8 must have exactly one open state label: ready-for-agent or ready-for-human."
     );
@@ -278,9 +277,10 @@ describe("Krutrimbox", () => {
     expect(github.closeIssue).not.toHaveBeenCalled();
   });
 
-  test("runs an AFK issue through sandbox, commit, PR maintenance, and issue closure", async () => {
+  test("runs AFK issues through sandbox, commit, and PR maintenance without closing issues", async () => {
     const github = new FakeGitHubClient({
       prds: [prdIssue({ body: "Full parent PRD body" })],
+      branchCommitMessages: ["Bootstrap\n\nRefs #3"],
       subIssuesByPrd: new Map([
         [
           1,
@@ -288,8 +288,7 @@ describe("Krutrimbox", () => {
             implementationIssue({
               number: 3,
               title: "Bootstrap",
-              state: "CLOSED",
-              labels: ["PRD-sub-issue"]
+              labels: ["PRD-sub-issue", "ready-for-agent"]
             }),
             implementationIssue({
               number: 4,
@@ -354,9 +353,52 @@ describe("Krutrimbox", () => {
     expect(github.pullRequestBodies.at(-1)).toContain("- [x] #3 - Bootstrap");
     expect(github.pullRequestBodies.at(-1)).toContain("- [x] #4 - Factory loop");
     expect(github.pullRequestBodies.at(-1)).toContain("- [x] #5 - Final review");
+    expect(github.pullRequestBodies.at(-1)).toContain("Closes #1");
+    expect(github.pullRequestBodies.at(-1)).toContain("Closes #3");
+    expect(github.pullRequestBodies.at(-1)).toContain("Closes #4");
+    expect(github.pullRequestBodies.at(-1)).toContain("Closes #5");
     expect(github.setPullRequestLabels).toHaveBeenCalledWith(10, ["krutrimbox"]);
-    expect(github.closeIssue).toHaveBeenCalledWith(4);
-    expect(github.closeIssue).toHaveBeenCalledWith(5);
+    expect(github.closeIssue).not.toHaveBeenCalled();
+  });
+
+  test("resumes from the Done Set instead of GitHub issue closed state", async () => {
+    const github = new FakeGitHubClient({
+      prds: [prdIssue()],
+      branchCommitMessages: ["Completed first issue\n\nRefs #4"],
+      subIssuesByPrd: new Map([
+        [
+          1,
+          [
+            implementationIssue({
+              number: 4,
+              title: "Already committed",
+              labels: ["PRD-sub-issue", "ready-for-agent"]
+            }),
+            implementationIssue({
+              number: 5,
+              title: "Closed but not committed",
+              state: "CLOSED",
+              labels: ["PRD-sub-issue", "ready-for-agent"]
+            })
+          ]
+        ]
+      ])
+    });
+    const sandbox = new FakeSandboxRunner();
+    const factory = new Krutrimbox({
+      github,
+      sandbox,
+      lockStore: fakeLockStore(),
+      templates: fixtureTemplates
+    });
+
+    await factory.runExplicit(1);
+
+    expect(github.listBranchCommitMessages).toHaveBeenCalledWith("krutrimbox/issue-1");
+    expect(sandbox.commitAndPush.mock.calls.map(([input]) => input.issueNumber)).toEqual([5]);
+    expect(github.pullRequestBodies.at(-1)).toContain("- [x] #4 - Already committed");
+    expect(github.pullRequestBodies.at(-1)).toContain("- [x] #5 - Closed but not committed");
+    expect(github.closeIssue).not.toHaveBeenCalled();
   });
 
   test("reuses an existing Target Issue Pull Request by deterministic branch", async () => {
@@ -400,11 +442,12 @@ describe("Krutrimbox", () => {
         [
           1,
           [
-            implementationIssue({ number: 3, title: "Bootstrap", state: "CLOSED", labels: ["PRD-sub-issue"] }),
-            implementationIssue({ number: 4, title: "Factory loop", state: "CLOSED", labels: ["PRD-sub-issue"] })
+            implementationIssue({ number: 3, title: "Bootstrap", labels: ["PRD-sub-issue", "ready-for-agent"] }),
+            implementationIssue({ number: 4, title: "Factory loop", labels: ["PRD-sub-issue", "ready-for-agent"] })
           ]
         ]
-      ])
+      ]),
+      branchCommitMessages: ["Bootstrap\n\nRefs #3", "Factory loop\n\nRefs #4"]
     });
     const sandbox = new FakeSandboxRunner();
     const factory = new Krutrimbox({
@@ -435,8 +478,9 @@ describe("Krutrimbox", () => {
       prds: [prdIssue()],
       pullRequests: [{ number: 10, isDraft: true, labels: [{ name: "krutrimbox" }] }],
       subIssuesByPrd: new Map([
-        [1, [implementationIssue({ number: 3, title: "Bootstrap", state: "CLOSED", labels: ["PRD-sub-issue"] })]]
+        [1, [implementationIssue({ number: 3, title: "Bootstrap", labels: ["PRD-sub-issue", "ready-for-agent"] })]]
       ]),
+      branchCommitMessages: ["Bootstrap\n\nRefs #3"],
       comments: new Map([
         [
           10,
@@ -474,8 +518,9 @@ describe("Krutrimbox", () => {
       prds: [prdIssue({ author: "jd-solanki" })],
       pullRequests: [{ number: 10, isDraft: true, labels: [{ name: "krutrimbox" }] }],
       subIssuesByPrd: new Map([
-        [1, [implementationIssue({ number: 3, state: "CLOSED", labels: ["PRD-sub-issue"] })]]
-      ])
+        [1, [implementationIssue({ number: 3, labels: ["PRD-sub-issue", "ready-for-agent"] })]]
+      ]),
+      branchCommitMessages: ["Bootstrap\n\nRefs #3"]
     });
     github.getAuthenticatedUser.mockResolvedValue("factory-bot");
     const factory = new Krutrimbox({
@@ -499,8 +544,9 @@ describe("Krutrimbox", () => {
       prds: [prdIssue({ author: "jd-solanki" })],
       pullRequests: [{ number: 10, isDraft: true, labels: [{ name: "krutrimbox" }] }],
       subIssuesByPrd: new Map([
-        [1, [implementationIssue({ number: 3, state: "CLOSED", labels: ["PRD-sub-issue"] })]]
-      ])
+        [1, [implementationIssue({ number: 3, labels: ["PRD-sub-issue", "ready-for-agent"] })]]
+      ]),
+      branchCommitMessages: ["Bootstrap\n\nRefs #3"]
     });
     github.getAuthenticatedUser.mockResolvedValue("jd-solanki");
     const factory = new Krutrimbox({
@@ -524,8 +570,9 @@ describe("Krutrimbox", () => {
       prds: [prdIssue()],
       pullRequests: [{ number: 10, isDraft: true, labels: [{ name: "krutrimbox" }] }],
       subIssuesByPrd: new Map([
-        [1, [implementationIssue({ number: 3, state: "CLOSED", labels: ["PRD-sub-issue"] })]]
-      ])
+        [1, [implementationIssue({ number: 3, labels: ["PRD-sub-issue", "ready-for-agent"] })]]
+      ]),
+      branchCommitMessages: ["Bootstrap\n\nRefs #3"]
     });
     const sandbox = new FakeSandboxRunner();
     const factory = new Krutrimbox({
@@ -545,8 +592,9 @@ describe("Krutrimbox", () => {
       prds: [prdIssue()],
       pullRequests: [{ number: 10, isDraft: true, labels: [{ name: "krutrimbox" }] }],
       subIssuesByPrd: new Map([
-        [1, [implementationIssue({ number: 3, state: "CLOSED", labels: ["PRD-sub-issue"] })]]
-      ])
+        [1, [implementationIssue({ number: 3, labels: ["PRD-sub-issue", "ready-for-agent"] })]]
+      ]),
+      branchCommitMessages: ["Bootstrap\n\nRefs #3"]
     });
     const factory = new Krutrimbox({
       github,
@@ -565,8 +613,9 @@ describe("Krutrimbox", () => {
     const github = new FakeGitHubClient({
       prds: [prdIssue()],
       subIssuesByPrd: new Map([
-        [1, [implementationIssue({ number: 3, state: "CLOSED", labels: ["PRD-sub-issue"] })]]
-      ])
+        [1, [implementationIssue({ number: 3, labels: ["PRD-sub-issue", "ready-for-agent"] })]]
+      ]),
+      branchCommitMessages: ["Bootstrap\n\nRefs #3"]
     });
     const sandbox = new FakeSandboxRunner();
     const factory = new Krutrimbox({
@@ -624,7 +673,7 @@ describe("Krutrimbox", () => {
       1,
       expect.stringContaining("krutrimbox is paused for PRD #1.")
     );
-    expect(github.closeIssue).toHaveBeenCalledWith(5);
+    expect(github.closeIssue).not.toHaveBeenCalled();
   });
 });
 
@@ -636,6 +685,7 @@ describe("Krutrimbox MVP smoke", () => {
   test("explicit run completes ordered AFK issues through PR, final review, and cleanup seams", async () => {
     const github = new FakeGitHubClient({
       prds: [prdIssue({ body: "Full parent PRD smoke fixture" })],
+      branchCommitMessages: ["Bootstrap CLI\n\nRefs #2"],
       issues: [
         blockerIssue({ number: 2, title: "Bootstrap CLI", state: "CLOSED" }),
         blockerIssue({ number: 4, title: "Factory loop", state: "CLOSED" })
@@ -659,8 +709,7 @@ describe("Krutrimbox MVP smoke", () => {
             implementationIssue({
               number: 2,
               title: "Bootstrap CLI",
-              state: "CLOSED",
-              labels: ["PRD-sub-issue"]
+              labels: ["PRD-sub-issue", "ready-for-agent"]
             })
           ]
         ]
@@ -716,7 +765,7 @@ describe("Krutrimbox MVP smoke", () => {
     expect(String(sandbox.runAfkIssue.mock.calls[1]?.[0].prompt)).toContain("- #4 - Factory loop (CLOSED)");
     expect(String(sandbox.runAfkIssue.mock.calls[1]?.[0].prompt)).not.toContain("Final review (afk");
     expect(sandbox.commitAndPush.mock.calls.map(([input]) => input.issueNumber)).toEqual([4, 6]);
-    expect(github.closeIssue.mock.calls.map(([issueNumber]) => issueNumber)).toEqual([4, 6]);
+    expect(github.closeIssue).not.toHaveBeenCalled();
     expect(github.createDraftPullRequest).toHaveBeenCalledWith({
       title: "krutrimbox #1: PRD: krutrimbox MVP",
       body: expect.stringContaining("Closes #1"),
@@ -737,11 +786,8 @@ describe("Krutrimbox MVP smoke", () => {
     expect(github.requestPullRequestReview).toHaveBeenCalledWith(10, "jd-solanki");
     expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: "krutrimbox-issue-1" });
 
-    const firstCommitOrder = sandbox.commitAndPush.mock.invocationCallOrder[0];
-    const firstCloseOrder = github.closeIssue.mock.invocationCallOrder[0];
     const reviewOrder = sandbox.runFinalReview.mock.invocationCallOrder[0];
     const readyOrder = github.markPullRequestReadyForReview.mock.invocationCallOrder[0];
-    expect(firstCommitOrder).toBeLessThan(firstCloseOrder);
     expect(reviewOrder).toBeLessThan(readyOrder);
   });
 
@@ -828,7 +874,7 @@ describe("Krutrimbox MVP smoke", () => {
       branchName: "krutrimbox/issue-5",
       issueNumber: 50
     });
-    expect(github.closeIssue).toHaveBeenCalledWith(50);
+    expect(github.closeIssue).not.toHaveBeenCalled();
     expect(github.getAttachedSubIssues).not.toHaveBeenCalledWith(9);
 
     const pauseOrder = github.updateIssueComment.mock.invocationCallOrder[0];
@@ -915,8 +961,9 @@ describe("FactoryRun", () => {
       prds: [prdIssue()],
       pullRequests: [{ number: 10, isDraft: true, labels: [{ name: "krutrimbox" }] }],
       subIssuesByPrd: new Map([
-        [1, [implementationIssue({ number: 3, state: "CLOSED", labels: ["PRD-sub-issue"] })]]
-      ])
+        [1, [implementationIssue({ number: 3, labels: ["PRD-sub-issue", "ready-for-agent"] })]]
+      ]),
+      branchCommitMessages: ["Bootstrap\n\nRefs #3"]
     });
     const sandbox = new FakeSandboxRunner();
     const run = new FactoryRun(runDependencies(github, sandbox), prdIssue());
@@ -939,8 +986,8 @@ describe("FactoryRun", () => {
 
 describe("PrdPullRequest", () => {
   const sequence = buildImplementationSequence(1, [
-    implementationIssue({ number: 3, title: "Bootstrap", state: "CLOSED", labels: ["PRD-sub-issue"] })
-  ]);
+    implementationIssue({ number: 3, title: "Bootstrap", labels: ["PRD-sub-issue", "ready-for-agent"] })
+  ], new Set([3]));
 
   function prModule(github: FakeGitHubClient) {
     return new PrdPullRequest(
@@ -965,6 +1012,8 @@ describe("PrdPullRequest", () => {
       base: "main",
       labels: ["krutrimbox"]
     });
+    expect(github.pullRequestBodies.at(-1)).toContain("Closes #1");
+    expect(github.pullRequestBodies.at(-1)).toContain("Closes #3");
     expect(github.setPullRequestLabels).toHaveBeenCalledWith(10, ["krutrimbox"]);
   });
 
@@ -1062,7 +1111,7 @@ class FakeGitHubClient implements GitHubClient {
   });
   public readonly getDefaultBranch = vi.fn(async () => "main");
   public readonly findPullRequestByHead = vi.fn(async () => this.pullRequests[0] ?? null);
-  public readonly listBranchCommitMessages = vi.fn(async () => []);
+  public readonly listBranchCommitMessages = vi.fn(async () => this.branchCommitMessages);
   public readonly createDraftPullRequest = vi.fn(async (input: CreatePullRequestInput) => {
     this.pullRequestBodies.push(input.body);
     const pullRequest = { number: 10, isDraft: true, labels: input.labels.map((name) => ({ name })) };
@@ -1083,6 +1132,7 @@ class FakeGitHubClient implements GitHubClient {
   public readonly subIssuesByPrd: Map<number, GitHubIssue[]>;
   public readonly comments: Map<number, GitHubComment[]>;
   public readonly pullRequests: GitHubPullRequest[];
+  public readonly branchCommitMessages: string[];
   public readonly pullRequestBodies: string[] = [];
 
   public constructor({
@@ -1090,18 +1140,21 @@ class FakeGitHubClient implements GitHubClient {
     issues = [],
     subIssuesByPrd = new Map(),
     comments = new Map(),
-    pullRequests = []
+    pullRequests = [],
+    branchCommitMessages = []
   }: {
     prds: GitHubIssue[];
     issues?: GitHubIssue[];
     subIssuesByPrd?: Map<number, GitHubIssue[]>;
     comments?: Map<number, GitHubComment[]>;
     pullRequests?: GitHubPullRequest[];
+    branchCommitMessages?: string[];
   }) {
     this.prds = prds;
     this.subIssuesByPrd = subIssuesByPrd;
     this.comments = comments;
     this.pullRequests = pullRequests;
+    this.branchCommitMessages = branchCommitMessages;
 
     for (const prd of prds) {
       this.issues.set(prd.number, prd);
@@ -1192,7 +1245,7 @@ const fixtureTemplates: TemplateRenderer = {
       "templates/afk-error-comment.md":
         "<!-- krutrimbox:afk-error-issue-{{issue_number}} -->\n\n{{error_summary}}\n\nPRD: #{{prd_number}}\nBranch: `{{prd_branch}}`\nSandbox: `{{prd_sandbox}}`",
       "templates/pr-body.md":
-        "## Parent PRD\n\nCloses #{{prd_number}}\n\n## Implementation Issues\n\n{{implementation_issue_checklist}}\n\n## krutrimbox\n\nBranch: `{{prd_branch}}`\nSandbox: `{{prd_sandbox}}`",
+        "## Parent PRD\n\n{{closing_keywords}}\n\n## Implementation Issues\n\n{{implementation_issue_checklist}}\n\n## krutrimbox\n\nBranch: `{{prd_branch}}`\nSandbox: `{{prd_sandbox}}`",
       "prompts/afk-issue.md":
         "Do not create commits or push branches.\nWork on `{{prd_branch}}`.\n\n## Parent PRD\n{{prd_body}}\n\n## Current AFK Issue\n{{issue_body}}\n\n## Earlier Implementation Issues\n{{earlier_issues}}\n\n## Later Implementation Issues\n{{later_issues}}",
       "templates/final-review-comment.md":

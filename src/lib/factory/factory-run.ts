@@ -1,4 +1,5 @@
 import type { GitHubClient, GitHubIssue } from "../github";
+import { fetchDoneSet } from "./done-set";
 import { formatEarlierIssues, formatLaterIssues } from "./format";
 import { PrdPullRequest } from "./prd-pull-request";
 import type { SandboxRunner } from "./sandbox-runner";
@@ -37,9 +38,9 @@ type IssueOutcome = "completed" | "error";
 
 // One execution attempt by krutrimbox against a single locked PRD. The
 // PRD Branch and PRD Sandbox names are derived once and held as invariants;
-// `closedIssueNumbers` and `processedIssues` are intra-run bookkeeping rebuilt
-// fresh every run (ADR-0002), never persisted. Single-use: call `process()`
-// once.
+// `doneSet` and `processedIssues` are intra-run bookkeeping rebuilt fresh every
+// run from the branch's Refs footers (ADR-0015), never persisted separately.
+// Single-use: call `process()` once.
 export class FactoryRun {
   private readonly github: GitHubClient;
   private readonly sandbox: SandboxRunner;
@@ -49,7 +50,7 @@ export class FactoryRun {
   public readonly branchName: string;
   public readonly sandboxName: string;
   private readonly prdPullRequest: PrdPullRequest;
-  private readonly closedIssueNumbers = new Set<number>();
+  private readonly doneSet = new Set<number>();
   private readonly processedIssues: ResolvedIssue[] = [];
 
   public constructor(
@@ -78,10 +79,13 @@ export class FactoryRun {
     this.logger.log(`krutrimbox: building Implementation Sequence for PRD #${prd.number}.`);
 
     const subIssues = await this.github.getAttachedSubIssues(prd.number);
-    const sequence = buildImplementationSequence(prd.number, subIssues);
+    for (const issueNumber of await fetchDoneSet(this.github, this.branchName)) {
+      this.doneSet.add(issueNumber);
+    }
+
+    const sequence = buildImplementationSequence(prd.number, subIssues, this.doneSet);
 
     for (const issue of sequence.resolvedIssues) {
-      this.closedIssueNumbers.add(issue.number);
       this.logger.log(`krutrimbox: skipping Resolved Issue #${issue.number}.`);
     }
 
@@ -115,7 +119,7 @@ export class FactoryRun {
         return "issue-error";
       }
 
-      this.closedIssueNumbers.add(issue.number);
+      this.doneSet.add(issue.number);
       this.processedIssues.push({
         number: issue.number,
         title: issue.title,
@@ -167,10 +171,9 @@ export class FactoryRun {
         issueNumber: issue.number
       });
 
-      const closedAfterCurrent = new Set(this.closedIssueNumbers);
-      closedAfterCurrent.add(issue.number);
-      await this.prdPullRequest.ensureReflectsSequence(sequence, closedAfterCurrent);
-      await this.github.closeIssue(issue.number);
+      const doneAfterCurrent = new Set(this.doneSet);
+      doneAfterCurrent.add(issue.number);
+      await this.prdPullRequest.ensureReflectsSequence(sequence, doneAfterCurrent);
       this.logger.log(`krutrimbox: completed AFK Issue #${issue.number}.`);
 
       return "completed";
@@ -189,6 +192,10 @@ export class FactoryRun {
     const unresolved: string[] = [];
 
     for (const blockerNumber of blockerNumbers) {
+      if (this.doneSet.has(blockerNumber)) {
+        continue;
+      }
+
       const blocker = await this.github.getIssue(blockerNumber);
 
       if (blocker.state !== "CLOSED") {
