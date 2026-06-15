@@ -435,6 +435,66 @@ describe("GitHubCliClient", () => {
     expect(runner.calls[0]).toEqual({ command: "gh", args: ["pr", "diff", "8"] });
   });
 
+  test("lists branch commit messages and treats an absent branch as empty", async () => {
+    const calls: Array<{ command: string; args: string[] }> = [];
+    const runner: CommandRunner = async (command, args) => {
+      calls.push({ command, args });
+
+      if (commandKey(command, args) === commandKey("gh", ["repo", "view", "--json", "owner,name"])) {
+        return JSON.stringify({ owner: { login: "jd-solanki" }, name: "krutrimbox" });
+      }
+
+      if (
+        commandKey(command, args) ===
+        commandKey("gh", [
+          "api",
+          "repos/jd-solanki/krutrimbox/commits",
+          "--paginate",
+          "-f",
+          "sha=krutrimbox/issue-14"
+        ])
+      ) {
+        return JSON.stringify([
+          { commit: { message: "chore: first\n\nRefs #14" } },
+          { commit: { message: "chore: second\n\nRefs #15" } }
+        ]);
+      }
+
+      throw new Error("No commit found for SHA: krutrimbox/issue-99");
+    };
+    const client = createGitHubCliClient(runner);
+
+    await expect(client.listBranchCommitMessages("krutrimbox/issue-14")).resolves.toEqual([
+      "chore: first\n\nRefs #14",
+      "chore: second\n\nRefs #15"
+    ]);
+    await expect(client.listBranchCommitMessages("krutrimbox/issue-99")).resolves.toEqual([]);
+
+    expect(calls).toEqual([
+      { command: "gh", args: ["repo", "view", "--json", "owner,name"] },
+      {
+        command: "gh",
+        args: [
+          "api",
+          "repos/jd-solanki/krutrimbox/commits",
+          "--paginate",
+          "-f",
+          "sha=krutrimbox/issue-14"
+        ]
+      },
+      {
+        command: "gh",
+        args: [
+          "api",
+          "repos/jd-solanki/krutrimbox/commits",
+          "--paginate",
+          "-f",
+          "sha=krutrimbox/issue-99"
+        ]
+      }
+    ]);
+  });
+
   test("marks a pull request ready for review", async () => {
     const runner = fixtureRunner(
       new Map([[commandKey("gh", ["pr", "ready", "8"]), ""]])

@@ -47,6 +47,7 @@ export interface GitHubClient {
   closeIssue(issueNumber: number): Promise<void>;
   getDefaultBranch(): Promise<string>;
   findPullRequestByHead(branchName: string): Promise<GitHubPullRequest | null>;
+  listBranchCommitMessages(branchName: string): Promise<string[]>;
   createDraftPullRequest(input: CreatePullRequestInput): Promise<GitHubPullRequest>;
   updatePullRequestBody(pullRequestNumber: number, body: string): Promise<void>;
   setPullRequestLabels(pullRequestNumber: number, labels: string[]): Promise<void>;
@@ -287,6 +288,30 @@ export function createGitHubCliClient(
 
     findPullRequestByHead,
 
+    async listBranchCommitMessages(branchName: string): Promise<string[]> {
+      const repo = await getRepository();
+
+      try {
+        const commits = parseJson<RawCommit[]>(
+          await runGh([
+            "api",
+            `repos/${repo.owner.login}/${repo.name}/commits`,
+            "--paginate",
+            "-f",
+            `sha=${branchName}`
+          ])
+        );
+
+        return commits.map((commit) => commit.commit.message ?? "");
+      } catch (error) {
+        if (isMissingBranchError(error)) {
+          return [];
+        }
+
+        throw error;
+      }
+    },
+
     async createDraftPullRequest(input: CreatePullRequestInput): Promise<GitHubPullRequest> {
       const args = [
         "pr",
@@ -433,6 +458,12 @@ interface RawPullRequest {
   labels: Array<{
     name: string;
   }>;
+}
+
+interface RawCommit {
+  commit: {
+    message?: string;
+  };
 }
 
 interface TargetIssuesGraphqlResponse {
@@ -584,4 +615,8 @@ function formatRepository(repo: RepositoryInfo): string {
 
 function parseJson<T>(value: string): T {
   return JSON.parse(value) as T;
+}
+
+function isMissingBranchError(error: unknown): boolean {
+  return error instanceof Error && /No commit found for SHA|Not Found|404/.test(error.message);
 }

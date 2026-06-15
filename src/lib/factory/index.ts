@@ -4,6 +4,7 @@
 // behind their injection seams (the Pick<Class, ...> types each module exports).
 export * from "./constants";
 export * from "./sequence";
+export * from "./done-set";
 export * from "./format";
 export * from "./prd-pull-request";
 export * from "./factory-run";

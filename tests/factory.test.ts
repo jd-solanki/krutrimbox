@@ -9,6 +9,8 @@ import {
   deterministicTargetIssueBranch,
   deterministicTargetIssueSandbox,
   FactoryRun,
+  fetchDoneSet,
+  parseDoneSetFromCommitMessages,
   parseBlockingIssueNumbers,
   PrdPullRequest,
   SANDBOX_CODEX_EXEC_FLAGS,
@@ -97,6 +99,44 @@ describe("parseBlockingIssueNumbers", () => {
         "See #99 elsewhere.\n\n## Blocked by\n\n- #3\n- #7 and #3\n\n## Notes\n\n#12"
       )
     ).toEqual([3, 7]);
+  });
+});
+
+describe("Done Set ledger", () => {
+  test("extracts issue numbers from Refs footers across multiple commit messages", () => {
+    const doneSet = parseDoneSetFromCommitMessages([
+      "chore: first slice\n\nRefs #14",
+      "chore: second slice\n\nRefs #15\nRefs #16"
+    ]);
+
+    expect([...doneSet].sort((left, right) => left - right)).toEqual([14, 15, 16]);
+  });
+
+  test("uses set semantics for duplicate Refs footers", () => {
+    const doneSet = parseDoneSetFromCommitMessages([
+      "chore: first attempt\n\nRefs #14",
+      "chore: follow-up\n\nRefs #14"
+    ]);
+
+    expect([...doneSet]).toEqual([14]);
+  });
+
+  test("ignores commits with no Refs footer", () => {
+    const doneSet = parseDoneSetFromCommitMessages([
+      "chore: unrelated commit",
+      "docs: mention Refs #99 in prose, not as a footer"
+    ]);
+
+    expect([...doneSet]).toEqual([]);
+  });
+
+  test("fetches an empty Done Set for an absent or empty branch", async () => {
+    const source = {
+      listBranchCommitMessages: vi.fn(async () => [])
+    };
+
+    await expect(fetchDoneSet(source, "krutrimbox/issue-14")).resolves.toEqual(new Set());
+    expect(source.listBranchCommitMessages).toHaveBeenCalledWith("krutrimbox/issue-14");
   });
 });
 
@@ -1022,6 +1062,7 @@ class FakeGitHubClient implements GitHubClient {
   });
   public readonly getDefaultBranch = vi.fn(async () => "main");
   public readonly findPullRequestByHead = vi.fn(async () => this.pullRequests[0] ?? null);
+  public readonly listBranchCommitMessages = vi.fn(async () => []);
   public readonly createDraftPullRequest = vi.fn(async (input: CreatePullRequestInput) => {
     this.pullRequestBodies.push(input.body);
     const pullRequest = { number: 10, isDraft: true, labels: input.labels.map((name) => ({ name })) };
