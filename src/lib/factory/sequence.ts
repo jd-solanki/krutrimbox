@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { GitHubIssue } from "../github";
 import type { AgentName } from "./coding-agent";
 import {
@@ -92,15 +93,36 @@ export function deterministicTargetIssueSlug(targetIssueNumber: number): string 
   return `${TARGET_ISSUE_SANDBOX_PREFIX}${targetIssueNumber}`;
 }
 
-// The Target Issue Sandbox name is keyed on (Target Issue, Agent Backend) so a
-// run with one agent never reuses a sandbox built for another agent's CLI and
-// template image (ADR-0007). The Target Issue Branch stays agent-blind, so the
-// Done Set and HITL resume are unaffected when the agent changes between runs.
+// The Target Issue Sandbox name is keyed on (Repository, Target Issue, Agent
+// Backend) so a run with one agent never reuses a sandbox built for another
+// agent's CLI and template image, and so two repositories that share an issue
+// number never collide in `sbx`'s host-global namespace (ADR-0007). The Target
+// Issue Branch stays repo- and agent-blind, since branches live inside each
+// repository's own git, so the Done Set and HITL resume are unaffected.
 export function deterministicTargetIssueSandbox(
   targetIssueNumber: number,
+  repositorySlug: string,
   agentName: AgentName
 ): string {
-  return `${deterministicTargetIssueSlug(targetIssueNumber)}-${agentName}`;
+  return `${deterministicTargetIssueSlug(targetIssueNumber)}-${fingerprintedRepositorySlug(repositorySlug)}-${agentName}`;
+}
+
+// Renders a GitHub `owner/name` as the repository portion of a sandbox name: a
+// human-readable slug followed by a short fingerprint. The slug is the
+// lowercased identity with every run of non-alphanumeric characters (the `/`
+// separator, dots, underscores) collapsed to a single hyphen and edge hyphens
+// trimmed, so `sbx ls` stays scannable. The fingerprint is the first 8 hex
+// digits of the SHA-256 of that same lowercased identity, which keeps the name
+// unique even when two distinct repositories slugify to the same readable text
+// (e.g. `acme/foo.bar` and `acme/foo-bar`). Lowercasing before both steps means
+// case-only spellings of one repository — which GitHub does not allow to
+// coexist — never produce two different sandboxes.
+function fingerprintedRepositorySlug(repositorySlug: string): string {
+  const canonicalSlug = repositorySlug.toLowerCase();
+  const readableSlug = canonicalSlug.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  const fingerprint = createHash("sha256").update(canonicalSlug).digest("hex").slice(0, 8);
+
+  return `${readableSlug}-${fingerprint}`;
 }
 
 export function parseBlockingIssueNumbers(body: string): number[] {

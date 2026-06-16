@@ -37,6 +37,10 @@ export interface GitHubIssue {
 
 export interface GitHubClient {
   ensureRequiredLabels(): Promise<void>;
+  // The current repository's canonical `owner/name` (e.g. `octocat/hello-world`).
+  // Callers needing a repository-scoped key, such as the Target Issue Sandbox
+  // name, build on this (ADR-0007).
+  getRepositorySlug(): Promise<string>;
   getIssue(issueNumber: number): Promise<GitHubIssue>;
   getIssueUrl(issueNumber: number): Promise<string>;
   listReadyTargetIssues(author: string): Promise<GitHubIssue[]>;
@@ -152,6 +156,10 @@ export function createGitHubCliClient(
           label.description
         ]);
       }
+    },
+
+    async getRepositorySlug(): Promise<string> {
+      return formatRepository(await getRepository());
     },
 
     async getIssue(issueNumber: number): Promise<GitHubIssue> {

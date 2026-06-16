@@ -40,6 +40,17 @@ vi.mock("../src/lib/factory/run-log", () => ({
   })
 }));
 
+// The repository FakeGitHubClient resolves to. Shared by the fake and by sandbox-
+// name expectations so both speak of the same repository.
+const FAKE_REPOSITORY_SLUG = "jd-solanki/krutrimbox";
+
+// The codex sandbox name FakeGitHubClient's repository yields for an issue,
+// expressed through the production helper so these expectations track the real
+// naming scheme instead of a hand-copied fingerprint.
+function fakeCodexSandbox(issueNumber: number): string {
+  return deterministicTargetIssueSandbox(issueNumber, FAKE_REPOSITORY_SLUG, "codex");
+}
+
 describe("buildImplementationSequence", () => {
   test("treats a standalone Target Issue as a sequence-of-one AFK Implementation Issue", () => {
     const issue = targetIssue({
@@ -337,7 +348,7 @@ describe("Krutrimbox", () => {
       "Standalone target issue body"
     );
     expect(sandbox.commitAndPush).toHaveBeenCalledWith({
-      sandboxName: "krutrimbox-issue-1-codex",
+      sandboxName: fakeCodexSandbox(1),
       branchName: "krutrimbox/issue-1",
       issueNumber: 1
     });
@@ -404,9 +415,9 @@ describe("Krutrimbox", () => {
       "runFinalReview",
       "removeSandbox"
     ]);
-    expect(sandbox.calls[0].input).toEqual({ sandboxName: "krutrimbox-issue-1-codex" });
+    expect(sandbox.calls[0].input).toEqual({ sandboxName: fakeCodexSandbox(1) });
     expect(sandbox.calls[1].input).toEqual({
-      sandboxName: "krutrimbox-issue-1-codex",
+      sandboxName: fakeCodexSandbox(1),
       branchName: "krutrimbox/issue-1"
     });
     expect(String(sandbox.calls[2].input.prompt)).toContain("Full parent Target Issue body");
@@ -514,7 +525,7 @@ describe("Krutrimbox", () => {
     );
     expect(sandbox.runAfkIssue).toHaveBeenCalledOnce();
     expect(sandbox.commitAndPush).toHaveBeenCalledWith({
-      sandboxName: "krutrimbox-issue-1-codex",
+      sandboxName: fakeCodexSandbox(1),
       branchName: "krutrimbox/issue-1",
       issueNumber: 5
     });
@@ -641,7 +652,7 @@ describe("Krutrimbox", () => {
     expect(String(reviewCall?.input.prompt)).toContain("- #4 - Factory loop (CLOSED)");
     expect(github.markPullRequestReadyForReview).toHaveBeenCalledWith(10);
     expect(github.requestPullRequestReview).toHaveBeenCalledWith(10, "jd-solanki");
-    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: "krutrimbox-issue-1-codex" });
+    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: fakeCodexSandbox(1) });
   });
 
   test("skips final review when the Target Issue Pull Request is already ready for review", async () => {
@@ -781,7 +792,7 @@ describe("Krutrimbox", () => {
 
     await factory.runExplicit(1, "codex");
 
-    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: "krutrimbox-issue-1-codex" });
+    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: fakeCodexSandbox(1) });
   });
 
   test("never merges the Target Issue Pull Request during final review routing", async () => {
@@ -1030,7 +1041,7 @@ describe("Krutrimbox MVP smoke", () => {
     );
     expect(github.markPullRequestReadyForReview).toHaveBeenCalledWith(10);
     expect(github.requestPullRequestReview).toHaveBeenCalledWith(10, "jd-solanki");
-    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: "krutrimbox-issue-1-codex" });
+    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: fakeCodexSandbox(1) });
 
     const reviewOrder = sandbox.runFinalReview.mock.invocationCallOrder[0];
     const readyOrder = github.markPullRequestReadyForReview.mock.invocationCallOrder[0];
@@ -1116,7 +1127,7 @@ describe("Krutrimbox MVP smoke", () => {
       expect.stringContaining("krutrimbox is paused for Target Issue #3.")
     );
     expect(sandbox.commitAndPush).toHaveBeenCalledWith({
-      sandboxName: "krutrimbox-issue-5-codex",
+      sandboxName: fakeCodexSandbox(5),
       branchName: "krutrimbox/issue-5",
       issueNumber: 50
     });
@@ -1139,7 +1150,14 @@ describe("FactoryRun", () => {
     sandbox: FakeSandboxRunner,
     logger: Pick<Console, "log"> = silentLogger()
   ) {
-    return { github, sandbox, agent: resolveCodingAgent("codex"), templates: fixtureTemplates, logger };
+    return {
+      github,
+      sandbox,
+      agent: resolveCodingAgent("codex"),
+      repositorySlug: FAKE_REPOSITORY_SLUG,
+      templates: fixtureTemplates,
+      logger
+    };
   }
 
   test("process() returns \"paused\" at the first HITL Issue without touching the sandbox", async () => {
@@ -1215,7 +1233,7 @@ describe("FactoryRun", () => {
     const run = new FactoryRun(runDependencies(github, sandbox), targetIssue());
 
     await expect(run.process()).resolves.toBe("completed");
-    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: "krutrimbox-issue-1-codex" });
+    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: fakeCodexSandbox(1) });
   });
 
   test("exposes the deterministic Target Issue branch and sandbox as run invariants", () => {
@@ -1226,7 +1244,7 @@ describe("FactoryRun", () => {
     );
 
     expect(run.branchName).toBe("krutrimbox/issue-7");
-    expect(run.sandboxName).toBe("krutrimbox-issue-7-codex");
+    expect(run.sandboxName).toBe(fakeCodexSandbox(7));
   });
 });
 
@@ -1242,7 +1260,7 @@ describe("TargetIssuePullRequest", () => {
       { log: vi.fn() },
       targetIssue(),
       "krutrimbox/issue-1",
-      "krutrimbox-issue-1-codex"
+      fakeCodexSandbox(1)
     );
   }
 
@@ -1306,6 +1324,7 @@ describe("TargetIssuePullRequest", () => {
 
 class FakeGitHubClient implements GitHubClient {
   public readonly ensureRequiredLabels = vi.fn(async () => undefined);
+  public readonly getRepositorySlug = vi.fn(async () => FAKE_REPOSITORY_SLUG);
   public readonly getIssue = vi.fn(async (issueNumber: number) => {
     const issue = this.issues.get(issueNumber);
 
@@ -1554,10 +1573,35 @@ function implementationIssue({
   };
 }
 
-test("the Target Issue branch is agent-blind while the sandbox is scoped per Agent Backend", () => {
+test("the Target Issue branch is agent-blind while the sandbox is scoped per Repository and Agent Backend", () => {
   expect(deterministicTargetIssueBranch(42)).toBe("krutrimbox/issue-42");
-  expect(deterministicTargetIssueSandbox(42, "codex")).toBe("krutrimbox-issue-42-codex");
-  expect(deterministicTargetIssueSandbox(42, "claude")).toBe("krutrimbox-issue-42-claude");
+
+  const codexSandbox = deterministicTargetIssueSandbox(42, "jd-solanki/krutrimbox", "codex");
+  const claudeSandbox = deterministicTargetIssueSandbox(42, "jd-solanki/krutrimbox", "claude");
+
+  // The readable issue, repository, and agent parts, joined by an 8-hex-digit
+  // repository fingerprint that sits between the repository slug and the agent.
+  expect(codexSandbox).toMatch(/^krutrimbox-issue-42-jd-solanki-krutrimbox-[0-9a-f]{8}-codex$/);
+  expect(claudeSandbox).toMatch(/^krutrimbox-issue-42-jd-solanki-krutrimbox-[0-9a-f]{8}-claude$/);
+  expect(codexSandbox).not.toBe(claudeSandbox);
+});
+
+test("the Target Issue sandbox name is deterministic and unique per repository", () => {
+  expect(deterministicTargetIssueSandbox(5, "jd-solanki/krutrimbox", "codex")).toBe(
+    deterministicTargetIssueSandbox(5, "jd-solanki/krutrimbox", "codex")
+  );
+
+  // Case-only spellings of one repository — which GitHub forbids from coexisting
+  // — resolve to the same sandbox.
+  expect(deterministicTargetIssueSandbox(5, "JD-Solanki/KrutrimBox", "codex")).toBe(
+    deterministicTargetIssueSandbox(5, "jd-solanki/krutrimbox", "codex")
+  );
+
+  // Distinct repositories whose readable slugs collide still get distinct
+  // sandboxes, because the fingerprint is taken over the original identity.
+  expect(deterministicTargetIssueSandbox(5, "acme/foo.bar", "codex")).not.toBe(
+    deterministicTargetIssueSandbox(5, "acme/foo-bar", "codex")
+  );
 });
 
 test("file locks use the deterministic Target Issue slug", async () => {

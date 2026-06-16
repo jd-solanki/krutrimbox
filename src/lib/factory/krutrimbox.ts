@@ -136,6 +136,7 @@ export class Krutrimbox {
       github: this.github,
       sandbox: this.buildSandbox(agent),
       agent,
+      repositorySlug: await this.github.getRepositorySlug(),
       templates: this.templates,
       logger: runLog,
       output: runLog.stream
