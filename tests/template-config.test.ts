@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -29,6 +29,11 @@ async function projectDir() {
       const target = join(configDir, relativePath);
       await mkdir(dirname(target), { recursive: true });
       await writeFile(target, contents, "utf8");
+    },
+    async writeSymlinkUnder(relativePath: string, target: string) {
+      const linkPath = join(configDir, relativePath);
+      await mkdir(dirname(linkPath), { recursive: true });
+      await symlink(target, linkPath);
     },
     cleanup() {
       return rm(dir, { recursive: true, force: true });
@@ -149,6 +154,15 @@ describe("Project Configuration fails fast", () => {
 
   test("rejects absolute override paths", async () => {
     await project.writeConfig(JSON.stringify({ templates: { pullRequestBody: "/etc/passwd" } }));
+    expectInvalid(/escapes \.krutrimbox\//);
+  });
+
+  test("rejects override symlinks that escape .krutrimbox/", async () => {
+    const outsideTemplate = join(project.dir, "escape.md");
+    await writeFile(outsideTemplate, "escaped", "utf8");
+    await project.writeSymlinkUnder("templates/escape.md", outsideTemplate);
+    await project.writeConfig(JSON.stringify({ templates: { pullRequestBody: "templates/escape.md" } }));
+
     expectInvalid(/escapes \.krutrimbox\//);
   });
 });

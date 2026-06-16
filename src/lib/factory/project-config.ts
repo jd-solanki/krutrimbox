@@ -1,5 +1,5 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { isTemplateSlot, SUPPORTED_TEMPLATE_SLOTS, type TemplateSlot } from "./template-slots";
 
 // Committed, repository-owned Project Configuration (ADR-0013). A repository may
@@ -100,25 +100,48 @@ function resolveTemplateOverrides(
 // escape the directory, and reads the file so a missing override fails fast.
 function readOverrideFile(slot: TemplateSlot, configuredPath: string, configDir: string): string {
   const resolved = resolve(configDir, configuredPath);
-  const relativeToConfigDir = relative(configDir, resolved);
+  assertPathStaysInConfigDir(slot, configuredPath, configDir, resolved);
 
-  if (
-    relativeToConfigDir === ""
-    || relativeToConfigDir.startsWith("..")
-    || isAbsolute(relativeToConfigDir)
-  ) {
-    throw new Error(
-      `krutrimbox: template slot "${slot}" path "${configuredPath}" escapes ${PROJECT_CONFIG_DIRNAME}/.`
-    );
-  }
-
-  if (!existsSync(resolved) || !statSync(resolved).isFile()) {
+  if (!existsSync(resolved)) {
     throw new Error(
       `krutrimbox: template slot "${slot}" override file not found: ${PROJECT_CONFIG_DIRNAME}/${configuredPath}.`
     );
   }
 
-  return readFileSync(resolved, "utf8");
+  const realConfigDir = realpathSync(configDir);
+  const realResolved = realpathSync(resolved);
+
+  assertPathStaysInConfigDir(slot, configuredPath, realConfigDir, realResolved);
+
+  if (!statSync(realResolved).isFile()) {
+    throw new Error(
+      `krutrimbox: template slot "${slot}" override file not found: ${PROJECT_CONFIG_DIRNAME}/${configuredPath}.`
+    );
+  }
+
+  return readFileSync(realResolved, "utf8");
+}
+
+function assertPathStaysInConfigDir(
+  slot: TemplateSlot,
+  configuredPath: string,
+  configDir: string,
+  candidatePath: string
+): void {
+  if (pathEscapesDirectory(relative(configDir, candidatePath))) {
+    throw new Error(
+      `krutrimbox: template slot "${slot}" path "${configuredPath}" escapes ${PROJECT_CONFIG_DIRNAME}/.`
+    );
+  }
+}
+
+function pathEscapesDirectory(relativePath: string): boolean {
+  return (
+    relativePath === ""
+    || relativePath === ".."
+    || relativePath.startsWith(`..${sep}`)
+    || isAbsolute(relativePath)
+  );
 }
 
 function assertPlainObject(
