@@ -67,6 +67,13 @@ describe("ProjectTemplateRenderer built-in defaults", () => {
     expect(prompt).toContain("Work on the Target Issue Branch: `krutrimbox/issue-1`.");
   });
 
+  test("loads a final review prompt that asks for actionable findings as a to-do list", async () => {
+    const prompt = await renderer.renderPrompt("finalReview", {});
+
+    expect(prompt).toContain("- [ ] Finding 1");
+    expect(prompt).toContain("Format actionable findings as unchecked Markdown task-list items (`- [ ]`)");
+  });
+
   test("preserves placeholder substitution semantics: a missing value renders empty", async () => {
     const body = await renderer.renderTemplate("finalReviewComment", {});
 

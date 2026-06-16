@@ -30,13 +30,15 @@ Use this structure:
 
 ### Findings
 
-- Finding 1
-- Finding 2
+- [ ] Finding 1
+- [ ] Finding 2
 
 ### Notes
 
 - Any useful context, uncertainty, or follow-up.
 ```
+
+Format actionable findings as unchecked Markdown task-list items (`- [ ]`) so they render as a to-do list of things to work on. Keep non-actionable context under `Notes`.
 
 If there are no findings, say that clearly under `Findings`.
 
