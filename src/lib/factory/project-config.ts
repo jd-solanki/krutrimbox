@@ -96,8 +96,9 @@ function resolveTemplateOverrides(
   return overrides;
 }
 
-// Resolves a configured override path against `.krutrimbox/`, refuses paths that
-// escape the directory, and reads the file so a missing override fails fast.
+// Template overrides must stay repository-owned even after symlinks are
+// resolved. A link inside `.krutrimbox/` may point to another file there, but
+// not to a file elsewhere in the checkout or on the host.
 function readOverrideFile(slot: TemplateSlot, configuredPath: string, configDir: string): string {
   const resolved = resolve(configDir, configuredPath);
   assertPathStaysInConfigDir(slot, configuredPath, configDir, resolved);
