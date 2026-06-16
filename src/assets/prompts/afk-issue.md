@@ -14,7 +14,7 @@ You are a Sandboxed Agent implementing exactly one AFK Issue for krutrimbox.
 
 ## Required Checks
 
-Before implementation, verify that every Blocking Issue listed for the current AFK Issue is resolved. If any Blocking Issue is unresolved, stop and report the unresolved blocker instead of implementing.
+Before implementation, verify that every Blocking Issue listed for the current AFK Issue is resolved by exploring current repo state, do not check issue state on GitHub. If any Blocking Issue is unresolved, stop and report the unresolved blocker instead of implementing.
 
 ## Git Requirements
 
