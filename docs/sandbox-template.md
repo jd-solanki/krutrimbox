@@ -10,7 +10,7 @@ The custom template keeps AFK Issue runs deterministic: each fresh Sandboxed Age
 
 ## Template Image
 
-A single parameterized `Dockerfile.sandbox` builds one image per Agent Backend. The `BASE` build argument selects the agent's stock template; the `pnpm` layer is identical for every agent, so it lives in one place. `BASE` is **required** and has no default — mirroring the required `--agent` flag, so a bare `docker build` can never silently produce a Codex image for a Claude run (an unset `BASE` fails at parse time). Always build through the `sandbox:prepare-template:<agent>` scripts:
+A single parameterized `Dockerfile.sandbox` builds one image per Agent Backend. The `BASE` build argument selects the agent's stock template; the `pnpm` layer is identical for every agent, so it lives in one place. `BASE` is **required** and has no default — mirroring the required `--agent` flag, so a bare `docker build` can never silently produce the wrong agent image (an unset `BASE` fails at parse time). Always build through the `sandbox:prepare-template:<agent>` scripts:
 
 ```Dockerfile
 # check=skip=InvalidDefaultArgInFrom

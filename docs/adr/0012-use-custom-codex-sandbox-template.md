@@ -8,6 +8,11 @@ The custom images are built from a single parameterized `Dockerfile.sandbox` who
 
 Docker Sandboxes does not automatically use images from the local Docker image cache. A locally built template must be saved and loaded into the Docker Sandboxes template store with `sbx template load` before `sbx create --template ...` can use it. The package scripts `sandbox:build-template`, `sandbox:load-template`, and `sandbox:prepare-template` capture that setup.
 
-Sandboxed Codex sessions run through `codex exec --ephemeral --dangerously-bypass-approvals-and-sandbox`. The no-approval setting is required because krutrimbox runs Codex non-interactively; an approval prompt would otherwise hang or fail the AFK Issue. The bypass is scoped by the outer Docker Sandbox clone, not by the host machine, and avoids Codex's inner sandbox blocking package installs, tests, read-only GitHub inspection, or other commands the Sandboxed Agent may need.
+Sandboxed Agent sessions run non-interactively because no human is attached to answer approval prompts during AFK Issue execution; an unanswered prompt would hang or fail the run. Each Agent Backend uses its own flag to bypass its built-in approval layer:
+
+- Codex: `codex exec --ephemeral --dangerously-bypass-approvals-and-sandbox` — also disables Codex's inner sandbox, which would otherwise block package installs, tests, and read-only GitHub inspection inside the outer Docker Sandbox clone.
+- Claude Code: `claude -p --dangerously-skip-permissions`
+
+The bypass is scoped by the outer Docker Sandbox clone, not by the host machine.
 
 Existing sandboxes keep the template they were created from. If the template changes, remove and recreate affected Target Issue Sandboxes after preserving any needed work.

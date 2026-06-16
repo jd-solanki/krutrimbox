@@ -1,6 +1,6 @@
 # Krutrimbox
 
-Krutrimbox is a code factory: a local orchestrator for agent-ready GitHub issues. It discovers Target Issues labeled `ready-for-agent` that have no parent issue, implements standalone Target Issues directly or walks their ordered Implementation Issues, delegates AFK work to fresh Codex sessions inside Docker Sandboxes, pauses for human work when needed, and keeps the outer process in charge of GitHub state, commits, pushes, and pull requests.
+Krutrimbox is a code factory: a local orchestrator for agent-ready GitHub issues. It discovers Target Issues labeled `ready-for-agent` that have no parent issue, implements standalone Target Issues directly or walks their ordered Implementation Issues, delegates AFK work to fresh Sandboxed Agent sessions inside Docker Sandboxes, pauses for human work when needed, and keeps the outer process in charge of GitHub state, commits, pushes, and pull requests.
 
 This README is written for a new machine setup. It assumes you are comfortable copying terminal commands, but not necessarily familiar with Docker Sandboxes yet.
 
@@ -10,7 +10,7 @@ krutrimbox uses three layers:
 
 1. Your host machine runs the `kb` Node.js CLI from the `krutrimbox` package.
 2. Docker Sandboxes creates an isolated Target Issue Sandbox for agent work.
-3. Codex runs inside that sandbox to implement one AFK issue at a time.
+3. The Sandboxed Agent runs inside that sandbox to implement one AFK issue at a time.
 
 The sandbox is intentionally separate from your host working tree. In Docker Sandboxes clone mode, the sandbox gets its own private Git clone. That keeps agent changes away from your current local branch until the outer krutrimbox commits and pushes them.
 
