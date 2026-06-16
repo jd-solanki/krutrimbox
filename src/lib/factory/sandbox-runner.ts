@@ -27,6 +27,11 @@ interface SandboxExecOptions {
   output?: NodeJS.WritableStream;
 }
 
+interface SshRemote {
+  host: string;
+  repoPath: string;
+}
+
 // Drives one Target Issue Sandbox through `sbx`: create/reuse, branch checkout,
 // the inner AFK and final-review runs, commit/push, and teardown. All sandbox
 // state lives behind these methods so Factory Runs never shell out directly. The
@@ -176,16 +181,34 @@ export function toHttpsRemoteUrl(url: string): string | null {
     return null;
   }
 
-  const ssh = /^ssh:\/\/(?:[^@/]+@)?([^/:]+)(?::\d+)?\/(.+)$/i.exec(trimmed);
-  const scp = /^(?:[^@/]+@)?([^/:]+):(.+)$/.exec(trimmed);
-  const match = ssh ?? scp;
-  if (!match) {
+  const remote = parseSshRemote(trimmed);
+  if (!remote) {
     return null;
   }
 
-  const host = match[1].includes(".") ? match[1] : "github.com";
-  const repoPath = match[2].replace(/^\/+/, "").replace(/\.git$/i, "");
-  return `https://${host}/${repoPath}.git`;
+  return `https://${normalizeRemoteHost(remote.host)}/${normalizeRepoPath(remote.repoPath)}.git`;
+}
+
+function parseSshRemote(url: string): SshRemote | undefined {
+  const sshUrl = /^ssh:\/\/(?:[^@/]+@)?([^/:]+)(?::\d+)?\/(.+)$/i.exec(url);
+  if (sshUrl) {
+    return { host: sshUrl[1], repoPath: sshUrl[2] };
+  }
+
+  const scpUrl = /^(?:[^@/]+@)?([^/:]+):(.+)$/.exec(url);
+  if (scpUrl) {
+    return { host: scpUrl[1], repoPath: scpUrl[2] };
+  }
+
+  return undefined;
+}
+
+function normalizeRemoteHost(host: string): string {
+  return host.includes(".") ? host : "github.com";
+}
+
+function normalizeRepoPath(repoPath: string): string {
+  return repoPath.replace(/^\/+/, "").replace(/\.git$/i, "");
 }
 
 // Injection seam: the public surface of CommandSandboxRunner, so fakes need no separate contract.
