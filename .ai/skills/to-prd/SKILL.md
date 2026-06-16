@@ -19,6 +19,19 @@ Check with the user that these seams match their expectations.
 
 3. Write the PRD using the template below, then publish it to the project issue tracker. Apply `needs-triage`. Do not apply `ready-for-agent` yet; a Parent Target Issue becomes ready only after the follow-up `to-issues` workflow has created and linked all its Implementation Issues, at which point `to-issues` applies `ready-for-agent` to the PRD.
 
+**Issue title format** — follow Conventional Commits:
+
+```
+type(scope): short imperative description
+```
+
+- **type**: `feat`, `fix`, `refactor`, `perf`, `docs`, `test`, `chore`, `ci`, `style`, `build`
+- **scope**: the module, package, or domain area (e.g. `auth`, `cli`, `api`, `ui`, `db`) — keep it short and lowercase
+- **`!`** after type/scope signals a breaking change: `feat!(auth): …` or `refactor(api)!: …`
+- **description**: lowercase, imperative mood, no trailing period
+
+Examples: `feat(auth): add OAuth2 login`, `fix(cli): handle missing config`, `refactor!(api): remove legacy endpoints`
+
 <prd-template>
 
 ## Problem Statement

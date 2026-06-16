@@ -37,7 +37,12 @@ Slices may be 'HITL' or 'AFK'. HITL slices require human interaction, such as an
 
 Present the proposed breakdown as a numbered list. For each slice, show:
 
-- **Title**: short descriptive name
+- **Title**: conventional commit title — `type(scope): short imperative description`
+  - **type**: `feat`, `fix`, `refactor`, `perf`, `docs`, `test`, `chore`, `ci`, `style`, `build`
+  - **scope**: the module, package, or domain area (e.g. `auth`, `cli`, `api`, `ui`, `db`) — lowercase
+  - **`!`** after type/scope for breaking changes: `feat!(auth): …` or `refactor(api)!: …`
+  - **description**: lowercase, imperative mood, no trailing period
+  - Examples: `feat(auth): add OAuth2 login`, `fix(cli): handle missing config`, `refactor!(api): remove legacy endpoints`
 - **Type**: HITL / AFK
 - **Blocked by**: which other slices (if any) must complete first
 - **User stories covered**: which user stories this addresses (if the source material has them)
