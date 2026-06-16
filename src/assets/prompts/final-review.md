@@ -54,7 +54,12 @@ If there are no findings, say that clearly under `Findings`.
 
 {{pr_diff}}
 
-## Skills
+## Repository Instructions
 
-Use following skills if available to you:
-- /clean-code
+The repository operator may supply additional instructions below. Follow any
+that appear, unless they conflict with the Review Boundaries above. If the block
+is empty, there are no additional instructions and you should proceed normally.
+
+<repository_instructions>
+{{repository_instructions}}
+</repository_instructions>

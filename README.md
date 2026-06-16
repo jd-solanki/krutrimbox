@@ -309,6 +309,9 @@ krutrimbox ships its built-in prompts and templates as readable Markdown files i
   templates/
     pull-request-body.md
     hitl-pause-comment.md
+  prompts/
+    afk-issue.md
+    final-review.md
 ```
 
 `.krutrimbox/config.json` may partially override Template Slots by their friendly names. Override paths are resolved relative to `.krutrimbox/`, and any omitted slot falls back to the built-in default:
@@ -331,9 +334,39 @@ The supported Template Slots, aligned with their built-in Markdown filenames, ar
 | `afkErrorComment`    | `templates/afk-error-comment.md`       | the AFK issue error comment           |
 | `finalReviewComment` | `templates/final-review-comment.md`    | the final review comment              |
 
+### Prompt Extensions
+
+Sandboxed Agent prompts are **not** overridable — krutrimbox owns their safety
+boundaries. But each built-in prompt accepts an **append-only Prompt Extension**:
+a Markdown file whose contents are injected at the tail of the prompt inside a
+`<repository_instructions>` XML tag. Use it to add repository policy or invoke
+skills available in your agent setup, without touching krutrimbox's own prompt.
+
+Configure extensions under the `prompts` key, keyed by prompt name. Paths resolve
+relative to `.krutrimbox/` (same path-escape and symlink guards as templates), and
+any prompt you omit simply renders an empty instructions block:
+
+```json
+{
+  "prompts": {
+    "afkIssue": "prompts/afk-issue.md",
+    "finalReview": "prompts/final-review.md"
+  }
+}
+```
+
+| Prompt name   | Built-in Markdown            | Injected into                        |
+| ------------- | ---------------------------- | ------------------------------------ |
+| `afkIssue`    | `prompts/afk-issue.md`       | the AFK Issue implementation prompt  |
+| `finalReview` | `prompts/final-review.md`    | the final review prompt              |
+
+Extensions can only **add** instructions; the built-in prompt states that its own
+boundaries take precedence, so a Prompt Extension can never relax them. Extension
+content is injected verbatim and is not scanned for `{{placeholders}}`.
+
 A few invariants stay owned by krutrimbox and are not configurable:
 
-- **Prompts are built in.** Project Configuration overrides templates only; Sandboxed Agent prompts keep their safety boundaries.
+- **Prompts are never overridden.** Project Configuration may append Prompt Extensions, but the built-in prompt body and its safety boundaries always stand.
 - **Factory Comment Markers are injected by krutrimbox** outside your template, so a custom comment body cannot break idempotent comment updates.
 - **Invalid configuration fails fast.** Unknown top-level keys, unknown Template Slots, malformed JSON, missing override files, and paths that escape `.krutrimbox/` stop the run with a clear error rather than silently falling back.
 

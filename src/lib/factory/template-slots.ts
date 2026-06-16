@@ -27,12 +27,20 @@ export function isTemplateSlot(value: string): value is TemplateSlot {
   return Object.prototype.hasOwnProperty.call(TEMPLATE_SLOTS, value);
 }
 
-// Built-in Sandboxed Agent prompt name -> Markdown asset path. Prompts are not
-// configurable, so this catalog is internal: callers reference prompts by these
-// names and always get the built-in content.
+// Built-in Sandboxed Agent prompt name -> Markdown asset path. Prompts are never
+// overridable, but each one accepts an append-only Prompt Extension keyed by
+// these same names through `.krutrimbox/config.json` (ADR-0013).
 export const PROMPT_ASSETS = {
   afkIssue: "prompts/afk-issue.md",
   finalReview: "prompts/final-review.md"
 } as const;
 
 export type PromptName = keyof typeof PROMPT_ASSETS;
+
+// The prompt names a project may extend, surfaced for validation error messages
+// and as the authority on what `.krutrimbox/config.json` "prompts" accepts.
+export const SUPPORTED_PROMPT_NAMES = Object.keys(PROMPT_ASSETS) as PromptName[];
+
+export function isPromptName(value: string): value is PromptName {
+  return Object.prototype.hasOwnProperty.call(PROMPT_ASSETS, value);
+}

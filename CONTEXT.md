@@ -41,12 +41,16 @@ Shared repository policy that changes how krutrimbox behaves for every operator 
 _Avoid_: local settings, personal settings, machine settings
 
 **Project Configuration Directory**:
-The repository-owned `.krutrimbox/` directory that holds shared krutrimbox Project Configuration, including configurable comment template files. Runtime-only subdirectories under it remain local state.
+The repository-owned `.krutrimbox/` directory that holds shared krutrimbox Project Configuration, including configurable comment template files and Prompt Extension files. Runtime-only subdirectories under it remain local state.
 _Avoid_: state directory, cache directory, local config directory
 
 **Template Slot**:
 A named, user-configurable piece of krutrimbox output text, such as the Target Issue Pull Request Body or a comment body. Each Template Slot has a built-in default and may be replaced by a repository-owned Markdown file.
 _Avoid_: template path, template key, internal template name
+
+**Prompt Extension**:
+A named, append-only block of repository-owned instructions injected at the tail of a single built-in Sandboxed Agent prompt, wrapped in an XML tag. Unlike a Template Slot, a Prompt Extension never replaces krutrimbox's prompt — it can only add instructions to it — and each is scoped to one specific prompt rather than shared across all of them.
+_Avoid_: prompt override, prompt slot, custom prompt, prompt template
 
 **Explicit Run**:
 A Factory Run started for one specified Target Issue.
@@ -156,6 +160,7 @@ _Avoid_: comment tag, marker, dedupe token
 - An **Implementation Issue** is in the **Done Set** once it has an **Issue Reference Footer** commit on the **Target Issue Branch**; the **Target Issue Pull Request** auto-closes every Done Set issue (and the Target Issue) on merge.
 - A **Factory Run** processes a **Target Issue**, pauses at the first **HITL Issue**, and routes the **Target Issue Pull Request** to the **Final Reviewer** once every **Implementation Issue** is Resolved.
 - A **Factory Run** runs against exactly one **Agent Backend**, chosen by the required `--agent` flag; the Agent Backend supplies the **Sandboxed Agent** session and the **krutrimbox Sandbox Template** for that run's **Target Issue Sandbox**.
+- A built-in Sandboxed Agent prompt may carry one **Prompt Extension** per prompt, supplied through **Project Configuration**; unlike a **Template Slot**, it appends to the prompt rather than replacing it, so krutrimbox keeps ownership of the prompt's safety boundaries.
 
 ## Flagged ambiguities
 

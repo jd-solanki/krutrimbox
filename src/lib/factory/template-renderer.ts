@@ -13,9 +13,13 @@ type RenderValues = Record<string, string | number>;
 
 export class ProjectTemplateRenderer {
   private readonly templateOverrides: Map<TemplateSlot, string>;
+  private readonly promptExtensions: Map<PromptName, string>;
 
-  public constructor(config: ResolvedProjectConfig = { templateOverrides: new Map() }) {
+  public constructor(
+    config: ResolvedProjectConfig = { templateOverrides: new Map(), promptExtensions: new Map() }
+  ) {
     this.templateOverrides = config.templateOverrides;
+    this.promptExtensions = config.promptExtensions;
   }
 
   // Builds a renderer for a project directory, loading and validating its
@@ -32,9 +36,14 @@ export class ProjectTemplateRenderer {
     return substitute(source, values);
   }
 
-  // Renders a built-in Sandboxed Agent prompt. Prompts are never overridable.
+  // Renders a built-in Sandboxed Agent prompt. The prompt body is never
+  // overridable; the only project-supplied content is the append-only Prompt
+  // Extension, injected as the `repository_instructions` value (empty when the
+  // project configures no extension for this prompt). Callers never pass that
+  // value — the renderer owns it from Project Configuration.
   public async renderPrompt(name: PromptName, values: RenderValues): Promise<string> {
-    return substitute(await loadBuiltInAsset(PROMPT_ASSETS[name]), values);
+    const repository_instructions = this.promptExtensions.get(name) ?? "";
+    return substitute(await loadBuiltInAsset(PROMPT_ASSETS[name]), { ...values, repository_instructions });
   }
 }
 

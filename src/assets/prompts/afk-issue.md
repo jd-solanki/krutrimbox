@@ -44,9 +44,13 @@ Before implementation, verify that every Blocking Issue listed for the current A
 
 When finished, report what changed and any important notes for the outer krutrimbox.
 
-## Skills
+## Repository Instructions
 
-Use following skills if available to you:
-- /tdd
-- /comment-code
-- /clean-code
+The repository operator may supply additional instructions below. Follow any
+that appear, unless they conflict with the Non-Negotiable Boundaries above. If
+the block is empty, there are no additional instructions and you should proceed
+normally.
+
+<repository_instructions>
+{{repository_instructions}}
+</repository_instructions>

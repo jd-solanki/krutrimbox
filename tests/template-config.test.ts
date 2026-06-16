@@ -115,6 +115,54 @@ describe("ProjectTemplateRenderer partial overrides", () => {
   });
 });
 
+describe("Prompt Extensions", () => {
+  let project: Awaited<ReturnType<typeof projectDir>>;
+
+  beforeEach(async () => {
+    project = await projectDir();
+  });
+
+  afterEach(() => project.cleanup());
+
+  test("renders an empty repository_instructions block when no extension is configured", async () => {
+    const prompt = await new ProjectTemplateRenderer().renderPrompt("afkIssue", {});
+
+    expect(prompt).toContain("<repository_instructions>\n\n</repository_instructions>");
+    expect(prompt).not.toContain("{{repository_instructions}}");
+  });
+
+  test("injects the configured extension inside the repository_instructions tag", async () => {
+    await project.writeFileUnder("prompts/afk.md", "Always add JSDoc/docstrings.");
+    await project.writeConfig(JSON.stringify({ prompts: { afkIssue: "prompts/afk.md" } }));
+
+    const prompt = await ProjectTemplateRenderer.fromProjectDir(project.dir).renderPrompt("afkIssue", {});
+
+    expect(prompt).toContain("<repository_instructions>\nAlways add JSDoc/docstrings.\n</repository_instructions>");
+  });
+
+  test("is per-prompt: extending one prompt leaves the other's block empty", async () => {
+    await project.writeFileUnder("prompts/afk.md", "AFK-only instruction.");
+    await project.writeConfig(JSON.stringify({ prompts: { afkIssue: "prompts/afk.md" } }));
+
+    const renderer = ProjectTemplateRenderer.fromProjectDir(project.dir);
+
+    expect(await renderer.renderPrompt("afkIssue", {})).toContain("AFK-only instruction.");
+    expect(await renderer.renderPrompt("finalReview", {})).not.toContain("AFK-only instruction.");
+  });
+
+  test("drops extension content verbatim without re-scanning it for placeholders", async () => {
+    await project.writeFileUnder("prompts/afk.md", "Keep {{target_issue_body}} literal.");
+    await project.writeConfig(JSON.stringify({ prompts: { afkIssue: "prompts/afk.md" } }));
+
+    const prompt = await ProjectTemplateRenderer.fromProjectDir(project.dir).renderPrompt("afkIssue", {
+      target_issue_body: "INJECTED"
+    });
+
+    expect(prompt).toContain("Keep {{target_issue_body}} literal.");
+    expect(prompt).not.toContain("Keep INJECTED literal.");
+  });
+});
+
 describe("Project Configuration fails fast", () => {
   let project: Awaited<ReturnType<typeof projectDir>>;
 
@@ -134,8 +182,23 @@ describe("Project Configuration fails fast", () => {
   });
 
   test("rejects unsupported top-level keys", async () => {
-    await project.writeConfig(JSON.stringify({ prompts: { afkIssue: "x.md" } }));
-    expectInvalid(/unsupported configuration key "prompts"/);
+    await project.writeConfig(JSON.stringify({ bogus: { afkIssue: "x.md" } }));
+    expectInvalid(/unsupported configuration key "bogus"/);
+  });
+
+  test("rejects unknown prompt names", async () => {
+    await project.writeConfig(JSON.stringify({ prompts: { bogusPrompt: "x.md" } }));
+    expectInvalid(/unknown prompt extension "bogusPrompt"/);
+  });
+
+  test("rejects a missing prompt extension file", async () => {
+    await project.writeConfig(JSON.stringify({ prompts: { afkIssue: "prompts/missing.md" } }));
+    expectInvalid(/prompt extension "afkIssue" file not found/);
+  });
+
+  test("rejects prompt extension paths that escape .krutrimbox/", async () => {
+    await project.writeConfig(JSON.stringify({ prompts: { afkIssue: "/etc/passwd" } }));
+    expectInvalid(/escapes \.krutrimbox\//);
   });
 
   test("rejects unknown Template Slots", async () => {
@@ -150,7 +213,7 @@ describe("Project Configuration fails fast", () => {
 
   test("rejects a missing override file", async () => {
     await project.writeConfig(JSON.stringify({ templates: { pullRequestBody: "templates/missing.md" } }));
-    expectInvalid(/override file not found/);
+    expectInvalid(/template slot "pullRequestBody" file not found/);
   });
 
   test("rejects override paths that escape .krutrimbox/ with ..", async () => {

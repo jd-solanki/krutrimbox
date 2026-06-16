@@ -1,0 +1,6 @@
+{
+  "prompts": {
+    "afkIssue": "prompts/afk-issue.md",
+    "finalReview": "prompts/final-review.md"
+  }
+}
