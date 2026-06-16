@@ -15,6 +15,10 @@ export interface SandboxAfkInput extends SandboxBranchInput {
 }
 
 export interface SandboxCommitInput extends SandboxBranchInput {
+  // The commit subject line: the Implementation Issue's title verbatim. A
+  // Standalone Target Issue commits under its own title; a Parent Target Issue
+  // commits each Implementation Issue under that sub-issue's title.
+  subject: string;
   issueNumber: number;
 }
 
@@ -148,7 +152,7 @@ export class CommandSandboxRunner {
       "git",
       "commit",
       "-m",
-      "chore: krutrimbox implementation",
+      input.subject,
       "-m",
       `Refs #${input.issueNumber}`
     ]);

@@ -51,15 +51,15 @@ The MVP does not use an `in-progress` issue label. Strict sequential execution u
 7. Before implementation, the Sandboxed Agent session verifies Blocking Issues again with Read-Only GitHub Access.
 8. If a Blocking Issue is not resolved, the Sandboxed Agent session throws an error; krutrimbox catches that error, comments on the current AFK Issue with a helpful idempotent error comment, leaves the issue open, and exits the Factory Run.
 9. If Blocking Issues are resolved, the Sandboxed Agent session checks out or creates the Target Issue Branch and implements the AFK Issue.
-10. After the Sandboxed Agent exits successfully, the outer krutrimbox creates a commit with a fixed commit message, includes `Refs #<issue-number>`, pushes the Target Issue Branch, and creates or reuses the Target Issue Pull Request using the Authenticated GitHub User.
+10. After the Sandboxed Agent exits successfully, the outer krutrimbox creates a commit whose subject is the Implementation Issue title, includes `Refs #<issue-number>`, pushes the Target Issue Branch, and creates or reuses the Target Issue Pull Request using the Authenticated GitHub User.
 11. krutrimbox does not close the completed issue. The branch footer moves it into the Done Set, and GitHub closes it only when the pull request merges.
 
 Sandbox Success trusts the Sandboxed Agent session's successful process exit followed by the outer krutrimbox committing and pushing the resulting changes. Agent verification can be tightened later.
 
-The fixed commit message is:
+The commit message uses the Implementation Issue title as its subject, with the Issue Reference Footer below. For a Standalone Target Issue the subject is the Target Issue's own title; for a Parent Target Issue each commit's subject is the title of the sub-issue it delivers:
 
 ```text
-chore: krutrimbox implementation
+<implementation-issue-title>
 
 Refs #<issue-number>
 ```
@@ -82,7 +82,7 @@ The Target Issue Pull Request is created as a draft and remains draft while any 
 
 The Target Issue Branch name is deterministic: `krutrimbox/issue-<target-issue-number>`.
 
-The Target Issue Pull Request title uses a fixed krutrimbox format: `krutrimbox #<target-issue-number>: <target-issue-title>`.
+The Target Issue Pull Request title is the Target Issue title verbatim.
 
 The Target Issue Pull Request targets the repository default branch.
 

@@ -47,7 +47,7 @@ export class TargetIssuePullRequest {
     }
 
     const created = await this.github.createDraftPullRequest({
-      title: `krutrimbox #${this.targetIssue.number}: ${this.targetIssue.title}`,
+      title: this.targetIssue.title,
       body,
       head: this.branchName,
       base: await this.github.getDefaultBranch(),

@@ -294,6 +294,9 @@ Batch discovery finds open issues authored by `jd-solanki` with the `ready-for-a
 
 A Standalone Target Issue has no attached sub-issues, so krutrimbox treats the Target Issue itself as a sequence-of-one Implementation Issue and implements its body directly. A Parent Target Issue has attached sub-issues, so krutrimbox uses the Target Issue body as context and walks those Implementation Issues in issue-number order.
 
+> [!TIP]
+> krutrimbox reuses your issue titles verbatim: the Target Issue Pull Request title is the Target Issue title, and each commit subject is the title of the Implementation Issue it delivers — the sub-issue title for a Parent Target Issue, or the Target Issue's own title for a Standalone Target Issue. So if you write your Target Issue and sub-issue titles following your commit conventions (for example `feat: add batch mode` or `fix: handle missing footer`), your pull request title and every commit on the branch will follow those conventions automatically — with no extra step.
+
 krutrimbox does not close issues during a run. Each successful AFK or HITL completion is recorded by a `Refs #<issue-number>` commit footer on the Target Issue Branch; the Done Set is rebuilt from those footers on every run and drives resume behavior. The Target Issue Pull Request body carries `Closes #<number>` keywords for the Target Issue and every Implementation Issue, so GitHub closes them when the pull request merges.
 
 ## Project Configuration Directory

@@ -215,6 +215,7 @@ export class FactoryRun {
       await this.sandbox.commitAndPush({
         sandboxName: this.sandboxName,
         branchName: this.branchName,
+        subject: issue.title,
         issueNumber: issue.number
       });
 

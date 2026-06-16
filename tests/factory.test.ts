@@ -350,10 +350,11 @@ describe("Krutrimbox", () => {
     expect(sandbox.commitAndPush).toHaveBeenCalledWith({
       sandboxName: fakeCodexSandbox(1),
       branchName: "krutrimbox/issue-1",
+      subject: "Target Issue: krutrimbox MVP",
       issueNumber: 1
     });
     expect(github.createDraftPullRequest).toHaveBeenCalledWith({
-      title: "krutrimbox #1: Target Issue: krutrimbox MVP",
+      title: "Target Issue: krutrimbox MVP",
       body: expect.stringContaining("- [x] #1 - Target Issue: krutrimbox MVP"),
       head: "krutrimbox/issue-1",
       base: "main",
@@ -430,7 +431,7 @@ describe("Krutrimbox", () => {
       "Do not create commits or push branches."
     );
     expect(github.createDraftPullRequest).toHaveBeenCalledWith({
-      title: "krutrimbox #1: Target Issue: krutrimbox MVP",
+      title: "Target Issue: krutrimbox MVP",
       body: expect.stringContaining("- [x] #4 - Factory loop"),
       head: "krutrimbox/issue-1",
       base: "main",
@@ -527,6 +528,7 @@ describe("Krutrimbox", () => {
     expect(sandbox.commitAndPush).toHaveBeenCalledWith({
       sandboxName: fakeCodexSandbox(1),
       branchName: "krutrimbox/issue-1",
+      subject: "Continue after HITL",
       issueNumber: 5
     });
   });
@@ -1022,9 +1024,13 @@ describe("Krutrimbox MVP smoke", () => {
     expect(String(sandbox.runAfkIssue.mock.calls[1]?.[0].prompt)).toContain("- #4 - Factory loop (CLOSED)");
     expect(String(sandbox.runAfkIssue.mock.calls[1]?.[0].prompt)).not.toContain("Final review (afk");
     expect(sandbox.commitAndPush.mock.calls.map(([input]) => input.issueNumber)).toEqual([4, 6]);
+    expect(sandbox.commitAndPush.mock.calls.map(([input]) => input.subject)).toEqual([
+      "Factory loop",
+      "Final review"
+    ]);
     expect(github.closeIssue).not.toHaveBeenCalled();
     expect(github.createDraftPullRequest).toHaveBeenCalledWith({
-      title: "krutrimbox #1: Target Issue: krutrimbox MVP",
+      title: "Target Issue: krutrimbox MVP",
       body: expect.stringContaining("Closes #1"),
       head: "krutrimbox/issue-1",
       base: "main",
@@ -1129,6 +1135,7 @@ describe("Krutrimbox MVP smoke", () => {
     expect(sandbox.commitAndPush).toHaveBeenCalledWith({
       sandboxName: fakeCodexSandbox(5),
       branchName: "krutrimbox/issue-5",
+      subject: "Batch AFK",
       issueNumber: 50
     });
     expect(github.closeIssue).not.toHaveBeenCalled();
@@ -1270,7 +1277,7 @@ describe("TargetIssuePullRequest", () => {
     await prModule(github).ensureReflectsSequence(sequence, new Set([3]));
 
     expect(github.createDraftPullRequest).toHaveBeenCalledWith({
-      title: "krutrimbox #1: Target Issue: krutrimbox MVP",
+      title: "Target Issue: krutrimbox MVP",
       body: expect.stringContaining("- [x] #3 - Bootstrap"),
       head: "krutrimbox/issue-1",
       base: "main",
@@ -1453,7 +1460,12 @@ class FakeSandboxRunner implements SandboxRunner {
     }
   );
   public readonly commitAndPush = vi.fn(
-    async (input: { sandboxName: string; branchName: string; issueNumber: number }) => {
+    async (input: {
+      sandboxName: string;
+      branchName: string;
+      subject: string;
+      issueNumber: number;
+    }) => {
       this.calls.push({ name: "commitAndPush", input });
     }
   );
