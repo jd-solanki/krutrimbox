@@ -83,39 +83,67 @@ export class FactoryRun {
   }
 
   public async process(): Promise<FactoryRunOutcome> {
-    const { targetIssue } = this;
-    this.logger.log(`krutrimbox: building Implementation Sequence for Target Issue #${targetIssue.number}.`);
+    const sequence = await this.buildSequence();
 
-    const subIssues = await this.github.getAttachedSubIssues(targetIssue.number);
-    for (const issueNumber of await fetchDoneSet(this.github, this.branchName)) {
+    this.logResolvedIssues(sequence.resolvedIssues);
+
+    if (hasNoOpenIssues(sequence)) {
+      return this.completeRunWithNoOpenIssues(sequence);
+    }
+
+    this.logOpenImplementationSequence(sequence.openIssues);
+    return this.processOpenIssues(sequence);
+  }
+
+  private async buildSequence(): Promise<ImplementationSequence> {
+    this.logger.log(
+      `krutrimbox: building Implementation Sequence for Target Issue #${this.targetIssue.number}.`
+    );
+
+    const subIssues = await this.github.getAttachedSubIssues(this.targetIssue.number);
+    const doneIssueNumbers = await fetchDoneSet(this.github, this.branchName);
+
+    for (const issueNumber of doneIssueNumbers) {
       this.doneSet.add(issueNumber);
     }
 
-    const sequence = buildImplementationSequence(targetIssue, subIssues, this.doneSet);
+    return buildImplementationSequence(this.targetIssue, subIssues, this.doneSet);
+  }
 
-    for (const issue of sequence.resolvedIssues) {
+  private logResolvedIssues(issues: ResolvedIssue[]): void {
+    for (const issue of issues) {
       this.logger.log(`krutrimbox: skipping Resolved Issue #${issue.number}.`);
     }
+  }
 
-    if (sequence.openIssues.length === 0) {
-      this.logger.log(`krutrimbox: Target Issue #${targetIssue.number} has no open Implementation Issues.`);
+  private async completeRunWithNoOpenIssues(
+    sequence: ImplementationSequence
+  ): Promise<FactoryRunOutcome> {
+    this.logger.log(
+      `krutrimbox: Target Issue #${this.targetIssue.number} has no open Implementation Issues.`
+    );
 
-      if (sequence.resolvedIssues.length > 0) {
-        await this.routeFinalReview(sequence);
-      }
-
-      return "completed";
+    if (sequence.resolvedIssues.length > 0) {
+      await this.routeFinalReview(sequence);
     }
 
-    const orderedIssues = sequence.openIssues
-      .map((issue) => `#${issue.number} (${issue.kind})`)
-      .join(", ");
-    this.logger.log(`krutrimbox: Implementation Sequence for Target Issue #${targetIssue.number}: ${orderedIssues}.`);
+    return "completed";
+  }
 
+  private logOpenImplementationSequence(issues: ImplementationIssue[]): void {
+    const orderedIssues = issues.map((issue) => `#${issue.number} (${issue.kind})`).join(", ");
+    this.logger.log(
+      `krutrimbox: Implementation Sequence for Target Issue #${this.targetIssue.number}: ${orderedIssues}.`
+    );
+  }
+
+  private async processOpenIssues(sequence: ImplementationSequence): Promise<FactoryRunOutcome> {
     for (const issue of sequence.openIssues) {
       if (issue.kind === "hitl") {
         await this.pauseAtHitl(issue);
-        this.logger.log(`krutrimbox: paused Target Issue #${targetIssue.number} at HITL Issue #${issue.number}.`);
+        this.logger.log(
+          `krutrimbox: paused Target Issue #${this.targetIssue.number} at HITL Issue #${issue.number}.`
+        );
         return "paused";
       }
 
@@ -127,13 +155,7 @@ export class FactoryRun {
         return "issue-error";
       }
 
-      this.doneSet.add(issue.number);
-      this.processedIssues.push({
-        number: issue.number,
-        title: issue.title,
-        state: "CLOSED",
-        labels: issue.labels
-      });
+      this.recordCompletedIssue(issue);
     }
 
     const allResolvedSequence: ImplementationSequence = {
@@ -143,6 +165,16 @@ export class FactoryRun {
     await this.routeFinalReview(allResolvedSequence);
 
     return "completed";
+  }
+
+  private recordCompletedIssue(issue: ImplementationIssue): void {
+    this.doneSet.add(issue.number);
+    this.processedIssues.push({
+      number: issue.number,
+      title: issue.title,
+      state: "CLOSED",
+      labels: issue.labels
+    });
   }
 
   private async processAfkIssue(
@@ -335,4 +367,8 @@ function finalReviewMarker(targetIssueNumber: number): string {
 
 function formatError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function hasNoOpenIssues(sequence: ImplementationSequence): boolean {
+  return sequence.openIssues.length === 0;
 }

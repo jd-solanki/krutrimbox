@@ -220,36 +220,20 @@ export function createGitHubCliClient(
     async listIssueComments(issueNumber: number): Promise<GitHubComment[]> {
       const repo = await getRepository();
       const comments = parseJson<RawComment[]>(
-        await runGh([
-          "api",
-          `repos/${repo.owner.login}/${repo.name}/issues/${issueNumber}/comments`
-        ])
+        await runGh(["api", issueCommentsPath(repo, issueNumber)])
       );
 
-      return comments.map((comment) => ({
-        id: String(comment.id),
-        body: comment.body ?? "",
-        url: comment.html_url ?? `https://github.com/${formatRepository(repo)}/issues/${issueNumber}`
-      }));
+      return comments.map((comment) => parseComment(comment, issueUrl(repo, issueNumber)));
     },
 
     async createIssueComment(issueNumber: number, body: string): Promise<GitHubComment> {
       const repo = await getRepository();
 
       const comment = parseJson<RawComment>(
-        await runGh([
-          "api",
-          `repos/${repo.owner.login}/${repo.name}/issues/${issueNumber}/comments`,
-          "-f",
-          `body=${body}`
-        ])
+        await runGh(["api", issueCommentsPath(repo, issueNumber), "-f", `body=${body}`])
       );
 
-      return {
-        id: String(comment.id),
-        body: comment.body ?? "",
-        url: comment.html_url ?? `https://github.com/${formatRepository(repo)}/issues/${issueNumber}`
-      };
+      return parseComment(comment, issueUrl(repo, issueNumber));
     },
 
     async updateIssueComment(commentId: string, body: string): Promise<GitHubComment> {
@@ -266,11 +250,7 @@ export function createGitHubCliClient(
         ])
       );
 
-      return {
-        id: String(comment.id),
-        body: comment.body ?? "",
-        url: comment.html_url ?? `https://github.com/${formatRepository(repo)}/issues/comments/${commentId}`
-      };
+      return parseComment(comment, issueCommentUrl(repo, commentId));
     },
 
     async getDefaultBranch(): Promise<string> {
@@ -604,6 +584,26 @@ function parsePullRequest(pullRequest: RawPullRequest): GitHubPullRequest {
     isDraft: pullRequest.isDraft ?? false,
     labels: pullRequest.labels.map((label) => ({ name: label.name }))
   };
+}
+
+function parseComment(comment: RawComment, fallbackUrl: string): GitHubComment {
+  return {
+    id: String(comment.id),
+    body: comment.body ?? "",
+    url: comment.html_url ?? fallbackUrl
+  };
+}
+
+function issueCommentsPath(repo: RepositoryInfo, issueNumber: number): string {
+  return `repos/${repo.owner.login}/${repo.name}/issues/${issueNumber}/comments`;
+}
+
+function issueUrl(repo: RepositoryInfo, issueNumber: number): string {
+  return `https://github.com/${formatRepository(repo)}/issues/${issueNumber}`;
+}
+
+function issueCommentUrl(repo: RepositoryInfo, commentId: string): string {
+  return `https://github.com/${formatRepository(repo)}/issues/comments/${commentId}`;
 }
 
 function formatRepository(repo: RepositoryInfo): string {

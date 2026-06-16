@@ -50,9 +50,16 @@ export function formatLaterIssues(issues: ImplementationIssue[]): string {
 
   return issues
     .map((issue) => {
-      const blockers = parseBlockingIssueNumbers(issue.body);
-      const blockerText = blockers.length > 0 ? `, blocked by ${blockers.map((number) => `#${number}`).join(", ")}` : "";
-      return `- #${issue.number} - ${issue.title} (${issue.kind}${blockerText})`;
+      return `- #${issue.number} - ${issue.title} (${issue.kind}${formatBlockerSummary(issue)})`;
     })
     .join("\n");
+}
+
+function formatBlockerSummary(issue: ImplementationIssue): string {
+  const blockers = parseBlockingIssueNumbers(issue.body);
+  if (blockers.length === 0) {
+    return "";
+  }
+
+  return `, blocked by ${blockers.map((number) => `#${number}`).join(", ")}`;
 }
