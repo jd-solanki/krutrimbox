@@ -16,7 +16,7 @@ import {
 import { FileTargetIssueLockStore, type TargetIssueLockStore } from "./lock-store";
 import { createFileRunLogFactory, type RunLogFactory } from "./run-log";
 import { CommandSandboxRunner, type SandboxRunner } from "./sandbox-runner";
-import { BundledTemplateRenderer, type TemplateRenderer } from "./template-renderer";
+import { ProjectTemplateRenderer, type TemplateRenderer } from "./template-renderer";
 
 export interface KrutrimboxDependencies {
   github?: GitHubClient;
@@ -62,7 +62,7 @@ export class Krutrimbox {
     this.lockStore = dependencies.lockStore ?? new FileTargetIssueLockStore(cwd);
     this.logger = dependencies.logger ?? console;
     this.openRunLog = dependencies.openRunLog ?? createFileRunLogFactory(cwd, this.logger);
-    this.templates = dependencies.templates ?? new BundledTemplateRenderer();
+    this.templates = dependencies.templates ?? ProjectTemplateRenderer.fromProjectDir(cwd);
     this.cwd = cwd;
     this.commandRunner = createExecFileCommandRunner();
     this.injectedSandbox = dependencies.sandbox;

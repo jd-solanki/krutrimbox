@@ -298,7 +298,7 @@ krutrimbox does not close issues during a run. Each successful AFK or HITL compl
 
 ## Project Configuration Directory
 
-Repositories may keep shared krutrimbox configuration in `.krutrimbox/`. Commit files that define team policy, such as config and comment templates. Template override paths in `.krutrimbox/config.json` are relative to `.krutrimbox/`, and omitted template slots use the built-in defaults:
+krutrimbox ships its built-in prompts and templates as readable Markdown files inside the installed package, so the same defaults apply whether you run from npm or from source. Repositories may keep shared krutrimbox configuration in `.krutrimbox/` and commit files that define team policy, such as `config.json` and comment templates:
 
 ```text
 .krutrimbox/
@@ -308,6 +308,8 @@ Repositories may keep shared krutrimbox configuration in `.krutrimbox/`. Commit 
     hitl-pause-comment.md
 ```
 
+`.krutrimbox/config.json` may partially override Template Slots by their friendly names. Override paths are resolved relative to `.krutrimbox/`, and any omitted slot falls back to the built-in default:
+
 ```json
 {
   "templates": {
@@ -316,6 +318,21 @@ Repositories may keep shared krutrimbox configuration in `.krutrimbox/`. Commit 
   }
 }
 ```
+
+The supported Template Slots, aligned with their built-in Markdown filenames, are:
+
+| Template Slot        | Built-in Markdown                      | Used for                              |
+| -------------------- | -------------------------------------- | ------------------------------------- |
+| `pullRequestBody`    | `templates/pull-request-body.md`       | the Target Issue Pull Request body    |
+| `hitlPauseComment`   | `templates/hitl-pause-comment.md`      | the HITL pause comment                |
+| `afkErrorComment`    | `templates/afk-error-comment.md`       | the AFK issue error comment           |
+| `finalReviewComment` | `templates/final-review-comment.md`    | the final review comment              |
+
+A few invariants stay owned by krutrimbox and are not configurable:
+
+- **Prompts are built in.** Project Configuration overrides templates only; Sandboxed Agent prompts keep their safety boundaries.
+- **Factory Comment Markers are injected by krutrimbox** outside your template, so a custom comment body cannot break idempotent comment updates.
+- **Invalid configuration fails fast.** Unknown top-level keys, unknown Template Slots, malformed JSON, missing override files, and paths that escape `.krutrimbox/` stop the run with a clear error rather than silently falling back.
 
 Keep runtime state local. Add only these generated subdirectories to the target repository's `.gitignore`:
 

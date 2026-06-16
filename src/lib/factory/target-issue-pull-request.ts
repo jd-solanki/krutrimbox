@@ -83,7 +83,7 @@ export class TargetIssuePullRequest {
     sequence: ImplementationSequence,
     doneSet: Set<number>
   ): Promise<string> {
-    return this.templates.render("templates/pr-body.md", {
+    return this.templates.renderTemplate("pullRequestBody", {
       target_issue_number: this.targetIssue.number,
       target_issue_branch: this.branchName,
       target_issue_sandbox: this.sandboxName,
