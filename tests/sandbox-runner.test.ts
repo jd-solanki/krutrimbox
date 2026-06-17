@@ -234,7 +234,8 @@ describe("CommandSandboxRunner", () => {
       issueNumber: 4
     });
 
-    expect(calls.map((call) => call.args.slice(5))).toEqual([
+    const sandboxGit = calls.filter((call) => call.command === "sbx").map((call) => call.args.slice(5));
+    expect(sandboxGit).toEqual([
       ["git", "add", "-A"],
       [
         "git",
@@ -243,9 +244,39 @@ describe("CommandSandboxRunner", () => {
         "Generalize Implementation Sequence: standalone sequence-of-one",
         "-m",
         "Refs #4"
-      ],
-      ["git", "push", "-u", "origin", "krutrimbox/issue-1"]
+      ]
     ]);
+  });
+
+  test("publishes the commit from the host via the sandbox remote, never pushing inside the sandbox", async () => {
+    const calls: Array<{ command: string; args: string[] }> = [];
+    const runner: CommandRunner = async (command, args) => {
+      calls.push({ command, args });
+      return "";
+    };
+    const sandbox = new CommandSandboxRunner(runner, "/workspace/krutrimbox", codex, "template");
+
+    await sandbox.commitAndPush({
+      sandboxName: "krutrimbox-issue-1-codex",
+      branchName: "krutrimbox/issue-1",
+      subject: "Generalize Implementation Sequence: standalone sequence-of-one",
+      issueNumber: 4
+    });
+
+    const hostGit = calls.filter((call) => call.command === "git").map((call) => call.args);
+    expect(hostGit).toEqual([
+      ["-C", "/workspace/krutrimbox", "fetch", "sandbox-krutrimbox-issue-1-codex", "krutrimbox/issue-1"],
+      [
+        "-C",
+        "/workspace/krutrimbox",
+        "push",
+        "origin",
+        "FETCH_HEAD:refs/heads/krutrimbox/issue-1"
+      ]
+    ]);
+
+    const sandboxGit = calls.filter((call) => call.command === "sbx").map((call) => call.args.slice(5));
+    expect(sandboxGit.some((command) => command.includes("push"))).toBe(false);
   });
 
   test("removes clone sandboxes without an interactive confirmation prompt", async () => {

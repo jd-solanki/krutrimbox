@@ -94,33 +94,47 @@ pnpm pkg:link
 
 ## Authenticate GitHub For Host And Sandboxes
 
-krutrimbox shells out to `gh` for GitHub state and mutations. Make sure `gh` is logged in and points at the right account:
+krutrimbox uses **two separate GitHub credentials**, and the split is what keeps the inner agent safe:
+
+| Credential | Where it lives | Used for | Access needed |
+| ---------- | -------------- | -------- | ------------- |
+| **Host credential** | your `gh` login on the host | every GitHub mutation — create/edit the Target Issue Pull Request, comment, label, request review — **and the Target Issue Branch push** | **write** |
+| **Sandbox credential** | Docker's global `github` secret, injected into sandboxes | inside the sandbox only: the clone, `git fetch`/`ls-remote` against origin, and the agent's read-only `gh` inspection | **read-only** |
+
+The outer `kb` process performs all writes on the host. The sandbox only ever reads from GitHub — so the credential injected into it can, and should, be read-only.
+
+### Host credential (write)
+
+Make sure `gh` is logged in and points at the right account:
 
 ```sh
 gh auth status
-```
-
-If needed:
-
-```sh
+# if needed:
 gh auth login
 ```
 
 The account must be able to read issues, create/edit pull requests, push branches, and comment on issues/PRs in the target repository.
 
-Docker Sandboxes do not automatically inherit your host GitHub CLI login. Store the host `gh` token as Docker's built-in `github` sandbox secret so `gh` and HTTPS GitHub requests can authenticate inside newly created sandboxes:
+### Sandbox credential (read-only)
+
+Docker Sandboxes do not inherit your host GitHub CLI login. Store a **read-only** token as Docker's built-in global `github` secret so `gh` and HTTPS git can authenticate inside sandboxes:
 
 ```sh
-echo "$(gh auth token)" | sbx secret set -g github
+echo "$READ_ONLY_TOKEN" | sbx secret set -g github
 ```
+
+Create a dedicated fine-grained personal access token for this — name it **`krutrimbox`** so it is easy to find and revoke later — scoped to the target repository with only read permissions: **Contents: Read**, **Issues: Read**, **Pull requests: Read**, **Metadata: Read** (Metadata is mandatory). That is everything the sandbox needs. Keeping it a separate, named, read-only token (rather than reusing your host `gh auth token`) means the credential inside the sandbox is least-privilege and independently revocable.
+
+> [!IMPORTANT]
+> **Why a read-only token — krutrimbox's security boundary.** The inner Sandboxed Agent runs non-interactively with its approval prompts bypassed (`--dangerously-bypass-approvals-and-sandbox` / `--dangerously-skip-permissions`). Its prompt forbids changing GitHub state, but a prompt is guidance, not enforcement. The read-only token *is* the enforcement: even if the agent ignored every instruction, the only GitHub credential it can reach cannot push, comment, label, close, merge, or delete anything. All writes happen on the host, with the host credential, entirely outside the sandbox. This is possible because krutrimbox publishes commits from the host (see "How Inner Agent Runs Are Authorized") instead of handing the sandbox a write-capable token.
 
 The `-g` flag stores the secret globally for future sandboxes. Existing sandboxes do not receive newly created or changed global secrets; recreate them after setting the secret, or scope the secret to a specific running sandbox:
 
 ```sh
-echo "$(gh auth token)" | sbx secret set krutrimbox-issue-1 github
+echo "$READ_ONLY_TOKEN" | sbx secret set krutrimbox-issue-1-codex github
 ```
 
-Because all sandbox git access goes over HTTPS through this `github` secret, krutrimbox rewrites the cloned sandbox's `origin` to its HTTPS GitHub form before any remote operation. This means a host repo whose `origin` is an SSH remote — including an `~/.ssh/config` alias such as `git@github-personal:owner/repo.git` — works unchanged; the sandbox never needs your SSH config or keys. A real (dotted) SSH host is preserved for GitHub Enterprise, while an alias host resolves to `github.com`.
+Because all sandbox git reads go over HTTPS through this `github` secret, krutrimbox rewrites the cloned sandbox's `origin` to its HTTPS GitHub form before any remote operation. This means a host repo whose `origin` is an SSH remote — including an `~/.ssh/config` alias such as `git@github-personal:owner/repo.git` — works unchanged; the sandbox never needs your SSH config or keys. A real (dotted) SSH host is preserved for GitHub Enterprise, while an alias host resolves to `github.com`. The Target Issue Branch push runs on the host instead, using your host git credentials directly, so an SSH `origin` works there too.
 
 ## Authenticate Your Agent For Sandboxes
 
@@ -453,6 +467,8 @@ claude -p "<prompt>" --dangerously-skip-permissions
 
 This is intentional. The agent process is already running inside a Docker Sandbox private clone, so Docker Sandboxes is the outer isolation boundary. The inner process must not pause for approval because no human is attached to the AFK Issue session. `claude -p` is also a fresh one-shot (never `--continue`/`--resume`), which keeps each AFK Issue's context window fresh.
 
+Because those flags also bypass the agent's own approval prompts, the agent's GitHub reach is constrained by credentials, not prompts. The agent never pushes: it leaves its work as a commit in the sandbox clone, and the outer krutrimbox publishes it from the host — fetching the commit through the Docker-managed `sandbox-<name>` remote and pushing to `origin` with the host credential. The token injected into the sandbox is therefore read-only (see "Authenticate GitHub For Host And Sandboxes"), so even with approvals bypassed the agent cannot mutate GitHub.
+
 These flags prevent the agent's own approval prompts. They do not answer ordinary command prompts from tools such as `git`, package managers, or auth flows. That is why the machine setup, GitHub auth, agent auth, network policy, and custom `pnpm` template all need to be prepared before running the factory.
 
 ## Troubleshooting
@@ -511,7 +527,7 @@ sbx template ls
 
 ### `gh` cannot connect or is not authenticated
 
-First check host GitHub CLI authentication:
+This can be either credential (see "Authenticate GitHub For Host And Sandboxes"). First check the host GitHub CLI login that the outer process uses for all writes:
 
 ```sh
 gh auth status
@@ -523,10 +539,10 @@ If needed:
 gh auth login
 ```
 
-Then store the host token for future Docker Sandboxes:
+If instead the failure is inside a sandbox, (re)store the **read-only** `krutrimbox` token as the global `github` secret for future Docker Sandboxes:
 
 ```sh
-echo "$(gh auth token)" | sbx secret set -g github
+echo "$READ_ONLY_TOKEN" | sbx secret set -g github
 ```
 
 If the Target Issue Sandbox already exists, either remove it after confirming there is no work to preserve:
@@ -539,7 +555,7 @@ sbx rm --force krutrimbox-issue-<number>-<agent>
 Or apply the secret directly to that running sandbox:
 
 ```sh
-echo "$(gh auth token)" | sbx secret set krutrimbox-issue-<number>-<agent> github
+echo "$READ_ONLY_TOKEN" | sbx secret set krutrimbox-issue-<number>-<agent> github
 ```
 
 ### A sandbox is left behind after a failure

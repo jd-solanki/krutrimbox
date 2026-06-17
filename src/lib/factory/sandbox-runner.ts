@@ -90,9 +90,11 @@ export class CommandSandboxRunner {
   // Docker Sandboxes' `github` secret, and the credential proxy applies it to HTTPS
   // GitHub requests only — never SSH. We deliberately do not forward host SSH keys
   // into the sandbox. So converting `origin` to its HTTPS GitHub form is what lets
-  // that secret authenticate the push at the end of the run. Run before any remote
-  // operation; idempotent, since an already-HTTPS `origin` is left untouched and
-  // reused sandboxes pay only for the read.
+  // that secret authenticate the sandbox's `ls-remote`/`fetch` reads. Those are the
+  // only origin operations the sandbox performs — the Target Issue Branch push runs
+  // on the host (see `commitAndPush`), so this secret never needs write access. Run
+  // before any remote operation; idempotent, since an already-HTTPS `origin` is left
+  // untouched and reused sandboxes pay only for the read.
   private async normalizeOrigin(sandboxName: string): Promise<void> {
     const current = (
       await this.exec(sandboxName, ["git", "remote", "get-url", "origin"])
@@ -158,6 +160,19 @@ export class CommandSandboxRunner {
     await this.runner("sbx", ["rm", "--force", input.sandboxName]);
   }
 
+  // Commits the agent's work inside the sandbox, then publishes it from the HOST.
+  //
+  // The commit is local to the sandbox clone and needs no credential. The push does
+  // need a write credential — and we deliberately keep that credential off the
+  // sandbox so the injected `github` secret can be read-only. The inner agent runs
+  // with approvals bypassed, so a read-only token is its hard write boundary: even
+  // if it ignores its prompt, it cannot mutate GitHub.
+  //
+  // Docker clone mode already exposes the sandbox clone as a `sandbox-<name>` git
+  // remote on the host (and keeps its URL current across restarts). So the host
+  // fetches the new commit through that remote and pushes it to `origin` with the
+  // host's own git credentials. A failed push throws, which leaves the issue out of
+  // the Done Set and so resumable on the next run.
   public async commitAndPush(input: SandboxCommitInput): Promise<void> {
     await this.exec(input.sandboxName, ["git", "add", "-A"]);
     await this.exec(input.sandboxName, [
@@ -168,7 +183,10 @@ export class CommandSandboxRunner {
       "-m",
       `Refs #${input.issueNumber}`
     ]);
-    await this.exec(input.sandboxName, ["git", "push", "-u", "origin", input.branchName]);
+
+    const sandboxRemote = `sandbox-${input.sandboxName}`;
+    await this.hostGit(["fetch", sandboxRemote, input.branchName]);
+    await this.hostGit(["push", "origin", `FETCH_HEAD:refs/heads/${input.branchName}`]);
   }
 
   private exec(
@@ -180,6 +198,14 @@ export class CommandSandboxRunner {
     args.push(sandboxName, "--", ...command);
 
     return this.runner("sbx", args, { output: options.output });
+  }
+
+  // Runs git on the HOST, in the host repository clone, with the host's own
+  // credentials — the counterpart to `exec`, which runs git inside the sandbox.
+  // This is how a sandbox commit reaches `origin` without a write credential ever
+  // entering the sandbox.
+  private hostGit(command: string[]): Promise<string> {
+    return this.runner("git", ["-C", this.workspacePath, ...command]);
   }
 }
 

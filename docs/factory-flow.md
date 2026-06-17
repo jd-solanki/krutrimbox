@@ -28,17 +28,17 @@ Before processing a Target Issue, krutrimbox acquires a Target Issue Lock. For t
 
 If a Target Issue is already locked, krutrimbox skips it and continues.
 
-krutrimbox uses Docker Sandbox clone mode for Target Issue Sandboxes. The host repository is the launch/source repository, but Target Issue Branch checkout, file changes, commits, and pushes happen inside the Target Issue Sandbox private clone rather than the host working tree.
+krutrimbox uses Docker Sandbox clone mode for Target Issue Sandboxes. The host repository is the launch/source repository, but Target Issue Branch checkout, file changes, and commits happen inside the Target Issue Sandbox private clone rather than the host working tree. The push to `origin` is the exception: it runs on the host (see below) so the sandbox never needs a write credential. The Target Issue Branch is cut from a clean origin ref (`origin/<base-branch>`, or `origin/<branch>` on resume), never from the sandbox clone's checked-out HEAD, so host working-tree state and local unpushed commits never leak into it.
 
 Target Issue Sandboxes are created from the krutrimbox Sandbox Template for the run's Agent Backend (`docker.io/library/krutrimbox-codex:pnpm` or `docker.io/library/krutrimbox-claude:pnpm`), so Sandboxed Agents have repository-required tooling such as `pnpm` available before implementation starts. See `docs/sandbox-template.md` for machine setup and template loading instructions.
 
-The outer TypeScript krutrimbox runs implementation git commands inside the Target Issue Sandbox, not on the host. This includes branch checkout, staging, committing, and pushing.
+The outer TypeScript krutrimbox runs implementation git commands inside the Target Issue Sandbox: branch checkout, staging, and committing. Publishing the commit is split out — the host fetches the new commit from the Docker-managed `sandbox-<name>` remote that clone mode exposes, then pushes it to `origin` with the host's own git credentials. Keeping the push on the host is what lets the injected sandbox `github` secret be read-only.
 
 The outer krutrimbox passes the absolute repository path to `sbx create` and uses that same path with `sbx exec --workdir`. In clone mode, the private repository clone is available at that path inside the sandbox; Docker Sandboxes' default exec directory is not guaranteed to be a Git repository.
 
 GitHub mutation commands run from the host through the outer krutrimbox's authenticated `gh` session. The Sandboxed Agent may use read-only `gh` commands for inspection, and sandbox git commands mutate only the Target Issue Sandbox private clone.
 
-For sandbox `gh` access and HTTPS GitHub operations, operators must store the host GitHub CLI token as Docker Sandboxes' built-in `github` secret, as documented in the README. Existing sandboxes created before the secret is configured must be recreated or given a sandbox-scoped `github` secret. If sandbox `git push` or read-only `gh` inspection fails because credentials are unavailable, krutrimbox treats it as an environment error and stops the current Target Issue.
+For sandbox `gh` access and HTTPS GitHub reads, operators store a read-only token as Docker Sandboxes' built-in `github` secret, as documented in the README; the host push uses the operator's own `gh`/git credentials and is the only write path. Existing sandboxes created before the secret is configured must be recreated or given a sandbox-scoped `github` secret. If the host push or the sandbox's read-only `gh`/`fetch` fails because credentials are unavailable, krutrimbox treats it as an environment error and stops the current Target Issue.
 
 The MVP does not use an `in-progress` issue label. Strict sequential execution under the Target Issue Lock prevents krutrimbox from starting the next AFK Issue until the current AFK Issue reaches Sandbox Success and is committed to the Target Issue Branch.
 
