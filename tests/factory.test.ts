@@ -1645,6 +1645,45 @@ test("the Target Issue sandbox name is deterministic and unique per repository",
   );
 });
 
+test("clamps the Target Issue sandbox name to Docker's 63-character hostname limit", () => {
+  // Docker maps the sandbox name to a container hostname (RFC 1035, 63-char cap),
+  // so `sbx create` rejects longer names outright. A long repository slug must be
+  // clamped so the whole name still fits. The exact name below is the golden
+  // output: the readable slug is cut to `big-organization-extremely-lo` (mid-word,
+  // no dangling hyphen) while the issue prefix and the `-<8hex>-<agent>` identity
+  // tail stay intact, landing exactly on the 63-char limit.
+  const name = deterministicTargetIssueSandbox(
+    5,
+    "big-organization/extremely-long-repository-name-here",
+    "codex"
+  );
+
+  expect(name).toBe("krutrimbox-issue-5-big-organization-extremely-lo-8b029291-codex");
+  expect(name.length).toBe(63);
+});
+
+test("keeps clamped sandbox names unique through the repository fingerprint", () => {
+  // Two distinct repositories whose readable slugs share a long leading prefix
+  // clamp to the same readable text (`acme-longrepository-name-shar`), so only the
+  // fingerprint — taken over the full identity — tells their sandboxes apart. The
+  // two golden names below are identical except for that fingerprint, which is
+  // exactly the uniqueness guarantee.
+  const first = deterministicTargetIssueSandbox(
+    5,
+    "acme/longrepository-name-shared-prefix-aaaaaaaaaaaa",
+    "codex"
+  );
+  const second = deterministicTargetIssueSandbox(
+    5,
+    "acme/longrepository-name-shared-prefix-bbbbbbbbbbbb",
+    "codex"
+  );
+
+  expect(first).toBe("krutrimbox-issue-5-acme-longrepository-name-shar-866ba7ea-codex");
+  expect(second).toBe("krutrimbox-issue-5-acme-longrepository-name-shar-0950998f-codex");
+  expect(first).not.toBe(second);
+});
+
 test("file locks use the deterministic Target Issue slug", async () => {
   const workdir = await mkdtemp(join(tmpdir(), "krutrimbox-locks-"));
   try {

@@ -93,36 +93,54 @@ export function deterministicTargetIssueSlug(targetIssueNumber: number): string 
   return `${TARGET_ISSUE_SANDBOX_PREFIX}${targetIssueNumber}`;
 }
 
+// Docker maps the Target Issue Sandbox name to a container hostname, whose RFC
+// 1035 label cap is 63 characters; `sbx create` rejects anything longer outright,
+// so the name must fit within this budget.
+const MAX_SANDBOX_NAME_LENGTH = 63;
+
 // The Target Issue Sandbox name is keyed on (Repository, Target Issue, Agent
 // Backend) so a run with one agent never reuses a sandbox built for another
 // agent's CLI and template image, and so two repositories that share an issue
 // number never collide in `sbx`'s host-global namespace (ADR-0007). The Target
 // Issue Branch stays repo- and agent-blind, since branches live inside each
 // repository's own git, so the Done Set and HITL resume are unaffected.
+//
+// The issue number, repository fingerprint, and agent all carry identity or
+// uniqueness and are never trimmed. Only the readable repository slug — which
+// exists purely for `sbx ls` legibility — is clamped to whatever budget remains
+// after the fixed parts, so a long repository slug can never push the name past
+// the hostname limit. The fingerprint still distinguishes two repositories whose
+// readable slugs clamp to the same leading text.
 export function deterministicTargetIssueSandbox(
   targetIssueNumber: number,
   repositorySlug: string,
   agentName: AgentName
 ): string {
-  return `${deterministicTargetIssueSlug(targetIssueNumber)}-${fingerprintedRepositorySlug(repositorySlug)}-${agentName}`;
+  const { readableSlug, fingerprint } = repositorySlugParts(repositorySlug);
+  const head = `${deterministicTargetIssueSlug(targetIssueNumber)}-`;
+  const suffix = `-${fingerprint}-${agentName}`;
+  const slugBudget = Math.max(0, MAX_SANDBOX_NAME_LENGTH - head.length - suffix.length);
+  const clampedSlug = readableSlug.slice(0, slugBudget).replace(/-+$/, "");
+
+  return `${head}${clampedSlug}${suffix}`;
 }
 
-// Renders a GitHub `owner/name` as the repository portion of a sandbox name: a
-// human-readable slug followed by a short fingerprint. The slug is the
-// lowercased identity with every run of non-alphanumeric characters (the `/`
-// separator, dots, underscores) collapsed to a single hyphen and edge hyphens
-// trimmed, so `sbx ls` stays scannable. The fingerprint is the first 8 hex
-// digits of the SHA-256 of that same lowercased identity, which keeps the name
-// unique even when two distinct repositories slugify to the same readable text
-// (e.g. `acme/foo.bar` and `acme/foo-bar`). Lowercasing before both steps means
-// case-only spellings of one repository — which GitHub does not allow to
-// coexist — never produce two different sandboxes.
-function fingerprintedRepositorySlug(repositorySlug: string): string {
+// Splits a GitHub `owner/name` into the two pieces the sandbox name needs. The
+// readable slug is the lowercased identity with every run of non-alphanumeric
+// characters (the `/` separator, dots, underscores) collapsed to a single hyphen
+// and edge hyphens trimmed, so `sbx ls` stays scannable. The fingerprint is the
+// first 8 hex digits of the SHA-256 of that same lowercased identity, which keeps
+// the name unique even when two distinct repositories slugify to the same readable
+// text (e.g. `acme/foo.bar` and `acme/foo-bar`) — and crucially still does so after
+// the readable slug is clamped to fit the hostname limit. Lowercasing before both
+// steps means case-only spellings of one repository — which GitHub does not allow
+// to coexist — never produce two different sandboxes.
+function repositorySlugParts(repositorySlug: string): { readableSlug: string; fingerprint: string } {
   const canonicalSlug = repositorySlug.toLowerCase();
   const readableSlug = canonicalSlug.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   const fingerprint = createHash("sha256").update(canonicalSlug).digest("hex").slice(0, 8);
 
-  return `${readableSlug}-${fingerprint}`;
+  return { readableSlug, fingerprint };
 }
 
 export function parseBlockingIssueNumbers(body: string): number[] {
