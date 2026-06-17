@@ -7,7 +7,7 @@ import {
   type GitHubIssue
 } from "../github";
 import { resolveCodingAgent, type AgentName, type CodingAgent } from "./coding-agent";
-import { FACTORY_OWNER } from "./constants";
+import { classifyOwnership, isImplementable } from "./ownership";
 import {
   FactoryRun,
   type FactoryRunDependencies,
@@ -36,7 +36,27 @@ export interface KrutrimboxDependencies {
 // when the issue is not open or is already locked and no run took place.
 type DispatchOutcome = FactoryRunOutcome | "skipped";
 
-// The top-level orchestrator: discovers Factory-Owned Target Issues and
+// Per-run flags shared by Explicit and Batch Runs.
+export interface RunOptions {
+  // Origin branch the Target Issue Branch is cut from and the PR targets; defaults
+  // to the repository default branch.
+  baseBranch?: string;
+  // The Implement-Unassigned Override (`--implement-unassigned`): run zero-assignee
+  // issues too. A solo-developer escape hatch (ADR-0018).
+  implementUnassigned?: boolean;
+}
+
+// The resolved per-run context: everything a dispatch needs that does not vary
+// per Target Issue. Resolved once at the top of a run so the Operator and base
+// branch are read a single time, not per dispatched issue.
+interface RunContext {
+  agent: CodingAgent;
+  baseBranch: string;
+  operator: string;
+  allowUnassigned: boolean;
+}
+
+// The top-level orchestrator: discovers the Operator's Target Issues and
 // dispatches each one. Dependencies are injected for tests; in production the
 // constructor wires the file/command-backed implementations from `cwd`.
 export class Krutrimbox {
@@ -72,55 +92,77 @@ export class Krutrimbox {
   public async runExplicit(
     issueNumber: number,
     agentName: AgentName,
-    baseBranch?: string
+    options: RunOptions = {}
   ): Promise<void> {
     const agent = resolveCodingAgent(agentName);
     await this.github.ensureRequiredLabels();
-
-    const targetIssue = await this.github.getIssue(issueNumber);
-
-    if (!isFactoryOwnedTargetIssue(targetIssue)) {
-      this.logger.log(
-        `krutrimbox: skipping Target Issue #${targetIssue.number}; author ${targetIssue.author.login} is not ${FACTORY_OWNER}.`
-      );
-      return;
-    }
-
-    const base = await this.resolveBaseBranch(baseBranch);
+    const context = await this.buildRunContext(agent, options);
 
     this.logger.log(
-      `krutrimbox: starting Explicit Run for Target Issue #${targetIssue.number} with the ${agent.name} Agent Backend.`
+      `krutrimbox: starting Explicit Run for Target Issue #${issueNumber} with the ${agent.name} Agent Backend.`
     );
-    this.logger.log(`krutrimbox: processing only Factory-Owned Target Issues by ${FACTORY_OWNER}.`);
-    await this.dispatch(targetIssue, agent, base);
+
+    const targetIssue = await this.github.getIssue(issueNumber);
+    await this.dispatch(targetIssue, context);
   }
 
-  public async runBatch(agentName: AgentName, baseBranch?: string): Promise<void> {
+  public async runBatch(agentName: AgentName, options: RunOptions = {}): Promise<void> {
     const agent = resolveCodingAgent(agentName);
     this.logger.log(
       `krutrimbox: starting Batch Run for ready Target Issues with the ${agent.name} Agent Backend.`
     );
     await this.github.ensureRequiredLabels();
-    const base = await this.resolveBaseBranch(baseBranch);
-    this.logger.log(`krutrimbox: discovering Factory-Owned Target Issues by ${FACTORY_OWNER}.`);
+    const context = await this.buildRunContext(agent, options);
+    this.logger.log(`krutrimbox: discovering Target Issues assigned to ${context.operator}.`);
 
-    const targetIssues = [...await this.github.listReadyTargetIssues(FACTORY_OWNER)]
-      .sort((left, right) => left.number - right.number);
+    const targetIssues = await this.discoverBatchTargetIssues(context);
     const outcomes: DispatchOutcome[] = [];
 
     for (const targetIssue of targetIssues) {
-      outcomes.push(await this.dispatch(targetIssue, agent, base));
+      outcomes.push(await this.dispatch(targetIssue, context));
     }
 
     this.logBatchSummary(outcomes);
   }
 
-  // Resolves the base branch for a run: the explicit `--base-branch` when given,
-  // otherwise the repository's default branch. Keeping the default dynamic (rather
-  // than a hard-coded `main`) means repositories whose default is `dev`, `trunk`,
-  // etc. work without the flag.
-  private async resolveBaseBranch(baseBranch?: string): Promise<string> {
-    return baseBranch ?? (await this.github.getDefaultBranch());
+  // Resolves the once-per-run context: the Operator (the authenticated GitHub
+  // user this run implements work for) and the base branch. The base defaults to
+  // the repository's default branch — kept dynamic rather than a hard-coded `main`
+  // so repositories whose default is `dev`, `trunk`, etc. work without the flag.
+  private async buildRunContext(agent: CodingAgent, options: RunOptions): Promise<RunContext> {
+    return {
+      agent,
+      baseBranch: options.baseBranch ?? (await this.github.getDefaultBranch()),
+      operator: await this.github.getAuthenticatedUser(),
+      allowUnassigned: options.implementUnassigned ?? false
+    };
+  }
+
+  // Discovers the Batch Run's Target Issues: those assigned to the Operator, plus
+  // unassigned ones under the Implement-Unassigned Override. Issues assigned to
+  // others or to several people are dropped with a warning so a Batch Run never
+  // claims work it cannot cleanly route (ADR-0018, ADR-0019).
+  private async discoverBatchTargetIssues(context: RunContext): Promise<GitHubIssue[]> {
+    const discovered = context.allowUnassigned
+      ? await this.github.listAllReadyTargetIssues()
+      : await this.github.listReadyTargetIssues();
+
+    return [...discovered]
+      .filter((targetIssue) => this.isDiscoverableByOperator(targetIssue, context))
+      .sort((left, right) => left.number - right.number);
+  }
+
+  private isDiscoverableByOperator(targetIssue: GitHubIssue, context: RunContext): boolean {
+    const ownership = classifyOwnership(targetIssue, context.operator);
+
+    if (isImplementable(ownership, { allowUnassigned: context.allowUnassigned })) {
+      return true;
+    }
+
+    this.logger.log(
+      `krutrimbox: skipping Target Issue #${targetIssue.number}; it is not assigned to you alone (${ownership}).`
+    );
+    return false;
   }
 
   // The dispatch seam: discovery hands a Target Issue here, and dispatch guards
@@ -129,8 +171,7 @@ export class Krutrimbox {
   // deterministic branch and sandbox.
   private async dispatch(
     targetIssue: GitHubIssue,
-    agent: CodingAgent,
-    baseBranch: string
+    context: RunContext
   ): Promise<DispatchOutcome> {
     if (targetIssue.state !== "OPEN") {
       this.logger.log(
@@ -153,10 +194,12 @@ export class Krutrimbox {
 
     const runDependencies: FactoryRunDependencies = {
       github: this.github,
-      sandbox: this.buildSandbox(agent),
-      agent,
+      sandbox: this.buildSandbox(context.agent),
+      agent: context.agent,
       repositorySlug: await this.github.getRepositorySlug(),
-      baseBranch,
+      baseBranch: context.baseBranch,
+      operator: context.operator,
+      allowUnassigned: context.allowUnassigned,
       templates: this.templates,
       logger: runLog,
       output: runLog.stream
@@ -199,10 +242,6 @@ export class Krutrimbox {
       + `${tally["issue-error"]} errored, ${tally.skipped} skipped.`
     );
   }
-}
-
-function isFactoryOwnedTargetIssue(targetIssue: GitHubIssue): boolean {
-  return targetIssue.author.login === FACTORY_OWNER;
 }
 
 function isGitHubClient(value: GitHubClient | KrutrimboxDependencies): value is GitHubClient {

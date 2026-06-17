@@ -57,7 +57,7 @@ A Factory Run started for one specified Target Issue.
 _Avoid_: manual run, single run, targeted run
 
 **Batch Run**:
-A Factory Run mode that discovers open Target Issues — labeled `ready-for-agent` and having no parent issue — and processes them one at a time.
+A Factory Run mode that discovers open Target Issues — labeled `ready-for-agent`, assigned to the Operator (`assignee:@me`), and having no parent issue — and processes them one at a time.
 _Avoid_: sweep, queue run, all run
 
 **Implementation Issue**:
@@ -67,6 +67,10 @@ _Avoid_: task, ticket, child issue
 **Implementation Sequence**:
 The ordered set of Implementation Issues that krutrimbox evaluates and completes for a Target Issue.
 _Avoid_: issue list, checklist, queue
+
+**Due Issue**:
+The first still-open Implementation Issue in the Implementation Sequence (the lowest issue number not in the Done Set) — the only issue krutrimbox may act on in the current round of its walk. krutrimbox implements the Due Issue when it is an Owned Issue, pauses when it is a HITL Issue or belongs to another user after the Operator has already done work this run (handoff), and errors when it belongs to another user as the first thing a run looks at.
+_Avoid_: next issue, current issue, head of queue
 
 **Blocking Issue**:
 An Implementation Issue listed in another Implementation Issue's `Blocked by` section and expected to be resolved before that dependent issue begins.
@@ -116,9 +120,17 @@ _Avoid_: bot author, factory author, reviewer
 The human GitHub user who created the Target Issue and owns acceptance of the requested work.
 _Avoid_: reporter, requester
 
-**Factory-Owned Target Issue**:
-A Target Issue authored by `jd-solanki`, making it eligible for krutrimbox processing.
-_Avoid_: eligible issue, owned issue
+**Operator**:
+The GitHub account krutrimbox is authenticated as for a run; krutrimbox matches the issues it works on against this user via `assignee:@me`. The same person is the Authenticated GitHub User that creates branches, commits, and pull requests.
+_Avoid_: runner, current user, bot
+
+**Owned Issue**:
+An issue assigned to exactly the Operator and nobody else, making it eligible for krutrimbox to implement. A zero-assignee issue is an Owned Issue only under the Implement-Unassigned Override; an issue assigned to one other person, or to multiple people, is never owned.
+_Avoid_: assigned issue, eligible issue, my issue
+
+**Implement-Unassigned Override**:
+The `--implement-unassigned` flag that lets krutrimbox treat a zero-assignee issue as an Owned Issue. A solo-developer escape hatch that disables the single-assignee collision guard, so it is not used in teams.
+_Avoid_: force flag, ignore-assignee, no-assignee mode
 
 **Final Reviewer**:
 The human reviewer selected for the completed Target Issue Pull Request after krutrimbox posts its review.
@@ -159,6 +171,7 @@ _Avoid_: comment tag, marker, dedupe token
 - A **Target Issue** has exactly one **Target Issue Branch**, one **Target Issue Pull Request**, one **Target Issue Sandbox**, and one **Target Issue Lock**.
 - An **Implementation Issue** is in the **Done Set** once it has an **Issue Reference Footer** commit on the **Target Issue Branch**; the **Target Issue Pull Request** auto-closes every Done Set issue (and the Target Issue) on merge.
 - A **Factory Run** processes a **Target Issue**, pauses at the first **HITL Issue**, and routes the **Target Issue Pull Request** to the **Final Reviewer** once every **Implementation Issue** is Resolved.
+- krutrimbox implements an **Implementation Issue** only when it is an **Owned Issue** for the **Operator**; on a shared **Parent Target Issue** the **Due Issue** decides whose turn it is, and a **Factory Run** pauses (handoff) or errors when the Due Issue is not the Operator's.
 - A **Factory Run** runs against exactly one **Agent Backend**, chosen by the required `--agent` flag; the Agent Backend supplies the **Sandboxed Agent** session and the **krutrimbox Sandbox Template** for that run's **Target Issue Sandbox**.
 - A built-in Sandboxed Agent prompt may carry one **Prompt Extension** per prompt, supplied through **Project Configuration**; unlike a **Template Slot**, it appends to the prompt rather than replacing it, so krutrimbox keeps ownership of the prompt's safety boundaries.
 

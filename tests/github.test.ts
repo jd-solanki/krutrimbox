@@ -121,7 +121,7 @@ describe("GitHubCliClient", () => {
     ]);
   });
 
-  test("discovers Factory-Owned Target Issues with no parent through GraphQL parent links", async () => {
+  test("discovers Target Issues assigned to the Operator, with no parent, through GraphQL parent links", async () => {
     const runner = fixtureRunner(
       new Map([
         [
@@ -134,7 +134,7 @@ describe("GitHubCliClient", () => {
             data: {
               search: {
                 nodes: [
-                  issueFixture({ number: 9, title: "Target B" }),
+                  issueFixture({ number: 9, title: "Target B", assignees: ["alice"] }),
                   issueFixture({ number: 7, title: "Child issue", parentNumber: 3 }),
                   issueFixture({ number: 3, title: "Target A" })
                 ]
@@ -146,9 +146,10 @@ describe("GitHubCliClient", () => {
     );
     const client = createGitHubCliClient(runner);
 
-    const targetIssues = await client.listReadyTargetIssues("jd-solanki");
+    const targetIssues = await client.listReadyTargetIssues();
 
     expect(targetIssues.map((issue) => issue.number)).toEqual([3, 9]);
+    expect(targetIssues[1].assignees).toEqual([{ login: "alice" }]);
     expect(runner.calls[0]).toEqual({
       command: "gh",
       args: ["repo", "view", "--json", "owner,name"]
@@ -159,8 +160,74 @@ describe("GitHubCliClient", () => {
       "-f",
       expect.stringMatching(/^query=/),
       "-F",
-      "queryString=repo:jd-solanki/krutrimbox is:issue is:open author:jd-solanki label:ready-for-agent"
+      "queryString=repo:jd-solanki/krutrimbox is:issue is:open assignee:@me label:ready-for-agent"
     ]);
+  });
+
+  test("discovers every ready Target Issue regardless of assignee for the Implement-Unassigned Override", async () => {
+    const runner = fixtureRunner(
+      new Map([
+        [
+          commandKey("gh", ["repo", "view", "--json", "owner,name"]),
+          JSON.stringify({ owner: { login: "jd-solanki" }, name: "krutrimbox" })
+        ],
+        [
+          "graphql",
+          JSON.stringify({
+            data: { search: { nodes: [issueFixture({ number: 3, title: "Target A", assignees: [] })] } }
+          })
+        ]
+      ])
+    );
+    const client = createGitHubCliClient(runner);
+
+    const targetIssues = await client.listAllReadyTargetIssues();
+
+    expect(targetIssues.map((issue) => issue.number)).toEqual([3]);
+    expect(runner.calls[1].args).toEqual([
+      "api",
+      "graphql",
+      "-f",
+      expect.stringMatching(/^query=/),
+      "-F",
+      "queryString=repo:jd-solanki/krutrimbox is:issue is:open label:ready-for-agent"
+    ]);
+  });
+
+  test("reads an issue's assignees through gh issue view", async () => {
+    const runner = fixtureRunner(
+      new Map([
+        [
+          commandKey("gh", ["repo", "view", "--json", "owner,name"]),
+          JSON.stringify({ owner: { login: "jd-solanki" }, name: "krutrimbox" })
+        ],
+        [
+          commandKey("gh", [
+            "issue",
+            "view",
+            "4",
+            "--repo",
+            "jd-solanki/krutrimbox",
+            "--json",
+            "number,title,body,state,author,labels,assignees"
+          ]),
+          JSON.stringify({
+            number: 4,
+            title: "Target Issue",
+            body: "Body",
+            state: "OPEN",
+            author: { login: "jd-solanki" },
+            labels: [{ name: "ready-for-agent" }],
+            assignees: [{ login: "alice" }]
+          })
+        ]
+      ])
+    );
+    const client = createGitHubCliClient(runner);
+
+    const issue = await client.getIssue(4);
+
+    expect(issue.assignees).toEqual([{ login: "alice" }]);
   });
 
   test("fetches attached sub-issues through gh api GraphQL fixture data", async () => {
@@ -186,6 +253,9 @@ describe("GitHubCliClient", () => {
                         author: { login: "jd-solanki" },
                         labels: {
                           nodes: [{ name: "ready-for-agent" }]
+                        },
+                        assignees: {
+                          nodes: [{ login: "jd-solanki" }]
                         },
                         parent: { number: 1 }
                       }
@@ -590,11 +660,13 @@ describe("GitHubCliClient", () => {
 function issueFixture({
   number,
   title,
-  parentNumber = null
+  parentNumber = null,
+  assignees = ["jd-solanki"]
 }: {
   number: number;
   title: string;
   parentNumber?: number | null;
+  assignees?: string[];
 }): unknown {
   return {
     __typename: "Issue",
@@ -604,6 +676,7 @@ function issueFixture({
     state: "OPEN",
     author: { login: "jd-solanki" },
     labels: { nodes: [{ name: "ready-for-agent" }] },
+    assignees: { nodes: assignees.map((login) => ({ login })) },
     parent: parentNumber === null ? null : { number: parentNumber }
   };
 }

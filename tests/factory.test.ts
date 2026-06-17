@@ -44,6 +44,10 @@ vi.mock("../src/lib/factory/run-log", () => ({
 // name expectations so both speak of the same repository.
 const FAKE_REPOSITORY_SLUG = "jd-solanki/krutrimbox";
 
+// The Operator most fixtures are owned by: the default `getAuthenticatedUser`
+// login, so a Target Issue or sub-issue assigned to it is the Operator's to run.
+const OPERATOR = "factory-bot";
+
 // The codex sandbox name FakeGitHubClient's repository yields for an issue,
 // expressed through the production helper so these expectations track the real
 // naming scheme instead of a hand-copied fingerprint.
@@ -68,7 +72,8 @@ describe("buildImplementationSequence", () => {
         body: "Standalone body\n\n## Blocked by\n\n- #3",
         state: "OPEN",
         kind: "afk",
-        labels: ["ready-for-agent"]
+        labels: ["ready-for-agent"],
+        assignees: [{ login: OPERATOR }]
       }
     ]);
   });
@@ -189,26 +194,24 @@ describe("Krutrimbox", () => {
     vi.restoreAllMocks();
   });
 
-  test("explicit runs skip Target Issues not authored by the factory owner", async () => {
+  test("explicit runs never touch the sandbox for a Target Issue assigned to someone else", async () => {
     const github = new FakeGitHubClient({
-      targetIssues: [targetIssue({ author: "someone-else" })]
+      targetIssues: [targetIssue({ assignees: ["someone-else"] })]
     });
+    const sandbox = new FakeSandboxRunner();
     const factory = new Krutrimbox({
       github,
-      sandbox: new FakeSandboxRunner(),
+      sandbox,
       lockStore: fakeLockStore(),
       templates: fixtureTemplates
     });
-    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
     await factory.runExplicit(1, "codex");
 
     expect(github.ensureRequiredLabels).toHaveBeenCalledOnce();
     expect(github.getIssue).toHaveBeenCalledWith(1);
-    expect(github.getAttachedSubIssues).not.toHaveBeenCalled();
-    expect(log).toHaveBeenCalledWith(
-      "krutrimbox: skipping Target Issue #1; author someone-else is not jd-solanki."
-    );
+    expect(sandbox.ensureSandbox).not.toHaveBeenCalled();
+    expect(github.createDraftPullRequest).not.toHaveBeenCalled();
   });
 
   test("skips an already locked Target Issue before reading sub-issues", async () => {
@@ -376,7 +379,7 @@ describe("Krutrimbox", () => {
       templates: fixtureTemplates
     });
 
-    await factory.runExplicit(1, "codex", "dev");
+    await factory.runExplicit(1, "codex", { baseBranch: "dev" });
 
     expect(sandbox.checkoutBranch).toHaveBeenCalledWith({
       sandboxName: fakeCodexSandbox(1),
@@ -778,10 +781,10 @@ describe("Krutrimbox", () => {
 
   test("tags Target Issue Author in a comment instead of requesting self-review when authors match", async () => {
     const github = new FakeGitHubClient({
-      targetIssues: [targetIssue({ author: "jd-solanki" })],
+      targetIssues: [targetIssue({ author: "jd-solanki", assignees: ["jd-solanki"] })],
       pullRequests: [{ number: 10, isDraft: true, labels: [{ name: "krutrimbox" }] }],
       subIssuesByTargetIssue: new Map([
-        [1, [implementationIssue({ number: 3, labels: ["ready-for-agent"] })]]
+        [1, [implementationIssue({ number: 3, labels: ["ready-for-agent"], assignees: ["jd-solanki"] })]]
       ]),
       branchCommitMessages: ["Bootstrap\n\nRefs #3"]
     });
@@ -915,6 +918,31 @@ describe("Krutrimbox", () => {
     } finally {
       await rm(workdir, { recursive: true, force: true });
     }
+  });
+
+  test("batch discovery skips a Target Issue assigned to someone else", async () => {
+    const github = new FakeGitHubClient({
+      targetIssues: [targetIssue({ number: 2 }), targetIssue({ number: 3, assignees: ["bob"] })],
+      subIssuesByTargetIssue: new Map([
+        [2, [implementationIssue({ number: 20, parentNumber: 2, labels: ["ready-for-agent"] })]]
+      ])
+    });
+    const logger = { log: vi.fn() };
+    const factory = new Krutrimbox({
+      github,
+      sandbox: new FakeSandboxRunner(),
+      lockStore: fakeLockStore(),
+      templates: fixtureTemplates,
+      logger
+    });
+
+    await factory.runBatch("codex");
+
+    expect(github.getAttachedSubIssues).toHaveBeenCalledWith(2);
+    expect(github.getAttachedSubIssues).not.toHaveBeenCalledWith(3);
+    expect(logger.log).toHaveBeenCalledWith(
+      "krutrimbox: skipping Target Issue #3; it is not assigned to you alone (assigned-to-others)."
+    );
   });
 
   test("batch runs continue after a Target-Issue-local HITL pause", async () => {
@@ -1147,7 +1175,7 @@ describe("Krutrimbox MVP smoke", () => {
 
     await factory.runBatch("codex");
 
-    expect(github.listReadyTargetIssues).toHaveBeenCalledWith("jd-solanki");
+    expect(github.listReadyTargetIssues).toHaveBeenCalled();
     expect(lockStore.acquired).toEqual([3, 5, 9]);
     expect(lockStore.released).toEqual([3, 5]);
     expect(github.getAttachedSubIssues.mock.calls.map(([targetIssueNumber]) => targetIssueNumber)).toEqual([3, 5]);
@@ -1182,7 +1210,8 @@ describe("FactoryRun", () => {
   function runDependencies(
     github: FakeGitHubClient,
     sandbox: FakeSandboxRunner,
-    logger: Pick<Console, "log"> = silentLogger()
+    logger: Pick<Console, "log"> = silentLogger(),
+    options: { operator?: string; allowUnassigned?: boolean } = {}
   ) {
     return {
       github,
@@ -1190,6 +1219,8 @@ describe("FactoryRun", () => {
       agent: resolveCodingAgent("codex"),
       repositorySlug: FAKE_REPOSITORY_SLUG,
       baseBranch: "main",
+      operator: options.operator ?? OPERATOR,
+      allowUnassigned: options.allowUnassigned ?? false,
       templates: fixtureTemplates,
       logger
     };
@@ -1280,6 +1311,96 @@ describe("FactoryRun", () => {
 
     expect(run.branchName).toBe("krutrimbox/issue-7");
     expect(run.sandboxName).toBe(fakeCodexSandbox(7));
+  });
+
+  test("stops with an issue error when the immediate Due Issue is assigned to someone else", async () => {
+    const github = new FakeGitHubClient({
+      targetIssues: [targetIssue()],
+      subIssuesByTargetIssue: new Map([
+        [1, [implementationIssue({ number: 4, labels: ["ready-for-agent"], assignees: ["bob"] })]]
+      ])
+    });
+    const sandbox = new FakeSandboxRunner();
+    const logger = { log: vi.fn() };
+    const run = new FactoryRun(runDependencies(github, sandbox, logger), targetIssue());
+
+    await expect(run.process()).resolves.toBe("issue-error");
+    expect(logger.log).toHaveBeenCalledWith(
+      "krutrimbox: stopped Target Issue #1; Due Issue #4 is assigned to @bob, not you."
+    );
+    expect(sandbox.ensureSandbox).not.toHaveBeenCalled();
+  });
+
+  test("stops on a Due Issue assigned to multiple people, naming them", async () => {
+    const github = new FakeGitHubClient({
+      targetIssues: [targetIssue()],
+      subIssuesByTargetIssue: new Map([
+        [1, [implementationIssue({ number: 4, labels: ["ready-for-agent"], assignees: [OPERATOR, "bob"] })]]
+      ])
+    });
+    const sandbox = new FakeSandboxRunner();
+    const logger = { log: vi.fn() };
+    const run = new FactoryRun(runDependencies(github, sandbox, logger), targetIssue());
+
+    await expect(run.process()).resolves.toBe("issue-error");
+    expect(logger.log).toHaveBeenCalledWith(
+      `krutrimbox: stopped Target Issue #1; Due Issue #4 has multiple assignees (@${OPERATOR}, @bob); krutrimbox can't decide who implements it.`
+    );
+  });
+
+  test("implements the Operator's Due Issues, then pauses to hand off to a teammate's", async () => {
+    const github = new FakeGitHubClient({
+      targetIssues: [targetIssue()],
+      subIssuesByTargetIssue: new Map([
+        [
+          1,
+          [
+            implementationIssue({ number: 4, title: "Mine", labels: ["ready-for-agent"] }),
+            implementationIssue({ number: 5, title: "Bob's", labels: ["ready-for-agent"], assignees: ["bob"] })
+          ]
+        ]
+      ])
+    });
+    const sandbox = new FakeSandboxRunner();
+    const logger = { log: vi.fn() };
+    const run = new FactoryRun(runDependencies(github, sandbox, logger), targetIssue());
+
+    await expect(run.process()).resolves.toBe("paused");
+    expect(sandbox.commitAndPush.mock.calls.map(([input]) => input.issueNumber)).toEqual([4]);
+    expect(logger.log).toHaveBeenCalledWith(
+      "krutrimbox: paused Target Issue #1; Due Issue #5 is assigned to @bob, not you. Handing off to its assignee."
+    );
+  });
+
+  test("stops on an unassigned Due Issue without the Implement-Unassigned Override", async () => {
+    const github = new FakeGitHubClient({
+      targetIssues: [targetIssue({ assignees: [] })],
+      subIssuesByTargetIssue: new Map([
+        [1, [implementationIssue({ number: 4, labels: ["ready-for-agent"], assignees: [] })]]
+      ])
+    });
+    const sandbox = new FakeSandboxRunner();
+    const run = new FactoryRun(runDependencies(github, sandbox), targetIssue({ assignees: [] }));
+
+    await expect(run.process()).resolves.toBe("issue-error");
+    expect(sandbox.ensureSandbox).not.toHaveBeenCalled();
+  });
+
+  test("implements an unassigned Due Issue under the Implement-Unassigned Override", async () => {
+    const github = new FakeGitHubClient({
+      targetIssues: [targetIssue({ assignees: [] })],
+      subIssuesByTargetIssue: new Map([
+        [1, [implementationIssue({ number: 4, labels: ["ready-for-agent"], assignees: [] })]]
+      ])
+    });
+    const sandbox = new FakeSandboxRunner();
+    const run = new FactoryRun(
+      runDependencies(github, sandbox, silentLogger(), { allowUnassigned: true }),
+      targetIssue({ assignees: [] })
+    );
+
+    await expect(run.process()).resolves.toBe("completed");
+    expect(sandbox.commitAndPush).toHaveBeenCalledWith(expect.objectContaining({ issueNumber: 4 }));
   });
 });
 
@@ -1374,6 +1495,7 @@ class FakeGitHubClient implements GitHubClient {
     return `https://github.com/jd-solanki/krutrimbox/issues/${issueNumber}`;
   });
   public readonly listReadyTargetIssues = vi.fn(async () => this.targetIssues);
+  public readonly listAllReadyTargetIssues = vi.fn(async () => this.targetIssues);
   public readonly getAttachedSubIssues = vi.fn(async (targetIssueNumber: number) => {
     return this.subIssuesByTargetIssue.get(targetIssueNumber) ?? [];
   });
@@ -1551,11 +1673,13 @@ const fixtureTemplates: TemplateRenderer = new ProjectTemplateRenderer();
 function targetIssue({
   number = 1,
   author = "jd-solanki",
-  body = ""
+  body = "",
+  assignees = [OPERATOR]
 }: {
   number?: number;
   author?: string;
   body?: string;
+  assignees?: string[];
 } = {}): GitHubIssue {
   return {
     number,
@@ -1564,6 +1688,7 @@ function targetIssue({
     state: "OPEN",
     author: { login: author },
     labels: [{ name: "ready-for-agent" }],
+    assignees: assignees.map((login) => ({ login })),
     parentNumber: null
   };
 }
@@ -1584,6 +1709,7 @@ function blockerIssue({
     state,
     author: { login: "jd-solanki" },
     labels: [],
+    assignees: [],
     parentNumber: null
   };
 }
@@ -1594,7 +1720,8 @@ function implementationIssue({
   body = "Implementation issue body",
   state = "OPEN",
   parentNumber = 1,
-  labels
+  labels,
+  assignees = [OPERATOR]
 }: {
   number: number;
   title?: string;
@@ -1602,6 +1729,7 @@ function implementationIssue({
   state?: "OPEN" | "CLOSED";
   parentNumber?: number | null;
   labels: string[];
+  assignees?: string[];
 }): GitHubIssue {
   return {
     number,
@@ -1610,6 +1738,7 @@ function implementationIssue({
     state,
     author: { login: "jd-solanki" },
     labels: labels.map((name) => ({ name })),
+    assignees: assignees.map((login) => ({ login })),
     parentNumber
   };
 }

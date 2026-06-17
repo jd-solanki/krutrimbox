@@ -316,9 +316,9 @@ The chosen base drives **both** the branch cut and the Target Issue Pull Request
 
 Because the branch is cut from `origin/<base-branch>` (and resumed from `origin/<branch>`), a run is unaffected by your host working tree: you can be on any branch, with uncommitted changes or local commits that are not yet pushed, and none of that leaks into the Target Issue Branch.
 
-krutrimbox currently processes only Factory-Owned Target Issues authored by `jd-solanki`.
+krutrimbox works on issues assigned to **you** — the GitHub account `gh` is authenticated as — that carry the `ready-for-agent` label. An issue must be assigned to you alone; one assigned to someone else or to several people is skipped. Solo developers who don't assign issues can pass `--implement-unassigned` to also run issues with no assignee.
 
-Batch discovery finds open issues authored by `jd-solanki` with the `ready-for-agent` label and excludes any issue that has a parent issue. A child Implementation Issue can also carry `ready-for-agent`; the no-parent rule prevents it from being discovered as its own Target Issue.
+Batch discovery (`kb run`) finds open `ready-for-agent` issues assigned to you that have no parent issue. A child Implementation Issue can also carry `ready-for-agent`; the no-parent rule prevents it from being discovered as its own Target Issue. To work on your slice of an epic that belongs to a teammate, run the parent explicitly with `kb run --issue <parent>`. See [Issue Ownership & Routing](docs/issue-ownership-and-routing.md) for the full model, including how teams split a parent's sub-issues across people.
 
 A Standalone Target Issue has no attached sub-issues, so krutrimbox treats the Target Issue itself as a sequence-of-one Implementation Issue and implements its body directly. A Parent Target Issue has attached sub-issues, so krutrimbox uses the Target Issue body as context and walks those Implementation Issues in issue-number order.
 

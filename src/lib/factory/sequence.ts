@@ -15,6 +15,9 @@ export interface ImplementationIssue {
   state: "OPEN";
   kind: "afk" | "hitl";
   labels: string[];
+  // The issue's GitHub assignees, carried through so the Implementation Sequence
+  // walk can decide whether this issue is the Operator's to implement (ADR-0018).
+  assignees: Array<{ login: string }>;
 }
 
 export interface ResolvedIssue {
@@ -69,7 +72,8 @@ export function buildImplementationSequence(
       body: issue.body,
       state: "OPEN",
       kind: stateLabels[0] === AFK_LABEL ? "afk" : "hitl",
-      labels
+      labels,
+      assignees: issue.assignees
     });
   }
 

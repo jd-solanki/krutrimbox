@@ -29,6 +29,12 @@ export interface GitHubIssue {
   labels: Array<{
     name: string;
   }>;
+  // The issue's GitHub assignees. krutrimbox routes work by assignee — an issue is
+  // the Operator's to implement only when this list holds exactly the Operator
+  // (ADR-0017, ADR-0018). Empty when nobody is assigned.
+  assignees: Array<{
+    login: string;
+  }>;
   // The Target Issue this issue is attached to through GitHub's native sub-issue link
   // (REST `parent_issue_url` / GraphQL `parent`). Null for top-level issues such
   // as Target Issues, or when the issue was not fetched through the sub-issue relationship.
@@ -43,7 +49,13 @@ export interface GitHubClient {
   getRepositorySlug(): Promise<string>;
   getIssue(issueNumber: number): Promise<GitHubIssue>;
   getIssueUrl(issueNumber: number): Promise<string>;
-  listReadyTargetIssues(author: string): Promise<GitHubIssue[]>;
+  // Open Target Issues (labeled `ready-for-agent`, no parent) assigned to the
+  // Operator, via GitHub's `assignee:@me`. The default Batch Run discovery.
+  listReadyTargetIssues(): Promise<GitHubIssue[]>;
+  // Open Target Issues (labeled `ready-for-agent`, no parent) regardless of
+  // assignee. Backs Batch Run discovery under the Implement-Unassigned Override,
+  // where the caller keeps only the Operator's own and unassigned issues.
+  listAllReadyTargetIssues(): Promise<GitHubIssue[]>;
   getAttachedSubIssues(targetIssueNumber: number): Promise<GitHubIssue[]>;
   listIssueComments(issueNumber: number): Promise<GitHubComment[]>;
   createIssueComment(issueNumber: number, body: string): Promise<GitHubComment>;
@@ -134,6 +146,25 @@ export function createGitHubCliClient(
     return pullRequest ? parsePullRequest(pullRequest) : null;
   }
 
+  // Discovers open Target Issues for one assignee scope. `assigneeFilters` narrows
+  // the GitHub issue search — `["assignee:@me"]` for the Operator's own issues, or
+  // `[]` to include every assignee for the Implement-Unassigned Override. The
+  // no-parent requirement is applied after the search, since GitHub issue search
+  // cannot express the native sub-issue link (ADR-0014).
+  async function searchReadyTargetIssues(assigneeFilters: string[]): Promise<GitHubIssue[]> {
+    const repo = await getRepository();
+    const filters = ["is:issue", "is:open", ...assigneeFilters, `label:${AFK_LABEL_NAME}`];
+    const searchQuery = `repo:${formatRepository(repo)} ${filters.join(" ")}`;
+    const response = parseJson<TargetIssuesGraphqlResponse>(
+      await runGh(["api", "graphql", "-f", `query=${TARGET_ISSUES_QUERY}`, "-F", `queryString=${searchQuery}`])
+    );
+
+    return response.data.search.nodes
+      .map(parseSearchIssue)
+      .filter((issue) => issue.parentNumber === null)
+      .sort((left, right) => left.number - right.number);
+  }
+
   return {
     async ensureRequiredLabels(): Promise<void> {
       const existingLabels = parseJson<Array<{ name: string }>>(
@@ -174,7 +205,7 @@ export function createGitHubCliClient(
             "--repo",
             formatRepository(repo),
             "--json",
-            "number,title,body,state,author,labels"
+            "number,title,body,state,author,labels,assignees"
           ])
         )
       );
@@ -185,24 +216,12 @@ export function createGitHubCliClient(
       return `https://github.com/${formatRepository(repo)}/issues/${issueNumber}`;
     },
 
-    async listReadyTargetIssues(author: string): Promise<GitHubIssue[]> {
-      const repo = await getRepository();
-      const searchQuery = `repo:${formatRepository(repo)} is:issue is:open author:${author} label:${AFK_LABEL_NAME}`;
-      const response = parseJson<TargetIssuesGraphqlResponse>(
-        await runGh([
-          "api",
-          "graphql",
-          "-f",
-          `query=${TARGET_ISSUES_QUERY}`,
-          "-F",
-          `queryString=${searchQuery}`
-        ])
-      );
+    async listReadyTargetIssues(): Promise<GitHubIssue[]> {
+      return searchReadyTargetIssues(["assignee:@me"]);
+    },
 
-      return response.data.search.nodes
-        .map(parseSearchIssue)
-        .filter((issue) => issue.parentNumber === null)
-        .sort((left, right) => left.number - right.number);
+    async listAllReadyTargetIssues(): Promise<GitHubIssue[]> {
+      return searchReadyTargetIssues([]);
     },
 
     async getAttachedSubIssues(targetIssueNumber: number): Promise<GitHubIssue[]> {
@@ -422,6 +441,9 @@ interface RawGhIssue {
   labels: Array<{
     name: string;
   }>;
+  assignees?: Array<{
+    login: string;
+  }>;
 }
 
 interface RepositoryInfo {
@@ -484,6 +506,11 @@ interface RawGraphqlIssue {
       name: string;
     }>;
   };
+  assignees: {
+    nodes: Array<{
+      login: string;
+    }>;
+  };
   parent: {
     number: number;
   } | null;
@@ -511,6 +538,11 @@ query($queryString: String!) {
         labels(first: 100) {
           nodes {
             name
+          }
+        }
+        assignees(first: 10) {
+          nodes {
+            login
           }
         }
         parent {
@@ -558,6 +590,7 @@ function parseIssue(issue: RawGhIssue): GitHubIssue {
       login: issue.author.login
     },
     labels: issue.labels.map((label) => ({ name: label.name })),
+    assignees: (issue.assignees ?? []).map((assignee) => ({ login: assignee.login })),
     // `gh issue view`/`issue list` do not return the sub-issue parent link; the
     // parent is read natively when an issue is fetched via getAttachedSubIssues.
     parentNumber: null
@@ -574,6 +607,7 @@ function parseGraphqlIssue(issue: RawGraphqlIssue): GitHubIssue {
       login: issue.author?.login ?? ""
     },
     labels: issue.labels.nodes.map((label) => ({ name: label.name })),
+    assignees: issue.assignees.nodes.map((assignee) => ({ login: assignee.login })),
     parentNumber: issue.parent?.number ?? null
   };
 }

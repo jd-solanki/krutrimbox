@@ -1,4 +1,3 @@
-export const FACTORY_OWNER = "jd-solanki";
 export const AFK_LABEL = "ready-for-agent";
 export const HITL_LABEL = "ready-for-human";
 export const KRUTRIMBOX_LABEL = "krutrimbox";

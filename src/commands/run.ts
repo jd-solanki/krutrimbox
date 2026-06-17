@@ -1,12 +1,12 @@
 import { Command, Option } from "commander";
 import { AGENT_NAMES, type AgentName } from "../lib/factory/coding-agent";
-import { runKrutrimbox } from "../lib/factory/index";
+import { runKrutrimbox, type RunOptions } from "../lib/factory/index";
 
 // Injection seam: the CLI layer only needs these two entry points, so tests can
 // pass a fake dispatch instead of the real Krutrimbox orchestration.
 export interface CliDispatch {
-  runExplicit(issueNumber: number, agent: AgentName, baseBranch?: string): Promise<void> | void;
-  runBatch(agent: AgentName, baseBranch?: string): Promise<void> | void;
+  runExplicit(issueNumber: number, agent: AgentName, options?: RunOptions): Promise<void> | void;
+  runBatch(agent: AgentName, options?: RunOptions): Promise<void> | void;
 }
 
 export function createRunCommand(dispatch: CliDispatch = runKrutrimbox): Command {
@@ -34,14 +34,35 @@ export function createRunCommand(dispatch: CliDispatch = runKrutrimbox): Command
         "origin branch to start work from and target the PR at (default: repository default branch)"
       )
     )
-    .action(async (options: { issue?: number; agent: AgentName; baseBranch?: string }) => {
-      if (typeof options.issue === "number") {
-        await dispatch.runExplicit(options.issue, options.agent, options.baseBranch);
-        return;
-      }
+    .addOption(
+      // Optional solo-developer escape hatch: also run issues that have no
+      // assignee. It disables the single-assignee collision guard, so it is not
+      // for team use (ADR-0018).
+      new Option(
+        "--implement-unassigned",
+        "also run issues that have no assignee (solo-developer escape hatch)"
+      )
+    )
+    .action(
+      async (options: {
+        issue?: number;
+        agent: AgentName;
+        baseBranch?: string;
+        implementUnassigned?: boolean;
+      }) => {
+        const runOptions: RunOptions = {
+          baseBranch: options.baseBranch,
+          implementUnassigned: options.implementUnassigned
+        };
 
-      await dispatch.runBatch(options.agent, options.baseBranch);
-    });
+        if (typeof options.issue === "number") {
+          await dispatch.runExplicit(options.issue, options.agent, runOptions);
+          return;
+        }
+
+        await dispatch.runBatch(options.agent, runOptions);
+      }
+    );
 }
 
 function parseIssueNumber(value: string): number {

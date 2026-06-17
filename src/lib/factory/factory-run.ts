@@ -13,6 +13,7 @@ import {
   type ImplementationSequence,
   type ResolvedIssue
 } from "./sequence";
+import { classifyOwnership, isImplementable, type IssueOwnership } from "./ownership";
 import type { TemplateRenderer } from "./template-renderer";
 
 // The terminal outcome of one Factory Run against a locked Target Issue. `skipped` is a
@@ -36,6 +37,14 @@ export interface FactoryRunDependencies {
   // flag, or the repository default branch). The same value drives the branch cut
   // and the PR base so the two never disagree.
   baseBranch: string;
+  // The Operator: the authenticated GitHub user this run implements work for.
+  // krutrimbox implements a Due Issue only when it is assigned to exactly the
+  // Operator (ADR-0018, ADR-0019).
+  operator: string;
+  // The Implement-Unassigned Override (`--implement-unassigned`): when true a
+  // zero-assignee Due Issue counts as the Operator's. A solo-developer escape
+  // hatch that disables the single-assignee collision guard.
+  allowUnassigned: boolean;
   templates: TemplateRenderer;
   logger: Pick<Console, "log">;
   // Where the sandbox/agent output stream is sent for this run. Omitted in tests
@@ -63,6 +72,8 @@ export class FactoryRun {
   // re-selects the same agent (`--agent` is required and has no default).
   private readonly agentName: string;
   private readonly baseBranch: string;
+  private readonly operator: string;
+  private readonly allowUnassigned: boolean;
   public readonly branchName: string;
   public readonly sandboxName: string;
   private readonly targetIssuePullRequest: TargetIssuePullRequest;
@@ -80,6 +91,8 @@ export class FactoryRun {
     this.output = dependencies.output;
     this.agentName = dependencies.agent.name;
     this.baseBranch = dependencies.baseBranch;
+    this.operator = dependencies.operator;
+    this.allowUnassigned = dependencies.allowUnassigned;
     this.branchName = deterministicTargetIssueBranch(targetIssue.number);
     this.sandboxName = deterministicTargetIssueSandbox(
       targetIssue.number,
@@ -162,6 +175,10 @@ export class FactoryRun {
         return "paused";
       }
 
+      if (!this.isOperatorsToImplement(issue)) {
+        return this.haltAtUnownedDueIssue(issue);
+      }
+
       const priorIssues = [...sequence.resolvedIssues, ...this.processedIssues];
       const laterIssues = sequence.openIssues.filter((candidate) => candidate.number > issue.number);
       const outcome = await this.processAfkIssue(issue, sequence, priorIssues, laterIssues);
@@ -180,6 +197,32 @@ export class FactoryRun {
     await this.routeFinalReview(allResolvedSequence);
 
     return "completed";
+  }
+
+  // Whether the Due Issue is the Operator's to implement: assigned to exactly the
+  // Operator, or unassigned under the Implement-Unassigned Override (ADR-0018).
+  private isOperatorsToImplement(issue: ImplementationIssue): boolean {
+    return isImplementable(classifyOwnership(issue, this.operator), {
+      allowUnassigned: this.allowUnassigned
+    });
+  }
+
+  // Stops the walk at a Due Issue the Operator may not implement. It is an error
+  // when nothing has been implemented this run — the Operator entered a Target
+  // Issue with nothing for them to do — and a handoff pause once the Operator has
+  // already delivered earlier Implementation Issues this run (ADR-0019).
+  private haltAtUnownedDueIssue(issue: ImplementationIssue): FactoryRunOutcome {
+    const reason = describeUnownedDueIssue(issue, classifyOwnership(issue, this.operator));
+
+    if (this.processedIssues.length === 0) {
+      this.logger.log(`krutrimbox: stopped Target Issue #${this.targetIssue.number}; ${reason}`);
+      return "issue-error";
+    }
+
+    this.logger.log(
+      `krutrimbox: paused Target Issue #${this.targetIssue.number}; ${reason} Handing off to its assignee.`
+    );
+    return "paused";
   }
 
   private recordCompletedIssue(issue: ImplementationIssue): void {
@@ -392,6 +435,25 @@ function finalReviewMarker(targetIssueNumber: number): string {
 
 function formatError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+// A run-log reason explaining why a Due Issue is not the Operator's to implement,
+// shared by the error (immediate) and handoff (pause) halt cases (ADR-0019).
+function describeUnownedDueIssue(issue: ImplementationIssue, ownership: IssueOwnership): string {
+  switch (ownership) {
+    case "assigned-to-others":
+      return `Due Issue #${issue.number} is assigned to ${formatAssignees(issue)}, not you.`;
+    case "multiple-assignees":
+      return `Due Issue #${issue.number} has multiple assignees (${formatAssignees(issue)}); krutrimbox can't decide who implements it.`;
+    case "unassigned":
+      return `Due Issue #${issue.number} is not assigned to you; pass --implement-unassigned to run unowned issues.`;
+    case "owned":
+      return `Due Issue #${issue.number} is yours.`;
+  }
+}
+
+function formatAssignees(issue: ImplementationIssue): string {
+  return issue.assignees.map((assignee) => `@${assignee.login}`).join(", ");
 }
 
 function hasNoOpenIssues(sequence: ImplementationSequence): boolean {

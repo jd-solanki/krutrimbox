@@ -1,11 +1,11 @@
 # MVP Scope
 
-The MVP proves the krutrimbox orchestration loop for Factory-Owned Target Issues before tightening agent verification.
+The MVP proves the krutrimbox orchestration loop for Target Issues assigned to the Operator before tightening agent verification.
 
 ## In Scope
 
-- Run krutrimbox against one explicit Target Issue when the issue is authored by `jd-solanki`.
-- Run krutrimbox in Batch Run mode to discover open Target Issues authored by `jd-solanki`, labeled `ready-for-agent`, and lacking a parent issue.
+- Run krutrimbox against one explicit Target Issue, entered by parent id, when the issue (or its Due sub-issue) is assigned to the Operator.
+- Run krutrimbox in Batch Run mode to discover open Target Issues assigned to the Operator (`assignee:@me`), labeled `ready-for-agent`, and lacking a parent issue.
 - Provide `kb run --issue <number> --agent <codex|claude>` for Explicit Runs and `kb run --agent <codex|claude>` for Batch Runs. `--agent` is required and is the only Agent Backend selector.
 - Assume the CLI is run from the target repository root.
 - Use Docker Sandbox clone mode so Target Issue Branch checkout, file changes, commits, and pushes happen inside the Target Issue Sandbox rather than the host working tree.

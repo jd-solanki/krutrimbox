@@ -1,19 +1,19 @@
 # krutrimbox Flow
 
-krutrimbox starts from a Target Issue: an open Factory-Owned issue labeled `ready-for-agent` with no parent issue. A Target Issue can be Standalone, where its own body is the unit of work, or a Parent Target Issue, where native GitHub sub-issues form the ordered Implementation Sequence.
+krutrimbox starts from a Target Issue: an open issue labeled `ready-for-agent`, assigned to the Operator, with no parent issue. A Target Issue can be Standalone, where its own body is the unit of work, or a Parent Target Issue, where native GitHub sub-issues form the ordered Implementation Sequence.
 
 The MVP supports Explicit Runs for a specified Target Issue and Batch Runs that discover eligible Target Issues. Batch Runs process discovered Target Issues sequentially in issue-number order. A HITL pause or issue-level error stops the current Target Issue but does not stop the rest of the Batch Run unless the factory itself hits a fatal error.
 
 Before discovery or processing, krutrimbox ensures required GitHub labels exist: `krutrimbox`, `ready-for-agent`, and `ready-for-human`.
 
-Batch Run discovery filters for author `jd-solanki` when listing candidate Target Issues, so issues authored by other users are skipped by discovery rather than rejected after selection. For the MVP, `jd-solanki` is a top-level constant in the factory implementation, not a user-configurable value.
+Batch Run discovery filters for issues assigned to the Operator (`assignee:@me`) when listing candidate Target Issues, so issues assigned to other users — or to nobody — are not discovered. The Operator is the authenticated `gh` user; a solo developer who labels but does not assign can run with `--implement-unassigned` to also pick up zero-assignee issues.
 
-Explicit Runs also enforce Factory-Owned Target Issue eligibility. A requested Target Issue not authored by `jd-solanki` is skipped.
+Explicit Runs are entered by the parent issue id (`kb run --issue <parent>`) and route work by assignee. See [`issue-ownership-and-routing.md`](./issue-ownership-and-routing.md) for the full ownership model, the Due Issue walk, and how teams split a Parent Target Issue's sub-issues across people (ADR-0017, ADR-0018, ADR-0019).
 
 ## Target Issue Setup
 
 1. The Target Issue exists in GitHub, is open, and is labeled `ready-for-agent`.
-2. The Target Issue is authored by `jd-solanki`.
+2. The Target Issue is assigned to the Operator (or the run uses `--implement-unassigned` for a zero-assignee issue).
 3. The Target Issue has no parent issue.
 4. If the Target Issue has no attached sub-issues, it is treated as its own single AFK Implementation Issue.
 5. If the Target Issue has attached sub-issues, each Implementation Issue is linked through GitHub's native sub-issue relationship.
