@@ -22,7 +22,11 @@ export class TargetIssuePullRequest {
     private readonly logger: Pick<Console, "log">,
     private readonly targetIssue: GitHubIssue,
     private readonly branchName: string,
-    private readonly sandboxName: string
+    private readonly sandboxName: string,
+    // The origin branch this PR targets. Resolved once per run (the `--base-branch`
+    // flag or the repository default branch) and shared with the Target Issue
+    // Branch cut, so the PR base always matches the branch's actual base.
+    private readonly baseBranch: string
   ) {}
 
   public find(): Promise<GitHubPullRequest | null> {
@@ -50,7 +54,7 @@ export class TargetIssuePullRequest {
       title: this.targetIssue.title,
       body,
       head: this.branchName,
-      base: await this.github.getDefaultBranch(),
+      base: this.baseBranch,
       labels: [KRUTRIMBOX_LABEL]
     } satisfies CreatePullRequestInput);
     await this.github.setPullRequestLabels(created.number, [KRUTRIMBOX_LABEL]);

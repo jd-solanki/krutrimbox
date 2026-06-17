@@ -69,7 +69,11 @@ export class Krutrimbox {
     this.sandboxTemplateOverride = dependencies.sandboxTemplate;
   }
 
-  public async runExplicit(issueNumber: number, agentName: AgentName): Promise<void> {
+  public async runExplicit(
+    issueNumber: number,
+    agentName: AgentName,
+    baseBranch?: string
+  ): Promise<void> {
     const agent = resolveCodingAgent(agentName);
     await this.github.ensureRequiredLabels();
 
@@ -82,19 +86,22 @@ export class Krutrimbox {
       return;
     }
 
+    const base = await this.resolveBaseBranch(baseBranch);
+
     this.logger.log(
       `krutrimbox: starting Explicit Run for Target Issue #${targetIssue.number} with the ${agent.name} Agent Backend.`
     );
     this.logger.log(`krutrimbox: processing only Factory-Owned Target Issues by ${FACTORY_OWNER}.`);
-    await this.dispatch(targetIssue, agent);
+    await this.dispatch(targetIssue, agent, base);
   }
 
-  public async runBatch(agentName: AgentName): Promise<void> {
+  public async runBatch(agentName: AgentName, baseBranch?: string): Promise<void> {
     const agent = resolveCodingAgent(agentName);
     this.logger.log(
       `krutrimbox: starting Batch Run for ready Target Issues with the ${agent.name} Agent Backend.`
     );
     await this.github.ensureRequiredLabels();
+    const base = await this.resolveBaseBranch(baseBranch);
     this.logger.log(`krutrimbox: discovering Factory-Owned Target Issues by ${FACTORY_OWNER}.`);
 
     const targetIssues = [...await this.github.listReadyTargetIssues(FACTORY_OWNER)]
@@ -102,17 +109,29 @@ export class Krutrimbox {
     const outcomes: DispatchOutcome[] = [];
 
     for (const targetIssue of targetIssues) {
-      outcomes.push(await this.dispatch(targetIssue, agent));
+      outcomes.push(await this.dispatch(targetIssue, agent, base));
     }
 
     this.logBatchSummary(outcomes);
+  }
+
+  // Resolves the base branch for a run: the explicit `--base-branch` when given,
+  // otherwise the repository's default branch. Keeping the default dynamic (rather
+  // than a hard-coded `main`) means repositories whose default is `dev`, `trunk`,
+  // etc. work without the flag.
+  private async resolveBaseBranch(baseBranch?: string): Promise<string> {
+    return baseBranch ?? (await this.github.getDefaultBranch());
   }
 
   // The dispatch seam: discovery hands a Target Issue here, and dispatch guards
   // it (open state + lock) before a Factory Run ever exists. Holding the lock
   // across `process()` keeps the run's invariant intact: a FactoryRun owns its
   // deterministic branch and sandbox.
-  private async dispatch(targetIssue: GitHubIssue, agent: CodingAgent): Promise<DispatchOutcome> {
+  private async dispatch(
+    targetIssue: GitHubIssue,
+    agent: CodingAgent,
+    baseBranch: string
+  ): Promise<DispatchOutcome> {
     if (targetIssue.state !== "OPEN") {
       this.logger.log(
         `krutrimbox: skipping Target Issue #${targetIssue.number}; issue is ${targetIssue.state}.`
@@ -137,6 +156,7 @@ export class Krutrimbox {
       sandbox: this.buildSandbox(agent),
       agent,
       repositorySlug: await this.github.getRepositorySlug(),
+      baseBranch,
       templates: this.templates,
       logger: runLog,
       output: runLog.stream

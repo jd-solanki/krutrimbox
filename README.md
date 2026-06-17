@@ -288,6 +288,20 @@ kb run --agent claude
 
 The Agent Backend is chosen per run. Because the Done Set is rebuilt from `Refs #<number>` commit footers on the agent-blind Target Issue Branch, you can even resume a Target Issue with a different agent than an earlier run used; each agent gets its own Target Issue Sandbox (`krutrimbox-issue-<number>-<agent>`).
 
+### Choosing the base branch
+
+krutrimbox always cuts the Target Issue Branch from a clean origin ref, never from whatever your host happens to have checked out. By default that ref is your repository's **default branch** (whatever GitHub reports — `main`, `dev`, `trunk`, …). Pass `--base-branch` to start from a different origin branch:
+
+```sh
+kb run --issue 1 --agent codex                 # base = repository default branch
+kb run --issue 1 --agent codex --base-branch dev   # base = origin/dev
+kb run --agent claude --base-branch dev            # batch mode, all issues based on origin/dev
+```
+
+The chosen base drives **both** the branch cut and the Target Issue Pull Request base, so the PR always targets the branch the work was built on. This is useful when you keep `main` as a production branch and integrate day-to-day work on a branch like `dev`. If the named base branch does not exist on origin, the run stops with a clear error.
+
+Because the branch is cut from `origin/<base-branch>` (and resumed from `origin/<branch>`), a run is unaffected by your host working tree: you can be on any branch, with uncommitted changes or local commits that are not yet pushed, and none of that leaks into the Target Issue Branch.
+
 krutrimbox currently processes only Factory-Owned Target Issues authored by `jd-solanki`.
 
 Batch discovery finds open issues authored by `jd-solanki` with the `ready-for-agent` label and excludes any issue that has a parent issue. A child Implementation Issue can also carry `ready-for-agent`; the no-parent rule prevents it from being discovered as its own Target Issue.

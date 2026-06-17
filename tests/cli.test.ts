@@ -16,7 +16,7 @@ describe("krutrimbox CLI", () => {
 
     await program.parseAsync(["node", "kb", "run", "--issue", "42", "--agent", "claude"]);
 
-    expect(dispatch.runExplicit).toHaveBeenCalledWith(42, "claude");
+    expect(dispatch.runExplicit).toHaveBeenCalledWith(42, "claude", undefined);
     expect(dispatch.runBatch).not.toHaveBeenCalled();
   });
 
@@ -26,8 +26,28 @@ describe("krutrimbox CLI", () => {
 
     await program.parseAsync(["node", "kb", "run", "--agent", "codex"]);
 
-    expect(dispatch.runBatch).toHaveBeenCalledWith("codex");
+    expect(dispatch.runBatch).toHaveBeenCalledWith("codex", undefined);
     expect(dispatch.runExplicit).not.toHaveBeenCalled();
+  });
+
+  test("forwards an explicit base branch to an Explicit Run", async () => {
+    const dispatch = createTestDispatch();
+    const program = createTestProgram(dispatch);
+
+    await program.parseAsync([
+      "node", "kb", "run", "--issue", "42", "--agent", "claude", "--base-branch", "dev"
+    ]);
+
+    expect(dispatch.runExplicit).toHaveBeenCalledWith(42, "claude", "dev");
+  });
+
+  test("forwards an explicit base branch to a Batch Run", async () => {
+    const dispatch = createTestDispatch();
+    const program = createTestProgram(dispatch);
+
+    await program.parseAsync(["node", "kb", "run", "--agent", "codex", "--base-branch", "dev"]);
+
+    expect(dispatch.runBatch).toHaveBeenCalledWith("codex", "dev");
   });
 
   test("requires an Agent Backend so a run never starts without one chosen", async () => {

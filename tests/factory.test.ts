@@ -364,6 +364,32 @@ describe("Krutrimbox", () => {
     expect(github.closeIssue).not.toHaveBeenCalled();
   });
 
+  test("an explicit base branch drives both the branch cut and the Target Issue Pull Request base", async () => {
+    const github = new FakeGitHubClient({
+      targetIssues: [targetIssue({ body: "Standalone target issue body" })]
+    });
+    const sandbox = new FakeSandboxRunner();
+    const factory = new Krutrimbox({
+      github,
+      sandbox,
+      lockStore: fakeLockStore(),
+      templates: fixtureTemplates
+    });
+
+    await factory.runExplicit(1, "codex", "dev");
+
+    expect(sandbox.checkoutBranch).toHaveBeenCalledWith({
+      sandboxName: fakeCodexSandbox(1),
+      branchName: "krutrimbox/issue-1",
+      baseBranch: "dev"
+    });
+    expect(github.createDraftPullRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ base: "dev" })
+    );
+    // The repository default branch is never consulted when a base is given.
+    expect(github.getDefaultBranch).not.toHaveBeenCalled();
+  });
+
   test("runs AFK issues through sandbox, commit, and PR maintenance without closing issues", async () => {
     const github = new FakeGitHubClient({
       targetIssues: [targetIssue({ body: "Full parent Target Issue body" })],
@@ -419,7 +445,8 @@ describe("Krutrimbox", () => {
     expect(sandbox.calls[0].input).toEqual({ sandboxName: fakeCodexSandbox(1) });
     expect(sandbox.calls[1].input).toEqual({
       sandboxName: fakeCodexSandbox(1),
-      branchName: "krutrimbox/issue-1"
+      branchName: "krutrimbox/issue-1",
+      baseBranch: "main"
     });
     expect(String(sandbox.calls[2].input.prompt)).toContain("Full parent Target Issue body");
     expect(String(sandbox.calls[2].input.prompt)).toContain("Current issue body");
@@ -1162,6 +1189,7 @@ describe("FactoryRun", () => {
       sandbox,
       agent: resolveCodingAgent("codex"),
       repositorySlug: FAKE_REPOSITORY_SLUG,
+      baseBranch: "main",
       templates: fixtureTemplates,
       logger
     };
@@ -1267,7 +1295,8 @@ describe("TargetIssuePullRequest", () => {
       { log: vi.fn() },
       targetIssue(),
       "krutrimbox/issue-1",
-      fakeCodexSandbox(1)
+      fakeCodexSandbox(1),
+      "main"
     );
   }
 
@@ -1450,7 +1479,7 @@ class FakeSandboxRunner implements SandboxRunner {
     this.calls.push({ name: "ensureSandbox", input });
   });
   public readonly checkoutBranch = vi.fn(
-    async (input: { sandboxName: string; branchName: string }) => {
+    async (input: { sandboxName: string; branchName: string; baseBranch: string }) => {
       this.calls.push({ name: "checkoutBranch", input });
     }
   );

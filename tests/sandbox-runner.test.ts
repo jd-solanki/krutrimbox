@@ -10,14 +10,10 @@ const codex = resolveCodingAgent("codex");
 const claude = resolveCodingAgent("claude");
 
 describe("CommandSandboxRunner", () => {
-  test("checks out an existing branch and pulls the remote branch before work starts", async () => {
+  test("resumes an existing origin branch by cutting it from its own origin tip", async () => {
     const calls: Array<{ command: string; args: string[] }> = [];
     const runner: CommandRunner = async (command, args) => {
       calls.push({ command, args });
-
-      if (args.includes("--list")) {
-        return "  krutrimbox/issue-1\n";
-      }
 
       if (args.includes("ls-remote")) {
         return "abc123\trefs/heads/krutrimbox/issue-1\n";
@@ -29,35 +25,55 @@ describe("CommandSandboxRunner", () => {
 
     await sandbox.checkoutBranch({
       sandboxName: "krutrimbox-issue-1-codex",
-      branchName: "krutrimbox/issue-1"
+      branchName: "krutrimbox/issue-1",
+      baseBranch: "main"
     });
 
     expect(calls.map((call) => call.args.slice(5))).toEqual([
-      ["git", "branch", "--list", "krutrimbox/issue-1"],
       ["git", "ls-remote", "--heads", "origin", "krutrimbox/issue-1"],
-      ["git", "checkout", "krutrimbox/issue-1"],
-      ["git", "pull", "--no-rebase", "--autostash", "--no-edit", "origin", "krutrimbox/issue-1"]
+      ["git", "fetch", "origin", "krutrimbox/issue-1"],
+      ["git", "checkout", "-B", "krutrimbox/issue-1", "FETCH_HEAD"]
     ]);
   });
 
-  test("creates a local branch without pulling when the remote branch does not exist yet", async () => {
+  test("cuts a brand-new branch from the base branch's origin tip, not the clone HEAD", async () => {
     const calls: Array<{ command: string; args: string[] }> = [];
     const runner: CommandRunner = async (command, args) => {
       calls.push({ command, args });
+
+      if (args.includes("ls-remote") && args.includes("main")) {
+        return "def456\trefs/heads/main\n";
+      }
+
       return "";
     };
     const sandbox = new CommandSandboxRunner(runner, "/workspace/krutrimbox", codex, "template");
 
     await sandbox.checkoutBranch({
       sandboxName: "krutrimbox-issue-1-codex",
-      branchName: "krutrimbox/issue-1"
+      branchName: "krutrimbox/issue-1",
+      baseBranch: "main"
     });
 
     expect(calls.map((call) => call.args.slice(5))).toEqual([
-      ["git", "branch", "--list", "krutrimbox/issue-1"],
       ["git", "ls-remote", "--heads", "origin", "krutrimbox/issue-1"],
-      ["git", "checkout", "-B", "krutrimbox/issue-1"]
+      ["git", "ls-remote", "--heads", "origin", "main"],
+      ["git", "fetch", "origin", "main"],
+      ["git", "checkout", "-B", "krutrimbox/issue-1", "FETCH_HEAD"]
     ]);
+  });
+
+  test("fails fast when the base branch does not exist on origin", async () => {
+    const runner: CommandRunner = async () => "";
+    const sandbox = new CommandSandboxRunner(runner, "/workspace/krutrimbox", codex, "template");
+
+    await expect(
+      sandbox.checkoutBranch({
+        sandboxName: "krutrimbox-issue-1-codex",
+        branchName: "krutrimbox/issue-1",
+        baseBranch: "dev"
+      })
+    ).rejects.toThrow('Base branch "dev" does not exist on origin.');
   });
 
   test("creates the sandbox with the Agent Backend's `sbx` agent name and template", async () => {

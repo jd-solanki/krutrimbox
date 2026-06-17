@@ -5,8 +5,8 @@ import { runKrutrimbox } from "../lib/factory/index";
 // Injection seam: the CLI layer only needs these two entry points, so tests can
 // pass a fake dispatch instead of the real Krutrimbox orchestration.
 export interface CliDispatch {
-  runExplicit(issueNumber: number, agent: AgentName): Promise<void> | void;
-  runBatch(agent: AgentName): Promise<void> | void;
+  runExplicit(issueNumber: number, agent: AgentName, baseBranch?: string): Promise<void> | void;
+  runBatch(agent: AgentName, baseBranch?: string): Promise<void> | void;
 }
 
 export function createRunCommand(dispatch: CliDispatch = runKrutrimbox): Command {
@@ -24,13 +24,23 @@ export function createRunCommand(dispatch: CliDispatch = runKrutrimbox): Command
         .choices([...AGENT_NAMES])
         .makeOptionMandatory()
     )
-    .action(async (options: { issue?: number; agent: AgentName }) => {
+    .addOption(
+      // Optional: the origin branch the Target Issue Branch is cut from and the
+      // base the Target Issue Pull Request targets. Omitted, it defaults to the
+      // repository's default branch, so teams that integrate on `main` keep their
+      // current behavior while teams that integrate on, say, `dev` can point there.
+      new Option(
+        "--base-branch <branch>",
+        "origin branch to start work from and target the PR at (default: repository default branch)"
+      )
+    )
+    .action(async (options: { issue?: number; agent: AgentName; baseBranch?: string }) => {
       if (typeof options.issue === "number") {
-        await dispatch.runExplicit(options.issue, options.agent);
+        await dispatch.runExplicit(options.issue, options.agent, options.baseBranch);
         return;
       }
 
-      await dispatch.runBatch(options.agent);
+      await dispatch.runBatch(options.agent, options.baseBranch);
     });
 }
 

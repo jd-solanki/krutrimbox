@@ -31,6 +31,11 @@ export interface FactoryRunDependencies {
   // The current repository's `owner/name`, resolved once at dispatch. Scopes the
   // Target Issue Sandbox name to this repository (ADR-0007).
   repositorySlug: string;
+  // The origin branch the Target Issue Branch is cut from and the base the Target
+  // Issue Pull Request targets. Resolved once at dispatch (the `--base-branch`
+  // flag, or the repository default branch). The same value drives the branch cut
+  // and the PR base so the two never disagree.
+  baseBranch: string;
   templates: TemplateRenderer;
   logger: Pick<Console, "log">;
   // Where the sandbox/agent output stream is sent for this run. Omitted in tests
@@ -57,6 +62,7 @@ export class FactoryRun {
   // The run's Agent Backend name, surfaced in rerun commands so a resumed run
   // re-selects the same agent (`--agent` is required and has no default).
   private readonly agentName: string;
+  private readonly baseBranch: string;
   public readonly branchName: string;
   public readonly sandboxName: string;
   private readonly targetIssuePullRequest: TargetIssuePullRequest;
@@ -73,6 +79,7 @@ export class FactoryRun {
     this.logger = dependencies.logger;
     this.output = dependencies.output;
     this.agentName = dependencies.agent.name;
+    this.baseBranch = dependencies.baseBranch;
     this.branchName = deterministicTargetIssueBranch(targetIssue.number);
     this.sandboxName = deterministicTargetIssueSandbox(
       targetIssue.number,
@@ -85,7 +92,8 @@ export class FactoryRun {
       this.logger,
       targetIssue,
       this.branchName,
-      this.sandboxName
+      this.sandboxName,
+      this.baseBranch
     );
   }
 
@@ -205,7 +213,11 @@ export class FactoryRun {
       }
 
       await this.sandbox.ensureSandbox({ sandboxName: this.sandboxName });
-      await this.sandbox.checkoutBranch({ sandboxName: this.sandboxName, branchName: this.branchName });
+      await this.sandbox.checkoutBranch({
+        sandboxName: this.sandboxName,
+        branchName: this.branchName,
+        baseBranch: this.baseBranch
+      });
       await this.sandbox.runAfkIssue({
         sandboxName: this.sandboxName,
         branchName: this.branchName,

@@ -9,6 +9,13 @@ export interface SandboxBranchInput extends SandboxInput {
   branchName: string;
 }
 
+export interface SandboxCheckoutInput extends SandboxBranchInput {
+  // The origin branch a brand-new Target Issue Branch is cut from. Ignored when the
+  // Target Issue Branch already exists on origin (a resume), which is always cut
+  // from its own origin tip instead.
+  baseBranch: string;
+}
+
 export interface SandboxAfkInput extends SandboxBranchInput {
   prompt: string;
   output?: NodeJS.WritableStream;
@@ -96,13 +103,17 @@ export class CommandSandboxRunner {
     }
   }
 
-  public async checkoutBranch(input: SandboxBranchInput): Promise<void> {
-    const localBranch = await this.exec(input.sandboxName, [
-      "git",
-      "branch",
-      "--list",
-      input.branchName
-    ]);
+  // Cuts the Target Issue Branch from a known origin ref, never from the sandbox
+  // clone's current HEAD. `sbx create --clone` follows whichever ref the host had
+  // checked out at create time (including local unpushed commits), so cutting from
+  // HEAD would leak unrelated host work into the branch. Instead:
+  //   - resume (branch already on origin): cut from `origin/<branch>` so the branch
+  //     resumes exactly where its last push left off;
+  //   - new branch: cut from `origin/<baseBranch>` (the repository default branch,
+  //     or whatever `--base-branch` selected).
+  // `git checkout -B <branch> FETCH_HEAD` resets the local branch to that origin
+  // ref regardless of the clone's HEAD, which is the whole point.
+  public async checkoutBranch(input: SandboxCheckoutInput): Promise<void> {
     const remoteBranch = await this.exec(input.sandboxName, [
       "git",
       "ls-remote",
@@ -111,23 +122,24 @@ export class CommandSandboxRunner {
       input.branchName
     ]);
 
-    if (localBranch.trim()) {
-      await this.exec(input.sandboxName, ["git", "checkout", input.branchName]);
-    } else {
-      await this.exec(input.sandboxName, ["git", "checkout", "-B", input.branchName]);
+    const sourceRef = remoteBranch.trim() ? input.branchName : input.baseBranch;
+
+    if (!remoteBranch.trim()) {
+      const baseRef = await this.exec(input.sandboxName, [
+        "git",
+        "ls-remote",
+        "--heads",
+        "origin",
+        input.baseBranch
+      ]);
+
+      if (!baseRef.trim()) {
+        throw new Error(`Base branch "${input.baseBranch}" does not exist on origin.`);
+      }
     }
 
-    if (remoteBranch.trim()) {
-      await this.exec(input.sandboxName, [
-        "git",
-        "pull",
-        "--no-rebase",
-        "--autostash",
-        "--no-edit",
-        "origin",
-        input.branchName
-      ]);
-    }
+    await this.exec(input.sandboxName, ["git", "fetch", "origin", sourceRef]);
+    await this.exec(input.sandboxName, ["git", "checkout", "-B", input.branchName, "FETCH_HEAD"]);
   }
 
   public async runAfkIssue(input: SandboxAfkInput): Promise<void> {
