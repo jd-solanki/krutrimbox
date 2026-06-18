@@ -30,7 +30,10 @@
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "pkg:link": "pnpm add -g .",
-    "pkg:unlink": "pnpm remove -g krutrimbox"
+    "pkg:unlink": "pnpm remove -g krutrimbox",
+    "docs:dev": "vitepress dev docs/vitepress",
+    "docs:build": "vitepress build docs/vitepress",
+    "docs:preview": "vitepress preview docs/vitepress"
   },
   "dependencies": {
     "commander": "^14.0.2",
@@ -41,6 +44,7 @@
     "bumpp": "^10.2.3",
     "tsdown": "^0.16.4",
     "typescript": "^5.9.3",
+    "vitepress": "2.0.0-alpha.17",
     "vitest": "^4.0.15"
   },
   "engines": {
