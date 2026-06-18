@@ -2,7 +2,7 @@
 
 This document explains how krutrimbox decides **which issues it works on** and **who is allowed to make it work on them**. It covers labeling, the GitHub permission model behind it, issue assignment, the per-issue ownership rule, the `--implement-unassigned` flag, and how one engine serves solo developers, small teams, and large teams that split a single epic across people.
 
-It is the single source of truth for the assignee/ownership model. For the end-to-end Factory Run mechanics (sandboxes, commits, pull requests, final review) see [`factory-flow.md`](./factory-flow.md). For the vocabulary, see [`../CONTEXT.md`](../CONTEXT.md). The decisions recorded here are captured in ADR-0017, ADR-0018, and ADR-0019.
+It is the single source of truth for the assignee/ownership model. For the end-to-end Factory Run mechanics (sandboxes, commits, pull requests, final review) see [Factory Flow](./factory-flow). For the vocabulary, see [CONTEXT.md](https://github.com/jd-solanki/krutrimbox/blob/main/CONTEXT.md). The decisions recorded here are captured in ADR-0017, ADR-0018, and ADR-0019.
 
 ---
 

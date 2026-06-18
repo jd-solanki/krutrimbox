@@ -12,4 +12,4 @@ A run is always entered by the parent (`kb run --issue <parent-id>`, or batch di
 
 - Two operators never write the same sub-issue, because only one can be its sole assignee and only the Due Issue is actionable.
 - A sub-issue assigned to a third party that is not the Due Issue's owner blocks progress until its owner completes it — this is intended (it mirrors how a human team serialises dependent work).
-- Combined with ADR-0017 and ADR-0018, this is the routing model for solo, small-team, and large-team use; see `docs/issue-ownership-and-routing.md`.
+- Combined with ADR-0017 and ADR-0018, this is the routing model for solo, small-team, and large-team use; see [Issue Ownership & Routing](../vitepress/guide/concepts/issue-ownership-and-routing.md).
