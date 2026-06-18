@@ -1,4 +1,5 @@
-import { defineConfig } from 'vitepress'
+import { defineConfig } from 'vitepress';
+import packageJson from "../../../package.json" with { type: "json" };
 
 const repo = 'https://github.com/jd-solanki/krutrimbox'
 
@@ -15,7 +16,7 @@ export default defineConfig({
     nav: [
       { text: 'Guide', link: '/guide/quickstart', activeMatch: '/guide/' },
       {
-        text: 'v0.0.3',
+        text: `v${packageJson.version}`,
         items: [
           { text: 'npm', link: 'https://www.npmjs.com/package/krutrimbox' },
           { text: 'Changelog', link: `${repo}/releases` },
