@@ -102,6 +102,10 @@ Once you've seen it work, process every eligible issue assigned to you in one ba
 kb run --agent claude
 ```
 
+::: tip Bigger tasks? Use sub-issues
+For multi-step work, break a Target Issue into [GitHub's native sub-issues](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/adding-sub-issues) — the built-in parent/child relationship, not task-list checkboxes. krutrimbox walks them in issue-number order, one commit each, on a single branch and pull request. Run the parent with `kb run --issue <parent> --agent claude`. See [Issue Ownership & Routing](./concepts/issue-ownership-and-routing).
+:::
+
 ::: tip Most projects need a sandbox template
 The default sandbox image ships the agent CLI and Node — but not your project's toolchain (pnpm, uv, the Go toolchain, …). If your build or tests need tools the default image lacks, build a small custom template once. See [Sandbox Template](./sandbox-template).
 :::

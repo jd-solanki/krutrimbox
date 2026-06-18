@@ -91,7 +91,7 @@ You reach for explicit mode in the large-team case: when the parent epic belongs
 
 ## 7. Sub-issues: the Due Issue, the Done Set, and the walk
 
-A **Parent Target Issue** has ordered sub-issues (the **Implementation Sequence**, sorted by issue number). krutrimbox works through them strictly in order.
+A **Parent Target Issue** has ordered sub-issues (the **Implementation Sequence**, sorted by issue number). These are [GitHub's native sub-issues](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/adding-sub-issues) — the built-in parent/child relationship, not task-list checkboxes — so krutrimbox reads the hierarchy straight from GitHub. krutrimbox works through them strictly in order.
 
 - **Done Set** — the set of sub-issue numbers that already have a `Refs #<n>` commit footer on the shared **Target Issue Branch** (`krutrimbox/issue-<parent>`). It is never stored; krutrimbox rebuilds it from the branch's git log every run. The branch history *is* the record of "what's already done." (ADR-0015)
 - **Due Issue** — the first sub-issue that is still **open** (lowest number not in the Done Set). It is the only sub-issue eligible to be worked on right now.

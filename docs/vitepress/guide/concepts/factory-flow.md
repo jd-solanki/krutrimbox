@@ -1,6 +1,6 @@
 # krutrimbox Flow
 
-krutrimbox starts from a Target Issue: an open issue labeled `ready-for-agent`, assigned to the Operator, with no parent issue. A Target Issue can be Standalone, where its own body is the unit of work, or a Parent Target Issue, where native GitHub sub-issues form the ordered Implementation Sequence.
+krutrimbox starts from a Target Issue: an open issue labeled `ready-for-agent`, assigned to the Operator, with no parent issue. A Target Issue can be Standalone, where its own body is the unit of work, or a Parent Target Issue, where sub-issues form the ordered Implementation Sequence. Sub-issues are discovered through [GitHub's native sub-issue feature](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/adding-sub-issues) — the built-in parent/child relationship, not task-list checkboxes or `## Parent` body sections (ADR-0001).
 
 The MVP supports Explicit Runs for a specified Target Issue and Batch Runs that discover eligible Target Issues. Batch Runs process discovered Target Issues sequentially in issue-number order. A HITL pause or issue-level error stops the current Target Issue but does not stop the rest of the Batch Run unless the factory itself hits a fatal error.
 
