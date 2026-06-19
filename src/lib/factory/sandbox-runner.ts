@@ -1,4 +1,5 @@
 import type { CommandRunner } from "../github";
+import { diagnostics } from "../diagnostics";
 import type { CodingAgent } from "./coding-agent";
 import { RunLogStream } from "./run-log-stream";
 
@@ -137,7 +138,7 @@ export class CommandSandboxRunner {
       ]);
 
       if (!baseRef.trim()) {
-        throw new Error(`Base branch "${input.baseBranch}" does not exist on origin.`);
+        throw diagnostics.KB_R0003({ baseBranch: input.baseBranch });
       }
     }
 

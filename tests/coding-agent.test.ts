@@ -47,9 +47,20 @@ describe("resolveCodingAgent", () => {
   });
 
   test("rejects an unknown Agent Backend name instead of silently defaulting", () => {
-    expect(() => resolveCodingAgent("gemini" as never)).toThrow(
-      "Unknown Agent Backend \"gemini\"; expected one of: codex, claude."
-    );
+    let thrown: unknown;
+    try {
+      resolveCodingAgent("gemini" as never);
+    } catch (error) {
+      thrown = error;
+    }
+
+    // The diagnosis is the message; the selectable names are the remedy, so they
+    // live on the diagnostic's fix rather than being echoed in the message.
+    expect(thrown).toMatchObject({
+      name: "KB_R0001",
+      message: "Unknown Agent Backend \"gemini\".",
+      fix: "Pass --agent with one of: codex, claude."
+    });
   });
 
   test("exposes the selectable Agent Backend names for CLI validation", () => {

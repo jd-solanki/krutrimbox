@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { Command } from "commander";
+import { Diagnostic, formatDiagnostic } from "nostics";
 import updateNotifier from "update-notifier";
 import packageJson from "../package.json" with { type: "json" };
 import { createRunCommand } from "./commands/run";
@@ -18,4 +19,16 @@ program
 
 program.addCommand(createRunCommand());
 
-await program.parseAsync();
+// Diagnostics krutrimbox raises itself (the `KB_*` catalog in lib/diagnostics)
+// carry a `fix` and a `docs` URL beyond their message; render those on the way
+// out so the operator sees the actionable detail instead of a raw stack. Any
+// other failure rethrows unchanged, preserving its stack for debugging.
+try {
+  await program.parseAsync();
+} catch (error) {
+  if (error instanceof Diagnostic) {
+    console.error(formatDiagnostic(error));
+    process.exit(1);
+  }
+  throw error;
+}

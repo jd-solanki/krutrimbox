@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { GitHubIssue } from "../github";
+import { diagnostics } from "../diagnostics";
 import type { AgentName } from "./coding-agent";
 import {
   AFK_LABEL,
@@ -61,9 +62,11 @@ export function buildImplementationSequence(
     const stateLabels = labels.filter((label) => label === AFK_LABEL || label === HITL_LABEL);
 
     if (stateLabels.length !== 1) {
-      throw new Error(
-        `Implementation Issue #${issue.number} must have exactly one open state label: ${AFK_LABEL} or ${HITL_LABEL}.`
-      );
+      throw diagnostics.KB_R0006({
+        number: issue.number,
+        afkLabel: AFK_LABEL,
+        hitlLabel: HITL_LABEL
+      });
     }
 
     openIssues.push({

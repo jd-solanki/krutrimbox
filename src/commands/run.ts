@@ -1,4 +1,5 @@
 import { Command, Option } from "commander";
+import { diagnostics } from "../lib/diagnostics";
 import { AGENT_NAMES, type AgentName } from "../lib/factory/coding-agent";
 import { runKrutrimbox, type RunOptions } from "../lib/factory/index";
 
@@ -69,7 +70,7 @@ function parseIssueNumber(value: string): number {
   const issueNumber = Number(value);
 
   if (!Number.isInteger(issueNumber) || issueNumber < 1) {
-    throw new Error("Target Issue number must be a positive integer.");
+    throw diagnostics.KB_R0002();
   }
 
   return issueNumber;

@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { diagnostics } from "./diagnostics";
 
 export const REQUIRED_LABELS = [
   {
@@ -340,7 +341,7 @@ export function createGitHubCliClient(
       const pullRequest = await findPullRequestByHead(input.head);
 
       if (!pullRequest) {
-        throw new Error(`Created Pull Request for ${input.head}, but could not find it by head.`);
+        throw diagnostics.KB_R0004({ head: input.head });
       }
 
       return pullRequest;
@@ -614,7 +615,7 @@ function parseGraphqlIssue(issue: RawGraphqlIssue): GitHubIssue {
 
 function parseSearchIssue(issue: RawGraphqlSearchNode): GitHubIssue {
   if (issue.__typename !== "Issue") {
-    throw new Error(`Unexpected GitHub search result type: ${issue.__typename}`);
+    throw diagnostics.KB_R0005({ typename: issue.__typename });
   }
 
   return parseGraphqlIssue(issue);

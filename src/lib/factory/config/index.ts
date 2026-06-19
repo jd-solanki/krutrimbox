@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "pathe";
 import { safeDestr } from "destr";
 import * as v from "valibot";
+import { diagnostics } from "../../diagnostics";
 import { ConfigSchema, type ProjectConfig } from "./schema";
 import { resolveRepoOwnedFile } from "./path-safety";
 import { type PromptName, type TemplateSlot } from "../template-slots";
@@ -78,13 +79,25 @@ class ProjectConfigLoader {
       json = safeDestr(raw);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      throw new Error(`krutrimbox: ${CONFIG_FILE} is not valid JSON: ${detail}`);
+      // A user-file parse error: the JS stack points inside krutrimbox, so carry
+      // the original error as `cause` and the offending file as `sources`.
+      throw diagnostics.KB_C0001({
+        configFile: CONFIG_FILE,
+        detail,
+        cause: error,
+        sources: [CONFIG_FILE]
+      });
     }
 
     try {
       return v.parse(ConfigSchema, json);
     } catch (error) {
-      throw new Error(`krutrimbox: invalid ${CONFIG_FILE}${formatConfigIssue(error)}`);
+      throw diagnostics.KB_C0002({
+        configFile: CONFIG_FILE,
+        issue: formatConfigIssue(error),
+        cause: error,
+        sources: [CONFIG_FILE]
+      });
     }
   }
 
@@ -114,13 +127,19 @@ class ProjectConfigLoader {
 
     if (!resolution.ok) {
       if (resolution.reason === "escapes") {
-        throw new Error(
-          `krutrimbox: ${entityNoun} "${key}" path "${configuredPath}" escapes ${PROJECT_CONFIG_DIRNAME}/.`
-        );
+        throw diagnostics.KB_C0003({
+          entityNoun,
+          key,
+          configuredPath,
+          dirname: PROJECT_CONFIG_DIRNAME
+        });
       }
-      throw new Error(
-        `krutrimbox: ${entityNoun} "${key}" file not found: ${PROJECT_CONFIG_DIRNAME}/${configuredPath}.`
-      );
+      throw diagnostics.KB_C0004({
+        entityNoun,
+        key,
+        dirname: PROJECT_CONFIG_DIRNAME,
+        configuredPath
+      });
     }
 
     return readFileSync(resolution.realPath, "utf8");

@@ -124,9 +124,7 @@ describe("buildImplementationSequence", () => {
           labels: []
         })
       ], new Set())
-    ).toThrow(
-      "Implementation Issue #7 must have exactly one open state label: ready-for-agent or ready-for-human."
-    );
+    ).toThrow("Implementation Issue #7 must have exactly one open state label.");
 
     expect(() =>
       buildImplementationSequence(targetIssue(), [
@@ -135,9 +133,7 @@ describe("buildImplementationSequence", () => {
           labels: ["ready-for-agent", "ready-for-human"]
         })
       ], new Set())
-    ).toThrow(
-      "Implementation Issue #8 must have exactly one open state label: ready-for-agent or ready-for-human."
-    );
+    ).toThrow("Implementation Issue #8 must have exactly one open state label.");
   });
 });
 

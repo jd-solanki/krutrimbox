@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { diagnostics } from "../diagnostics";
 
 // Loads the built-in Markdown prompts and templates that ship with the CLI
 // package. Keeping the defaults as real Markdown files (instead of escaped
@@ -28,7 +29,7 @@ function resolveAssetsDir(): string {
   const found = ASSET_DIR_CANDIDATES.find((candidate) => existsSync(candidate));
 
   if (!found) {
-    throw new Error("krutrimbox: built-in Markdown assets directory was not found.");
+    throw diagnostics.KB_R0007();
   }
 
   cachedAssetsDir = found;

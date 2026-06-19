@@ -6,6 +6,7 @@
 // (branch checkout, commit/push, Done Set, prompts, PR orchestration) stays
 // agent-agnostic.
 
+import { diagnostics } from "../diagnostics";
 import { claudeRunLogCodec } from "./claude-run-log-codec";
 
 // The selectable Agent Backend names, in CLI-presentation order. Doubles as the
@@ -100,7 +101,7 @@ export function resolveCodingAgent(name: AgentName): CodingAgent {
   const agent = AGENTS_BY_NAME[name];
 
   if (!agent) {
-    throw new Error(`Unknown Agent Backend "${name}"; expected one of: ${AGENT_NAMES.join(", ")}.`);
+    throw diagnostics.KB_R0001({ name, expected: AGENT_NAMES.join(", ") });
   }
 
   return agent;
