@@ -12,6 +12,21 @@ export default defineConfig({
 
   head: [['link', { rel: 'icon', href: '/favicon.ico' }]],
 
+  markdown: {
+    config: (md) => {
+      // Render ```mermaid fences through the <Mermaid> component (client-side, SSR-safe).
+      const defaultFence = md.renderer.rules.fence!.bind(md.renderer.rules)
+      md.renderer.rules.fence = (tokens, idx, options, env, self) => {
+        const token = tokens[idx]
+        if (token.info.trim() === 'mermaid') {
+          const graph = Buffer.from(token.content, 'utf-8').toString('base64')
+          return `<Mermaid id="mermaid-${idx}" graph="${graph}" />`
+        }
+        return defaultFence(tokens, idx, options, env, self)
+      }
+    },
+  },
+
   themeConfig: {
     nav: [
       { text: 'Guide', link: '/guide/quickstart', activeMatch: '/guide/' },

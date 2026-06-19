@@ -38,8 +38,8 @@ flowchart TD
     I1["#10 — assigned to Alice"]
     I2["#11 — assigned to Bob"]
   end
-  A["Alice runs kb run"] -->|assignee:@me| I1 --> PA["Alice's branch + PR"]
-  B["Bob runs kb run"] -->|assignee:@me| I2 --> PB["Bob's branch + PR"]
+  A["Alice runs kb run"] -->|"assignee:@me"| I1 --> PA["Alice's branch + PR"]
+  B["Bob runs kb run"] -->|"assignee:@me"| I2 --> PB["Bob's branch + PR"]
 ```
 
 ## Large team

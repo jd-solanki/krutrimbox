@@ -42,6 +42,7 @@
   "devDependencies": {
     "@types/node": "^24.10.1",
     "bumpp": "^10.2.3",
+    "mermaid": "^11.15.0",
     "tsdown": "^0.16.4",
     "typescript": "^5.9.3",
     "vitepress": "2.0.0-alpha.17",
