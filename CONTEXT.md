@@ -13,7 +13,7 @@ The fresh coding-agent session — provided by the selected Agent Backend (Codex
 _Avoid_: worker, implementer, inner agent, Codex session
 
 **Agent Backend**:
-The swappable coding agent that backs a Factory Run, selected per run by the required `--agent` flag (`codex` or `claude`). An Agent Backend encapsulates the three things that differ between agents: the Docker Sandboxes agent name passed to `sbx create`, the non-interactive exec command built from a Sandboxed Agent prompt, and the default krutrimbox Sandbox Template. It does not own GitHub state or git operations.
+The swappable coding agent that backs a Factory Run, selected per run by the required `--agent` flag (`codex` or `claude`). An Agent Backend encapsulates what differs between agents: the Docker Sandboxes agent name passed to `sbx create`, the non-interactive exec command built from a Sandboxed Agent prompt, the default krutrimbox Sandbox Template, and — when the agent emits structured rather than plain-prose session output — how that output is rendered into the run log. It does not own GitHub state or git operations.
 _Avoid_: agent type, model, provider, Sandboxed Agent
 
 **Read-Only GitHub Access**:

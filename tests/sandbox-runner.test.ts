@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { Writable } from "node:stream";
 import { describe, expect, test } from "vitest";
 import {
   CommandSandboxRunner,
@@ -8,6 +10,14 @@ import type { CommandRunner } from "../src/lib/github";
 
 const codex = resolveCodingAgent("codex");
 const claude = resolveCodingAgent("claude");
+
+// A real `claude -p --output-format stream-json --verbose` capture: hook noise,
+// the init line, one assistant turn, a rate-limit event, and the terminal
+// `result`. The final assistant text lives in the `result` event's `result`.
+const claudeStreamJson = readFileSync(
+  new URL("./fixtures/claude-stream.jsonl", import.meta.url),
+  "utf8"
+);
 
 describe("CommandSandboxRunner", () => {
   test("resumes an existing origin branch by cutting it from its own origin tip", async () => {
@@ -192,6 +202,9 @@ describe("CommandSandboxRunner", () => {
       "claude",
       "-p",
       "implement #4",
+      "--output-format",
+      "stream-json",
+      "--verbose",
       "--dangerously-skip-permissions"
     ]);
   });
@@ -217,6 +230,45 @@ describe("CommandSandboxRunner", () => {
       "--dangerously-bypass-approvals-and-sandbox",
       "review the diff"
     ]);
+  });
+
+  test("returns the Claude Agent Backend's final message as the review body, not the raw event stream", async () => {
+    const runner: CommandRunner = async () => claudeStreamJson;
+    const sandbox = new CommandSandboxRunner(runner, "/workspace/krutrimbox", claude, "template");
+
+    const review = await sandbox.runFinalReview({
+      sandboxName: "krutrimbox-issue-1-claude",
+      prompt: "review the diff"
+    });
+
+    expect(review).toBe("I reviewed the diff. The change looks correct.");
+  });
+
+  test("streams readable lines into the run log for a Claude AFK Issue, not raw JSON", async () => {
+    const runner: CommandRunner = async (_command, _args, options) => {
+      options?.output?.write(claudeStreamJson);
+      return claudeStreamJson;
+    };
+    const sandbox = new CommandSandboxRunner(runner, "/workspace/krutrimbox", claude, "template");
+
+    let logged = "";
+    const output = new Writable({
+      write(chunk, _encoding, callback) {
+        logged += chunk.toString();
+        callback();
+      }
+    });
+
+    await sandbox.runAfkIssue({
+      sandboxName: "krutrimbox-issue-1-claude",
+      branchName: "krutrimbox/issue-1",
+      prompt: "implement #4",
+      output
+    });
+
+    expect(logged).toContain("● claude session (model: claude-sonnet-4-6)");
+    expect(logged).toContain("I reviewed the diff. The change looks correct.");
+    expect(logged).not.toContain('"type":"result"');
   });
 
   test("commits the Implementation Issue title as the subject above the Issue Reference Footer", async () => {

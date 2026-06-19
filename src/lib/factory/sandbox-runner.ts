@@ -1,5 +1,6 @@
 import type { CommandRunner } from "../github";
 import type { CodingAgent } from "./coding-agent";
+import { RunLogStream } from "./run-log-stream";
 
 export interface SandboxInput {
   sandboxName: string;
@@ -145,15 +146,41 @@ export class CommandSandboxRunner {
   }
 
   public async runAfkIssue(input: SandboxAfkInput): Promise<void> {
-    await this.exec(input.sandboxName, this.agent.buildExecCommand(input.prompt), {
-      output: input.output
-    });
+    await this.runAgent(input.sandboxName, input.prompt, input.output);
   }
 
   public async runFinalReview(input: SandboxFinalReviewInput): Promise<string> {
-    return this.exec(input.sandboxName, this.agent.buildExecCommand(input.prompt), {
-      output: input.output
-    });
+    return this.runAgent(input.sandboxName, input.prompt, input.output);
+  }
+
+  // Runs one Sandboxed Agent session and returns its caller-facing text. The two
+  // public entry points differ only in whether they use that text: a final review
+  // returns it as the review body, an AFK Issue discards it.
+  //
+  // A structured-output agent (one with a run-log codec) speaks newline-delimited
+  // JSON: its raw stdout is decoded to readable lines on the way to the run log,
+  // and to the final assistant message on the way to the caller. A plain-prose
+  // agent (Codex) has no codec, so its output streams to the run log and returns
+  // to the caller verbatim — the exact path it took before codecs existed.
+  private async runAgent(
+    sandboxName: string,
+    prompt: string,
+    output?: NodeJS.WritableStream
+  ): Promise<string> {
+    const command = this.agent.buildExecCommand(prompt);
+    const codec = this.agent.runLogCodec;
+
+    if (!codec) {
+      return this.exec(sandboxName, command, { output });
+    }
+
+    // Render to the run log only when there is one; the caller-facing text is
+    // extracted regardless (a final review needs it even with no run-log output).
+    const renderStream = output ? new RunLogStream(codec, output) : undefined;
+    const stdout = await this.exec(sandboxName, command, { output: renderStream ?? output });
+    renderStream?.flush();
+
+    return codec.extractResultText(stdout);
   }
 
   public async removeSandbox(input: SandboxInput): Promise<void> {

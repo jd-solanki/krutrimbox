@@ -1,0 +1,6 @@
+{"type":"system","subtype":"hook_started","hook_id":"957b59c8","hook_name":"SessionStart:startup","hook_event":"SessionStart","session_id":"fd374eaa"}
+{"type":"system","subtype":"hook_response","hook_id":"957b59c8","hook_name":"SessionStart:startup","hook_event":"SessionStart","output":"...","stdout":"...","stderr":"","exit_code":0,"outcome":"success","session_id":"fd374eaa"}
+{"type":"system","subtype":"init","cwd":"/workspace/krutrimbox","session_id":"fd374eaa","tools":["Bash","Edit","Read","Write"],"model":"claude-sonnet-4-6","permissionMode":"bypassPermissions","claude_code_version":"2.1.183"}
+{"type":"assistant","message":{"model":"claude-sonnet-4-6","id":"msg_01Ev","type":"message","role":"assistant","content":[{"type":"text","text":"I reviewed the diff. The change looks correct."}],"stop_reason":null},"session_id":"fd374eaa"}
+{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","resetsAt":1781860200,"rateLimitType":"five_hour"},"session_id":"fd374eaa"}
+{"type":"result","subtype":"success","is_error":false,"duration_ms":13389,"num_turns":1,"result":"I reviewed the diff. The change looks correct.","stop_reason":"end_turn","session_id":"fd374eaa","total_cost_usd":0.0455835}

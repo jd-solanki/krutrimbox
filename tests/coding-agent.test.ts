@@ -27,8 +27,16 @@ describe("resolveCodingAgent", () => {
       "claude",
       "-p",
       "do the work",
+      "--output-format",
+      "stream-json",
+      "--verbose",
       "--dangerously-skip-permissions"
     ]);
+  });
+
+  test("gives Claude a run-log codec to decode its structured output, but not Codex", () => {
+    expect(resolveCodingAgent("claude").runLogCodec).toBeDefined();
+    expect(resolveCodingAgent("codex").runLogCodec).toBeUndefined();
   });
 
   test("never bypasses with a resumed Claude session, which would leak context across AFK Issues", () => {

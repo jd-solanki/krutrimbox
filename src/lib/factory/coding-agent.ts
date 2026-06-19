@@ -6,11 +6,32 @@
 // (branch checkout, commit/push, Done Set, prompts, PR orchestration) stays
 // agent-agnostic.
 
+import { claudeRunLogCodec } from "./claude-run-log-codec";
+
 // The selectable Agent Backend names, in CLI-presentation order. Doubles as the
 // allow-list the run command validates `--agent` against.
 export const AGENT_NAMES = ["codex", "claude"] as const;
 
 export type AgentName = (typeof AGENT_NAMES)[number];
+
+// Decodes an Agent Backend whose exec command emits structured (machine-readable)
+// session output rather than plain prose. It keeps that structured stream from
+// leaking into human-facing surfaces, in two independent directions:
+//   - `extractResultText` lifts the final message out of a finished session for
+//     callers (the review body), so a PR comment never carries raw event data.
+//   - `renderLine` turns one raw event line into a human-readable run-log line
+//     (or drops it), so an operator watching the log sees prose and actions
+//     rather than a wall of JSON.
+// A plain-prose agent (Codex) has no codec: its output is the human-readable text
+// already, streamed and returned verbatim.
+export interface RunLogCodec {
+  // Renders one line of the agent's raw output for the run log. Returns the text
+  // to log (without a trailing newline), or null to drop the line as noise. A
+  // line that is not a recognized event is returned verbatim so nothing — not
+  // even an interleaved stderr line — is silently lost.
+  renderLine(line: string): string | null;
+  extractResultText(stdout: string): string;
+}
 
 export interface CodingAgent {
   // The Agent Backend's identity, also used to scope the Target Issue Sandbox
@@ -24,6 +45,9 @@ export interface CodingAgent {
   // prompt. Each agent runs non-interactively (no human is attached to an AFK
   // Issue) and never resumes a prior session, keeping context fresh per issue.
   buildExecCommand(prompt: string): string[];
+  // Present only for an agent that emits structured session output; absent for a
+  // plain-prose agent (Codex), whose output streams and returns verbatim.
+  readonly runLogCodec?: RunLogCodec;
 }
 
 const CODEX_AGENT: CodingAgent = {
@@ -44,8 +68,24 @@ const CLAUDE_AGENT: CodingAgent = {
     // `--resume` — so it satisfies the fresh-context-per-AFK-Issue invariant
     // (ADR-0005). `--dangerously-skip-permissions` is the no-human analog of
     // Codex's approval bypass; the Docker Sandbox clone is the real boundary.
-    return ["claude", "-p", prompt, "--dangerously-skip-permissions"];
-  }
+    //
+    // `--output-format stream-json --verbose` is what makes the run log fill
+    // live: the default `text` format buffers the whole turn and prints once at
+    // the end, so the log stayed empty until completion. `stream-json` emits one
+    // JSON event per line as each happens, and `--verbose` is required in print
+    // mode for those intermediate events to appear at all. The run-log codec
+    // decodes that stream (see `claudeRunLogCodec`).
+    return [
+      "claude",
+      "-p",
+      prompt,
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--dangerously-skip-permissions"
+    ];
+  },
+  runLogCodec: claudeRunLogCodec
 };
 
 const AGENTS_BY_NAME: Record<AgentName, CodingAgent> = {

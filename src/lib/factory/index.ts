@@ -17,5 +17,6 @@ export * from "./project-config";
 export * from "./template-renderer";
 export * from "./lock-store";
 export * from "./run-log";
+export * from "./run-log-stream";
 export * from "./sandbox-runner";
 export * from "./krutrimbox";
