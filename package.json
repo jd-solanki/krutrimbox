@@ -37,7 +37,10 @@
   },
   "dependencies": {
     "commander": "^14.0.2",
-    "update-notifier": "^7.3.1"
+    "destr": "^2.0.5",
+    "pathe": "^2.0.3",
+    "update-notifier": "^7.3.1",
+    "valibot": "^1.4.1"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",

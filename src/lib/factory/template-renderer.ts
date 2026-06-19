@@ -1,5 +1,5 @@
 import { loadBuiltInAsset } from "./asset-store";
-import { loadProjectConfig, type ResolvedProjectConfig } from "./project-config";
+import { loadProjectConfig, type ResolvedProjectConfig } from "./config";
 import { PROMPT_ASSETS, TEMPLATE_SLOTS, type PromptName, type TemplateSlot } from "./template-slots";
 
 // Renders krutrimbox's prompts and templates by substituting `{{key}}`

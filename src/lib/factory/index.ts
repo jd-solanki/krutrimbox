@@ -13,7 +13,7 @@ export * from "./target-issue-pull-request";
 export * from "./factory-run";
 export * from "./template-slots";
 export * from "./asset-store";
-export * from "./project-config";
+export * from "./config";
 export * from "./template-renderer";
 export * from "./lock-store";
 export * from "./run-log";

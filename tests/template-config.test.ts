@@ -183,12 +183,12 @@ describe("Project Configuration fails fast", () => {
 
   test("rejects unsupported top-level keys", async () => {
     await project.writeConfig(JSON.stringify({ bogus: { afkIssue: "x.md" } }));
-    expectInvalid(/unsupported configuration key "bogus"/);
+    expectInvalid(/invalid .+config\.json at "bogus": Invalid key/);
   });
 
   test("rejects unknown prompt names", async () => {
     await project.writeConfig(JSON.stringify({ prompts: { bogusPrompt: "x.md" } }));
-    expectInvalid(/unknown prompt extension "bogusPrompt"/);
+    expectInvalid(/at "prompts\.bogusPrompt": Invalid type/);
   });
 
   test("rejects a missing prompt extension file", async () => {
@@ -203,12 +203,12 @@ describe("Project Configuration fails fast", () => {
 
   test("rejects unknown Template Slots", async () => {
     await project.writeConfig(JSON.stringify({ templates: { bogusSlot: "x.md" } }));
-    expectInvalid(/unknown template slot "bogusSlot"/);
+    expectInvalid(/at "templates\.bogusSlot": Invalid type/);
   });
 
   test("rejects non-string template slot values", async () => {
     await project.writeConfig(JSON.stringify({ templates: { pullRequestBody: 42 } }));
-    expectInvalid(/must be a string path/);
+    expectInvalid(/at "templates\.pullRequestBody": Invalid type: Expected string but received 42/);
   });
 
   test("rejects a missing override file", async () => {
