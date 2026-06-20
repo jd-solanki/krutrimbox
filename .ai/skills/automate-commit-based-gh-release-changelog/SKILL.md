@@ -1,6 +1,7 @@
 ---
 name: automate-commit-based-gh-release-changelog
 description: Automate GitHub release creation and changelog generation from Conventional Commits using changelogithub — includes GitHub release mechanics, tag-based triggers, required permissions, and fetch-depth gotcha. Use when setting up GitHub releases, generating changelogs from commits, using changelogithub, or configuring v* tag triggers and contents:write permissions.
+disable-model-invocation: true
 ---
 
 # Automate Commit-Based GitHub Release Changelog

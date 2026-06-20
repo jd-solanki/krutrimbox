@@ -1,6 +1,7 @@
 ---
 name: node-cli
 description: Patterns and conventions for building Node.js CLI tools — src structure, entry point setup, Commander wiring, and update notifications. Use when creating or modifying a Node.js CLI, adding Commander commands, wiring update-notifier, or asking how to structure a CLI entry point or src directory.
+disable-model-invocation: true
 ---
 
 # Node CLI

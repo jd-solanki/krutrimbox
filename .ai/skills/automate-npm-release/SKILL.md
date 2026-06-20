@@ -1,6 +1,7 @@
 ---
 name: automate-npm-release
 description: Automate npm package publishing via GitHub Actions for single-package repos and independent monorepo packages, including bumpp version tags, GitHub release notes, trusted publishing, provenance, and package-scoped release tags. Use when setting up or modifying npm publish workflows, npm release pipelines, version bumping, package-scoped monorepo releases, changelogithub release notes, trusted publishing, provenance badges, NPM_TOKEN, or OIDC publishing.
+disable-model-invocation: true
 ---
 
 # Automate npm Release
