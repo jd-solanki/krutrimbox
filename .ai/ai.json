@@ -1,7 +1,7 @@
 {
   "packages": {
     "jd-solanki/.ai": {
-      "version": "v1.0.18",
+      "version": "v1.0.22",
       "linked": [
         "skills/automate-commit-based-gh-release-changelog",
         "skills/automate-npm-release",
@@ -10,13 +10,24 @@
         "skills/grill-with-docs",
         "skills/to-issues",
         "skills/to-prd",
-        "skills/write-a-skill",
         "skills/node-cli",
         "skills/clean-code",
-        "skills/diagnose",
         "skills/improve-codebase-architecture",
         "skills/tdd",
-        "skills/krutrimbox-github-labels"
+        "skills/krutrimbox-github-labels",
+        "CLAUDE.md",
+        "skills/add-diagnostic",
+        "skills/codebase-design",
+        "skills/coding",
+        "skills/diagnosing-bugs",
+        "skills/domain-modeling",
+        "skills/git-commit",
+        "skills/grilling",
+        "skills/implement",
+        "skills/nostics",
+        "skills/review",
+        "skills/writing-great-skills",
+        "AGENTS.md"
       ]
     }
   }

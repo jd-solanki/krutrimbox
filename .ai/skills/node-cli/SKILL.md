@@ -14,9 +14,18 @@ src/
 ├── commands/             # One file per CLI command
 │   ├── add.ts
 │   └── remove.ts
-└── lib/                  # Pure domain logic, no Commander concerns
-    ├── github.ts
-    └── linker.ts
+├── lib/                  # Pure domain logic, no Commander concerns
+│   ├── github.ts         # single-file feature → stays flat
+│   ├── linker.ts
+│   └── push/             # 2+ files → grouped into a feature folder, prefix dropped
+│       ├── index.ts      # barrel: re-exports the feature's public surface
+│       ├── workflow.ts
+│       └── validation.ts
+└── utils/                # Generic helpers — mix flat files and nested groups freely
+    ├── format.ts         # flat single-purpose helper
+    └── fs/               # related helpers grouped under one folder
+        ├── read.ts
+        └── write.ts
 tests/                    # Mirrors src/ structure, one test file per module
 ├── add.test.ts
 └── linker.test.ts
@@ -25,6 +34,7 @@ tests/                    # Mirrors src/ structure, one test file per module
 **conventions:**
 - `commands/` — each file exports a single `Command` instance; all CLI concerns (prompts, flags, output) live here
 - `lib/` — framework-agnostic helpers imported by commands; keep them testable in isolation
+- Directories don't have to be flat. Keep a feature flat by default, and group it into a folder **only once it owns 2+ files** — a folder holding one file is just noise. When you group, the folder already names the feature, so drop the redundant prefix from filenames (`lib/push/workflow.ts`, not `lib/push/push-workflow.ts`), and use `dir/index.ts` as the feature's public surface (a barrel re-exporting what commands import, or, for a provider-style seam, the interface/contract itself). Commands import the folder, not its internals: `import { planPush } from '../lib/push/index.js'`, so each feature's internal file split can change without touching call sites.
 
 ## Entry point structure
 
@@ -128,6 +138,7 @@ declare module 'update-notifier' {
 | Test runner | [`vitest`](https://vitest.dev) |
 | Version bumping | [`bumpp`](https://github.com/antfu/bumpp) — bumps `package.json`, commits, tags, and pushes in one step |
 | Bundler | [`tsdown`](https://github.com/rolldown/tsdown) |
+| Diagnostics (structured errors/warnings) | [`nostics`](https://nostics.dev/) — define a catalog of diagnostic codes with stable names, messages, fixes, and docs URLs |
 
 ## package.json essentials
 
