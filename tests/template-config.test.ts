@@ -5,11 +5,13 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
+  loadProjectConfig,
   PROMPT_ASSETS,
   ProjectTemplateRenderer,
   SUPPORTED_TEMPLATE_SLOTS,
   TEMPLATE_SLOTS
 } from "../src/lib/factory/index";
+import { interpolate } from "../src/utils/interpolate";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -67,25 +69,20 @@ describe("ProjectTemplateRenderer built-in defaults", () => {
     expect(prompt).toContain("Work on the Target Issue Branch: `krutrimbox/issue-1`.");
   });
 
-  test("loads a final review prompt that asks for actionable findings as a to-do list", async () => {
-    const prompt = await renderer.renderPrompt("finalReview", {});
-
-    expect(prompt).toContain("- [ ] Finding 1");
-    expect(prompt).toContain("Format actionable findings as unchecked Markdown task-list items (`- [ ]`)");
+  test("interpolates dotted placeholder keys such as Step Outputs", () => {
+    expect(interpolate("Review:\n\n{{steps.review.output}}", { "steps.review.output": "LGTM" }))
+      .toBe("Review:\n\nLGTM");
   });
 
-  test("preserves placeholder substitution semantics: a missing value renders empty", async () => {
-    const body = await renderer.renderTemplate("finalReviewComment", {});
-
-    expect(body.trim()).toBe("");
-    expect(body).not.toContain("{{review_body}}");
+  test("preserves placeholder substitution semantics: a missing value renders empty", () => {
+    expect(interpolate("before {{missing}} after", {})).toBe("before  after");
   });
 
   test("built-in comment templates carry no Factory Comment Marker", async () => {
-    const review = await renderer.renderTemplate("finalReviewComment", { review_body: "ok" });
+    const error = await renderer.renderTemplate("afkErrorComment", {});
     const pause = await renderer.renderTemplate("hitlPauseComment", {});
 
-    expect(review).not.toContain("<!-- krutrimbox:");
+    expect(error).not.toContain("<!-- krutrimbox:");
     expect(pause).not.toContain("<!-- krutrimbox:");
   });
 });
@@ -138,16 +135,6 @@ describe("Prompt Extensions", () => {
     const prompt = await ProjectTemplateRenderer.fromProjectDir(project.dir).renderPrompt("afkIssue", {});
 
     expect(prompt).toContain("<repository_instructions>\nAlways add JSDoc/docstrings.\n</repository_instructions>");
-  });
-
-  test("is per-prompt: extending one prompt leaves the other's block empty", async () => {
-    await project.writeFileUnder("prompts/afk.md", "AFK-only instruction.");
-    await project.writeConfig(JSON.stringify({ prompts: { afkIssue: "prompts/afk.md" } }));
-
-    const renderer = ProjectTemplateRenderer.fromProjectDir(project.dir);
-
-    expect(await renderer.renderPrompt("afkIssue", {})).toContain("AFK-only instruction.");
-    expect(await renderer.renderPrompt("finalReview", {})).not.toContain("AFK-only instruction.");
   });
 
   test("drops extension content verbatim without re-scanning it for placeholders", async () => {
@@ -235,6 +222,67 @@ describe("Project Configuration fails fast", () => {
 
     expectInvalid(/escapes \.krutrimbox\//);
   });
+
+  test("rejects an unknown hook name", async () => {
+    await project.writeConfig(JSON.stringify({ hooks: { "bogus:hook": [] } }));
+    expectInvalid(/at "hooks\.bogus:hook": Invalid/);
+  });
+
+  test("rejects an unknown hook action type", async () => {
+    await project.writeConfig(JSON.stringify({ hooks: { "pull-request:ready": [{ type: "bogus" }] } }));
+    expectInvalid(/hooks\.pull-request:ready\.0/);
+  });
+
+  test("rejects a missing agent action prompt file", async () => {
+    await project.writeConfig(
+      JSON.stringify({
+        hooks: { "pull-request:ready": [{ type: "agent", id: "review", prompt: "prompts/missing.md" }] }
+      })
+    );
+    expectInvalid(/hook agent prompt "review" file not found/);
+  });
+
+  test("rejects an agent action prompt path that escapes .krutrimbox/", async () => {
+    await project.writeConfig(
+      JSON.stringify({ hooks: { "pull-request:ready": [{ type: "agent", prompt: "/etc/passwd" }] } })
+    );
+    expectInvalid(/escapes \.krutrimbox\//);
+  });
+
+  test("rejects a Command Action outside the gh verb allowlist", async () => {
+    await project.writeConfig(
+      JSON.stringify({ hooks: { "pull-request:ready": [{ type: "command", run: ["gh", "pr", "merge", "10"] }] } })
+    );
+    expectInvalid(/"gh pr merge 10" is not an allowed gh command/);
+  });
+
+  test("rejects a Command Action that does not start with gh", async () => {
+    await project.writeConfig(
+      JSON.stringify({ hooks: { "pull-request:ready": [{ type: "command", run: ["rm", "-rf", "/"] }] } })
+    );
+    expectInvalid(/is not an allowed gh command/);
+  });
+
+  test("resolves a valid hook, reading the agent prompt from disk", async () => {
+    await project.writeFileUnder("prompts/review.md", "Review the PR.");
+    await project.writeConfig(
+      JSON.stringify({
+        hooks: {
+          "pull-request:ready": [
+            { type: "agent", id: "review", prompt: "prompts/review.md" },
+            { type: "comment", body: "{{steps.review.output}}" },
+            { type: "command", run: ["gh", "pr", "ready", "{{pr_number}}"] }
+          ]
+        }
+      })
+    );
+
+    expect(loadProjectConfig(project.dir).hooks.get("pull-request:ready")).toEqual([
+      { kind: "agent", id: "review", prompt: "Review the PR." },
+      { kind: "comment", body: "{{steps.review.output}}" },
+      { kind: "command", run: ["gh", "pr", "ready", "{{pr_number}}"] }
+    ]);
+  });
 });
 
 describe("built-in Markdown assets ship with the package", () => {
@@ -248,7 +296,6 @@ describe("built-in Markdown assets ship with the package", () => {
     expect(TEMPLATE_SLOTS.pullRequestBody).toBe("templates/pull-request-body.md");
     expect(TEMPLATE_SLOTS.hitlPauseComment).toBe("templates/hitl-pause-comment.md");
     expect(SUPPORTED_TEMPLATE_SLOTS).toContain("afkErrorComment");
-    expect(SUPPORTED_TEMPLATE_SLOTS).toContain("finalReviewComment");
   });
 
   test("the build copies the assets into the published dist output", async () => {

@@ -13,8 +13,7 @@
 export const TEMPLATE_SLOTS = {
   pullRequestBody: "templates/pull-request-body.md",
   hitlPauseComment: "templates/hitl-pause-comment.md",
-  afkErrorComment: "templates/afk-error-comment.md",
-  finalReviewComment: "templates/final-review-comment.md"
+  afkErrorComment: "templates/afk-error-comment.md"
 } as const;
 
 export type TemplateSlot = keyof typeof TEMPLATE_SLOTS;
@@ -29,10 +28,11 @@ export function isTemplateSlot(value: string): value is TemplateSlot {
 
 // Built-in Sandboxed Agent prompt name -> Markdown asset path. Prompts are never
 // overridable, but each one accepts an append-only Prompt Extension keyed by
-// these same names through `.krutrimbox/config.json` (ADR-0013).
+// these same names through `.krutrimbox/config.json` (ADR-0013). Final review is
+// no longer a built-in prompt: review is an operator-authored Review Pipeline
+// whose Agent Steps supply their own prompts (ADR-0021).
 export const PROMPT_ASSETS = {
-  afkIssue: "prompts/afk-issue.md",
-  finalReview: "prompts/final-review.md"
+  afkIssue: "prompts/afk-issue.md"
 } as const;
 
 export type PromptName = keyof typeof PROMPT_ASSETS;

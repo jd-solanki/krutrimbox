@@ -13,6 +13,8 @@ import {
   type FactoryRunDependencies,
   type FactoryRunOutcome
 } from "./factory-run";
+import { loadProjectConfig, type ResolvedHookAction } from "./config";
+import { type KrutrimboxHookName } from "./hooks/names";
 import { FileTargetIssueLockStore, type TargetIssueLockStore } from "./lock-store";
 import { createFileRunLogFactory, type RunLogFactory } from "./run-log";
 import { CommandSandboxRunner, type SandboxRunner } from "./sandbox-runner";
@@ -26,8 +28,14 @@ export interface KrutrimboxDependencies {
   sandbox?: SandboxRunner;
   lockStore?: TargetIssueLockStore;
   templates?: TemplateRenderer;
+  // The repository's resolved lifecycle hooks (ADR-0021). Injected in tests;
+  // otherwise loaded from `.krutrimbox/config.json` alongside the templates.
+  hooks?: Map<KrutrimboxHookName, ResolvedHookAction[]>;
   logger?: Pick<Console, "log">;
   openRunLog?: RunLogFactory;
+  // Runs `gh` Command Steps on the host. Injected in tests so a Command Step
+  // never spawns a real `gh`; in production the exec-file runner is used.
+  commandRunner?: CommandRunner;
   cwd?: string;
   sandboxTemplate?: string;
 }
@@ -65,6 +73,7 @@ export class Krutrimbox {
   private readonly logger: Pick<Console, "log">;
   private readonly openRunLog: RunLogFactory;
   private readonly templates: TemplateRenderer;
+  private readonly hooks: Map<KrutrimboxHookName, ResolvedHookAction[]>;
   // Held so a per-agent CommandSandboxRunner can be built at dispatch time, once
   // the run's Agent Backend is known.
   private readonly cwd: string;
@@ -82,9 +91,15 @@ export class Krutrimbox {
     this.lockStore = dependencies.lockStore ?? new FileTargetIssueLockStore(cwd);
     this.logger = dependencies.logger ?? console;
     this.openRunLog = dependencies.openRunLog ?? createFileRunLogFactory(cwd, this.logger);
-    this.templates = dependencies.templates ?? ProjectTemplateRenderer.fromProjectDir(cwd);
+    // Load the committed config once and derive both the templates and the
+    // lifecycle hooks from it, so an invalid config fails fast and is read a single
+    // time. Injected templates mean the caller (a test) owns configuration, so the
+    // file is not read at all; injected hooks can still override it.
+    const projectConfig = dependencies.templates ? undefined : loadProjectConfig(cwd);
+    this.templates = dependencies.templates ?? new ProjectTemplateRenderer(projectConfig);
+    this.hooks = dependencies.hooks ?? projectConfig?.hooks ?? new Map();
     this.cwd = cwd;
-    this.commandRunner = createExecFileCommandRunner();
+    this.commandRunner = dependencies.commandRunner ?? createExecFileCommandRunner();
     this.injectedSandbox = dependencies.sandbox;
     this.sandboxTemplateOverride = dependencies.sandboxTemplate;
   }
@@ -201,6 +216,8 @@ export class Krutrimbox {
       operator: context.operator,
       allowUnassigned: context.allowUnassigned,
       templates: this.templates,
+      hooks: this.hooks,
+      hostCommandRunner: this.commandRunner,
       logger: runLog,
       output: runLog.stream
     };

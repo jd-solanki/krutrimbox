@@ -67,7 +67,7 @@ sequenceDiagram
   Note over B: Next Due = #4 (Alice's) → pause
   A->>G: kb run --issue 1
   Note over A: Due = #4; #2 & #3 done → implement, push Refs #4
-  Note over A: Sequence complete → final review
+  Note over A: Sequence complete → mark ready + run hooks
 ```
 
 A run **errors** instead of pausing when the immediate due sub-issue isn't yours and you've done nothing this run ("nothing here for you yet"); it **pauses** once you've implemented at least one sub-issue this run ("your part is done, handing off"). See [Issue Ownership & Routing](./concepts/issue-ownership-and-routing#7-sub-issues-the-due-issue-the-done-set-and-the-walk) for the full walk.

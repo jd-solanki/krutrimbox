@@ -1,6 +1,11 @@
 {
   "prompts": {
-    "afkIssue": "prompts/afk-issue.md",
-    "finalReview": "prompts/final-review.md"
+    "afkIssue": "prompts/afk-issue.md"
+  },
+  "hooks": {
+    "pull-request:ready": [
+      { "type": "agent", "id": "review", "prompt": "prompts/final-review.md" },
+      { "type": "comment", "body": "{{steps.review.output}}" }
+    ]
   }
 }

@@ -114,15 +114,19 @@ If commit or push fails after the Sandboxed Agent exits successfully, krutrimbox
 
 Factory Run logs are written to per-Target-Issue log files under `.krutrimbox/logs`. Durable GitHub comments are reserved for actionable states such as HITL pauses, unresolved blockers, and AFK issue errors.
 
-## Final Review
+## Lifecycle Hooks
 
-When every Implementation Issue in the Implementation Sequence is in the Done Set, krutrimbox starts a fresh non-resumed Sandboxed Agent session (the run's Agent Backend) inside the same Target Issue Sandbox to review the Target Issue Pull Request diff against the Target Issue and Implementation Issue intent. The review session outputs a Markdown review body, and the outer krutrimbox posts it as a normal pull request comment using `templates/final-review-comment.md`. The final review comment uses a Factory Comment Marker so repeated Factory Runs update or skip the existing comment.
+krutrimbox fires named lifecycle hooks (via [`hookable`](https://github.com/unjs/hookable)) at key points, and a repository attaches **Hook Actions** to them under the `hooks` key in `.krutrimbox/config.json`, keyed by hook name (see [Configuration](/guide/configuration#hooks)). The first hook is `pull-request:ready`: when every Implementation Issue in the Implementation Sequence is in the Done Set, krutrimbox marks the Target Issue Pull Request **ready for review** — the only built-in behavior — and then fires `pull-request:ready` against the now-ready pull request. With no actions configured, krutrimbox only marks the pull request ready.
 
-The final review session may use read-only `gh` commands for inspection, but it must not mutate files or GitHub state. The outer krutrimbox captures the review Markdown, posts or updates the pull request comment through host `gh`, marks the Target Issue Pull Request ready for review, and routes or tags the Final Reviewer.
+Marking the pull request ready is also the run-once guard: a later Factory Run, or Batch re-discovery of a completed-but-unmerged Target Issue, finds a ready pull request and skips the hook. Actions run in order and fail fast — the first failing action aborts with an error naming it, and because the pull request is already ready, the operator fixes the action and re-runs.
 
-After the review comment is posted, krutrimbox marks the Target Issue Pull Request ready for review and requests review from the Target Issue Author when they differ from the pull request author; when they are the same user, krutrimbox tags the Target Issue Author in a comment instead of requesting self-review.
+A Hook Action is one of three kinds:
 
-Future review prompts may invoke a project-local review skill from `.agents/skills`.
+- **Agent action** — a fresh non-resumed Sandboxed Agent session (the run's Agent Backend) in the same Target Issue Sandbox, driven by an operator-authored prompt. It runs with Read-Only GitHub Access, so it gathers context itself (for example `gh pr diff`) and never mutates GitHub. Its text output is captured for later actions as `{{steps.<id>.output}}`; if it changed code, the outer krutrimbox commits and pushes that change from the host with a message referencing the action (no `Refs` footer, so it stays out of the Done Set).
+- **Comment action** — the outer krutrimbox posts the action's body, with variables interpolated, as a pull request comment.
+- **Command action** — the outer krutrimbox runs one allowlisted `gh` command on the host with the Operator's credential.
+
+As with implementation, every GitHub write happens on the host: Agent Action commits and Command Actions run host-side, while the sandbox keeps Read-Only GitHub Access.
 
 The Target Issue remains open while implementation is in progress. The Target Issue and its Implementation Issues close when the Target Issue Pull Request is merged using GitHub's linked pull request behavior.
 
@@ -132,4 +136,4 @@ krutrimbox never merges the Target Issue Branch into the default branch. A human
 
 ## Sandbox Cleanup
 
-The Factory Run uses a deterministic Target Issue Sandbox name derived from the Target Issue number: `krutrimbox-issue-<target-issue-number>`. When the Target Issue completes and final review routing is done, krutrimbox removes the Target Issue Sandbox automatically. When the Factory Run exits for HITL or an error, it keeps the Target Issue Sandbox for debugging and includes the cleanup command in the relevant comment or log.
+The Factory Run uses a deterministic Target Issue Sandbox name derived from the Target Issue number: `krutrimbox-issue-<target-issue-number>`. When the Target Issue completes and its `pull-request:ready` hook finishes, krutrimbox removes the Target Issue Sandbox it created automatically. When the Factory Run exits for HITL or an error, it keeps the Target Issue Sandbox for debugging and includes the cleanup command in the relevant comment or log.

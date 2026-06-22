@@ -3,8 +3,9 @@ import { join } from "pathe";
 import { safeDestr } from "destr";
 import * as v from "valibot";
 import { diagnostics } from "../../diagnostics";
-import { ConfigSchema, type ProjectConfig } from "./schema";
+import { ConfigSchema, type HookAction, type ProjectConfig } from "./schema";
 import { resolveRepoOwnedFile } from "./path-safety";
+import { type KrutrimboxHookName } from "../hooks/names";
 import { type PromptName, type TemplateSlot } from "../template-slots";
 
 // Committed, repository-owned Project Configuration (ADR-0013). A repository may
@@ -21,6 +22,15 @@ export const PROJECT_CONFIG_FILENAME = "config.json";
 // The repository-relative label used in fail-fast error messages.
 const CONFIG_FILE = `${PROJECT_CONFIG_DIRNAME}/${PROJECT_CONFIG_FILENAME}`;
 
+// One Hook Action with its config-referenced files already resolved (ADR-0021).
+// Discriminated by `kind` rather than the file's `type` to mark that these are
+// loaded values, not raw config: an Agent Action's `prompt` here is the Markdown
+// contents read from disk, not the path written in `config.json`.
+export type ResolvedHookAction =
+  | { kind: "agent"; id?: string; prompt: string }
+  | { kind: "comment"; body: string }
+  | { kind: "command"; run: string[] };
+
 export interface ResolvedProjectConfig {
   // Template Slot -> override Markdown contents, already read from disk during
   // validation. Only overridden slots appear; omitted slots fall back to the
@@ -30,11 +40,16 @@ export interface ResolvedProjectConfig {
   // during validation. Only extended prompts appear; omitted prompts render with
   // an empty `repository_instructions` block.
   promptExtensions: Map<PromptName, string>;
+  // Hook name -> its ordered Hook Actions, with Agent Action prompts read and
+  // Command Actions allowlist-checked during validation. Only configured hooks
+  // appear; an unconfigured hook simply has no actions to run.
+  hooks: Map<KrutrimboxHookName, ResolvedHookAction[]>;
 }
 
 const EMPTY_CONFIG: ResolvedProjectConfig = {
   templateOverrides: new Map(),
-  promptExtensions: new Map()
+  promptExtensions: new Map(),
+  hooks: new Map()
 };
 
 // Loads and validates `.krutrimbox/config.json` for the given project directory.
@@ -64,8 +79,53 @@ class ProjectConfigLoader {
 
     return {
       templateOverrides: this.readSection(config.templates, "template slot"),
-      promptExtensions: this.readSection(config.prompts, "prompt extension")
+      promptExtensions: this.readSection(config.prompts, "prompt extension"),
+      hooks: this.readHooks(config.hooks)
     };
+  }
+
+  // Resolves every configured hook's actions, keyed by hook name. An omitted
+  // `hooks` section yields an empty map (no hook has actions to run).
+  private readHooks(
+    hooks: Partial<Record<KrutrimboxHookName, HookAction[]>> | undefined
+  ): Map<KrutrimboxHookName, ResolvedHookAction[]> {
+    const resolved = new Map<KrutrimboxHookName, ResolvedHookAction[]>();
+
+    if (hooks === undefined) {
+      return resolved;
+    }
+
+    for (const [hookName, actions] of Object.entries(hooks) as [KrutrimboxHookName, HookAction[]][]) {
+      resolved.set(hookName, actions.map((action, index) => this.resolveHookAction(hookName, action, index)));
+    }
+
+    return resolved;
+  }
+
+  // Resolves one Hook Action into a loaded value. An Agent Action's prompt file is
+  // read from disk here (filesystem logic); a Command Action's `gh` allowlist is
+  // already enforced by the schema, so `run` passes through verbatim (ADR-0021).
+  private resolveHookAction(
+    hookName: KrutrimboxHookName,
+    action: HookAction,
+    index: number
+  ): ResolvedHookAction {
+    switch (action.type) {
+      case "agent":
+        return {
+          kind: "agent",
+          id: action.id,
+          prompt: this.readReferencedFile(
+            "hook agent prompt",
+            action.id ?? `${hookName}[${index}]`,
+            action.prompt
+          )
+        };
+      case "comment":
+        return { kind: "comment", body: action.body };
+      case "command":
+        return { kind: "command", run: action.run };
+    }
   }
 
   // Parses and structurally validates the file. safeDestr throws on malformed JSON

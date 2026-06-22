@@ -51,4 +51,4 @@ krutrimbox reuses your issue titles verbatim: the Target Issue Pull Request titl
 
 krutrimbox does not close issues during a run. Each successful AFK or HITL completion is recorded by a `Refs #<issue-number>` commit footer on the Target Issue Branch; the Done Set is rebuilt from those footers on every run and drives resume behavior. The Target Issue Pull Request body carries `Closes #<number>` keywords for the Target Issue and every Implementation Issue, so GitHub closes them when the pull request merges.
 
-For the end-to-end mechanics of a run — sandboxes, commits, pull requests, HITL pauses, and final review — see [Factory Flow](/guide/concepts/factory-flow).
+For the end-to-end mechanics of a run — sandboxes, commits, pull requests, HITL pauses, and lifecycle hooks — see [Factory Flow](/guide/concepts/factory-flow).

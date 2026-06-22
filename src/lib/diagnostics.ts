@@ -34,7 +34,7 @@ export const diagnostics = /*#__PURE__*/ defineDiagnostics({
     KB_C0002: {
       why: (p: { configFile: string; issue: string }) =>
         `krutrimbox: invalid ${p.configFile}${p.issue}`,
-      fix: 'Match the accepted shape: top-level "templates" and/or "prompts" objects mapping known keys to Markdown file paths under .krutrimbox/.'
+      fix: 'Match the accepted shape: optional "templates"/"prompts" objects mapping known keys to Markdown file paths under .krutrimbox/, and an optional "hooks" object mapping a hook name to an array of {type:"agent"|"comment"|"command"} actions.'
     },
 
     // config/index.ts — a configured Template Slot / Prompt Extension path escapes
@@ -103,6 +103,16 @@ export const diagnostics = /*#__PURE__*/ defineDiagnostics({
     KB_R0007: {
       why: "krutrimbox: built-in Markdown assets directory was not found.",
       fix: "Reinstall krutrimbox; the published package ships its assets/ directory alongside the bundle."
+    },
+
+    // hooks.ts — a Hook Action threw, so krutrimbox aborts the hook fail-fast
+    // (ADR-0021). For the `pull-request:ready` hook the pull request is already
+    // marked ready, so a re-run skips it; the operator fixes the action and
+    // re-triggers manually.
+    KB_R0008: {
+      why: (p: { hook: string; action: string; detail: string }) =>
+        `krutrimbox: ${p.hook} hook ${p.action} failed: ${p.detail}`,
+      fix: "Fix the failing hook action in .krutrimbox/config.json, then re-run krutrimbox."
     }
   }
 });

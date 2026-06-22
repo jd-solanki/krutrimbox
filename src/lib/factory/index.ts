@@ -10,6 +10,7 @@ export * from "./sequence";
 export * from "./done-set";
 export * from "./format";
 export * from "./target-issue-pull-request";
+export * from "./hooks";
 export * from "./factory-run";
 export * from "./template-slots";
 export * from "./asset-store";

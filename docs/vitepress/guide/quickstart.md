@@ -94,7 +94,7 @@ gh issue create \
 kb run --issue <number> --agent claude
 ```
 
-What happens next: krutrimbox creates a branch from a clean `origin` ref, creates an isolated sandbox with a private clone of your repo, runs a fresh agent session to implement the issue, commits the result, pushes it **from your host**, and opens a draft pull request titled after your issue. When all the work is done it runs a final review pass and marks the PR ready for review.
+What happens next: krutrimbox creates a branch from a clean `origin` ref, creates an isolated sandbox with a private clone of your repo, runs a fresh agent session to implement the issue, commits the result, pushes it **from your host**, and opens a draft pull request titled after your issue. When all the work is done it marks the PR ready for review and runs any hooks you've configured.
 
 Once you've seen it work, process every eligible issue assigned to you in one batch run:
 

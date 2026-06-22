@@ -9,7 +9,7 @@ A GitHub-driven orchestrator that finds agent-ready Target Issues, implements th
 _Avoid_: autonomous krutrimbox, factory, coding agent
 
 **Sandboxed Agent**:
-The fresh coding-agent session — provided by the selected Agent Backend (Codex or Claude Code) — delegated to implement one AFK Issue inside the Target Issue Sandbox. It changes code and reports completion, but does not own GitHub issue state.
+The fresh coding-agent session — provided by the selected Agent Backend (Codex or Claude Code) — delegated to implement one AFK Issue, or to run one Agent Action, inside the Target Issue Sandbox. It changes code and reports completion, but does not own GitHub issue state.
 _Avoid_: worker, implementer, inner agent, Codex session
 
 **Agent Backend**:
@@ -101,7 +101,7 @@ The shared branch (`krutrimbox/issue-<number>`) for all changes made while deliv
 _Avoid_: issue branch, feature branch
 
 **Target Issue Pull Request**:
-The single pull request for a Target Issue Branch that accumulates all commits, carries the `Closes #<number>` keywords that auto-close the Target Issue and its Implementation Issues on merge, and receives final review once every Implementation Issue is resolved.
+The single pull request for a Target Issue Branch that accumulates all commits, carries the `Closes #<number>` keywords that auto-close the Target Issue and its Implementation Issues on merge, and is marked ready — firing the `pull-request:ready` Hook — once every Implementation Issue is resolved.
 _Avoid_: implementation PR, issue PR
 
 **Target Issue Pull Request Body**:
@@ -132,9 +132,29 @@ _Avoid_: assigned issue, eligible issue, my issue
 The `--implement-unassigned` flag that lets krutrimbox treat a zero-assignee issue as an Owned Issue. A solo-developer escape hatch that disables the single-assignee collision guard, so it is not used in teams.
 _Avoid_: force flag, ignore-assignee, no-assignee mode
 
-**Final Reviewer**:
-The human reviewer selected for the completed Target Issue Pull Request after krutrimbox posts its review.
-_Avoid_: PR author, approver, maintainer
+**Hook**:
+A named krutrimbox lifecycle point that runs its configured Hook Actions when it fires. Hooks are repository-owned Project Configuration, keyed by hook name. The first hook is `pull-request:ready`: once a Target Issue finishes, krutrimbox marks the pull request ready (the only built-in behavior) and then fires this hook against it, at most once per Target Issue — a pull request that is already ready is skipped.
+_Avoid_: pipeline, lifecycle event, plugin
+
+**Hook Action**:
+One action attached to a Hook, of one of three generic kinds — Agent Action, Comment Action, or Command Action — executed in configured order. A failing Hook Action aborts the hook.
+_Avoid_: step, review step, handler
+
+**Agent Action**:
+A Hook Action that runs a fresh Sandboxed Agent session in the Target Issue Sandbox with an operator-supplied prompt. It exposes the session's text result as an Action Output, and any code it changes is committed on the host while the sandbox keeps Read-Only GitHub Access.
+_Avoid_: AI step, review agent, agent-review
+
+**Comment Action**:
+A Hook Action that posts a comment on the Target Issue Pull Request, optionally interpolating an earlier Action Output — for example to post an Agent Action's review or to summon a third-party reviewer.
+_Avoid_: review comment, note
+
+**Command Action**:
+A Hook Action that runs one allowlisted GitHub CLI command on the host with the Operator's credential. Only specific `gh` verb combinations are permitted, and the command is never run through a shell.
+_Avoid_: shell step, gh hook
+
+**Action Output**:
+The named text result an Agent Action exposes, keyed by its configured id, for later Hook Actions to interpolate.
+_Avoid_: variable, capture, return value
 
 **Sandbox Success**:
 The condition where a sandboxed agent session exits successfully after implementing an AFK Issue.
@@ -170,7 +190,7 @@ _Avoid_: comment tag, marker, dedupe token
 - A **Parent Target Issue** has one or more **Implementation Issues**; a **Standalone Target Issue** acts as its own single **Implementation Issue**.
 - A **Target Issue** has exactly one **Target Issue Branch**, one **Target Issue Pull Request**, one **Target Issue Sandbox**, and one **Target Issue Lock**.
 - An **Implementation Issue** is in the **Done Set** once it has an **Issue Reference Footer** commit on the **Target Issue Branch**; the **Target Issue Pull Request** auto-closes every Done Set issue (and the Target Issue) on merge.
-- A **Factory Run** processes a **Target Issue**, pauses at the first **HITL Issue**, and routes the **Target Issue Pull Request** to the **Final Reviewer** once every **Implementation Issue** is Resolved.
+- A **Factory Run** processes a **Target Issue**, pauses at the first **HITL Issue**, and once every **Implementation Issue** is Resolved marks the **Target Issue Pull Request** ready and fires the `pull-request:ready` **Hook**, running its **Hook Actions**.
 - krutrimbox implements an **Implementation Issue** only when it is an **Owned Issue** for the **Operator**; on a shared **Parent Target Issue** the **Due Issue** decides whose turn it is, and a **Factory Run** pauses (handoff) or errors when the Due Issue is not the Operator's.
 - A **Factory Run** runs against exactly one **Agent Backend**, chosen by the required `--agent` flag; the Agent Backend supplies the **Sandboxed Agent** session and the **krutrimbox Sandbox Template** for that run's **Target Issue Sandbox**.
 - A built-in Sandboxed Agent prompt may carry one **Prompt Extension** per prompt, supplied through **Project Configuration**; unlike a **Template Slot**, it appends to the prompt rather than replacing it, so krutrimbox keeps ownership of the prompt's safety boundaries.

@@ -68,9 +68,7 @@ export interface GitHubClient {
   updatePullRequestBody(pullRequestNumber: number, body: string): Promise<void>;
   setPullRequestLabels(pullRequestNumber: number, labels: string[]): Promise<void>;
   getAuthenticatedUser(): Promise<string>;
-  getPullRequestDiff(pullRequestNumber: number): Promise<string>;
   markPullRequestReadyForReview(pullRequestNumber: number): Promise<void>;
-  requestPullRequestReview(pullRequestNumber: number, reviewer: string): Promise<void>;
 }
 
 export type CommandRunner = (
@@ -378,16 +376,8 @@ export function createGitHubCliClient(
       return response.login;
     },
 
-    async getPullRequestDiff(pullRequestNumber: number): Promise<string> {
-      return runGh(["pr", "diff", String(pullRequestNumber)]);
-    },
-
     async markPullRequestReadyForReview(pullRequestNumber: number): Promise<void> {
       await runGh(["pr", "ready", String(pullRequestNumber)]);
-    },
-
-    async requestPullRequestReview(pullRequestNumber: number, reviewer: string): Promise<void> {
-      await runGh(["pr", "edit", String(pullRequestNumber), "--add-reviewer", reviewer]);
     }
   };
 }

@@ -209,7 +209,7 @@ describe("CommandSandboxRunner", () => {
     ]);
   });
 
-  test("runs the final review through the Codex Agent Backend's exec command", async () => {
+  test("runs an Agent Step session through the Codex Agent Backend's exec command", async () => {
     const calls: Array<{ command: string; args: string[] }> = [];
     const runner: CommandRunner = async (command, args) => {
       calls.push({ command, args });
@@ -217,7 +217,7 @@ describe("CommandSandboxRunner", () => {
     };
     const sandbox = new CommandSandboxRunner(runner, "/workspace/krutrimbox", codex, "template");
 
-    const review = await sandbox.runFinalReview({
+    const review = await sandbox.runAgentSession({
       sandboxName: "krutrimbox-issue-1-codex",
       prompt: "review the diff"
     });
@@ -232,16 +232,64 @@ describe("CommandSandboxRunner", () => {
     ]);
   });
 
-  test("returns the Claude Agent Backend's final message as the review body, not the raw event stream", async () => {
+  test("returns the Claude Agent Backend's final message as the session output, not the raw event stream", async () => {
     const runner: CommandRunner = async () => claudeStreamJson;
     const sandbox = new CommandSandboxRunner(runner, "/workspace/krutrimbox", claude, "template");
 
-    const review = await sandbox.runFinalReview({
+    const review = await sandbox.runAgentSession({
       sandboxName: "krutrimbox-issue-1-claude",
       prompt: "review the diff"
     });
 
     expect(review).toBe("I reviewed the diff. The change looks correct.");
+  });
+
+  test("hasWorkingTreeChanges reports a dirty working tree from git status", async () => {
+    const runner: CommandRunner = async () => " M src/foo.ts\n";
+    const sandbox = new CommandSandboxRunner(runner, "/workspace/krutrimbox", codex, "template");
+
+    await expect(
+      sandbox.hasWorkingTreeChanges({ sandboxName: "krutrimbox-issue-1-codex" })
+    ).resolves.toBe(true);
+  });
+
+  test("hasWorkingTreeChanges reports a clean working tree as no changes", async () => {
+    const runner: CommandRunner = async () => "";
+    const sandbox = new CommandSandboxRunner(runner, "/workspace/krutrimbox", codex, "template");
+
+    await expect(
+      sandbox.hasWorkingTreeChanges({ sandboxName: "krutrimbox-issue-1-codex" })
+    ).resolves.toBe(false);
+  });
+
+  test("commitReviewChanges commits without a Refs footer and pushes from the host", async () => {
+    const calls: Array<{ command: string; args: string[] }> = [];
+    const runner: CommandRunner = async (command, args) => {
+      calls.push({ command, args });
+      return "";
+    };
+    const sandbox = new CommandSandboxRunner(runner, "/workspace/krutrimbox", codex, "template");
+
+    await sandbox.commitReviewChanges({
+      sandboxName: "krutrimbox-issue-1-codex",
+      branchName: "krutrimbox/issue-1",
+      subject: 'chore: agent action "simplify" changes',
+      body: "Simplify the code."
+    });
+
+    const commit = calls.find((call) => call.args.includes("commit"));
+    expect(commit?.args.slice(-4)).toEqual([
+      "-m",
+      'chore: agent action "simplify" changes',
+      "-m",
+      "Simplify the code."
+    ]);
+    // No `Refs #` footer: a review commit must stay out of the Done Set.
+    expect(calls.flatMap((call) => call.args).join(" ")).not.toContain("Refs #");
+    expect(calls.at(-1)).toEqual({
+      command: "git",
+      args: ["-C", "/workspace/krutrimbox", "push", "origin", "FETCH_HEAD:refs/heads/krutrimbox/issue-1"]
+    });
   });
 
   test("streams readable lines into the run log for a Claude AFK Issue, not raw JSON", async () => {

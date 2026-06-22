@@ -11,15 +11,13 @@ import type { TemplateRenderer } from "./template-renderer";
 
 // The single pull request that accumulates a Target Issue's AFK Issue commits,
 // identified by its Target Issue Branch. Owns find-or-create, the deterministic
-// Target Issue Pull Request Body, the "exactly the krutrimbox label" invariant,
-// and Final Reviewer routing (ADR-0004). Review generation (a Sandbox concern)
-// and the idempotent review comment (a Factory Comment Marker concern) stay
-// with the Factory Run that drives it.
+// Target Issue Pull Request Body, and the "exactly the krutrimbox label"
+// invariant. Marking the pull request ready and running the Review Pipeline
+// against it once the Target Issue finishes stay with the Factory Run (ADR-0021).
 export class TargetIssuePullRequest {
   public constructor(
     private readonly github: GitHubClient,
     private readonly templates: TemplateRenderer,
-    private readonly logger: Pick<Console, "log">,
     private readonly targetIssue: GitHubIssue,
     private readonly branchName: string,
     private readonly sandboxName: string,
@@ -31,10 +29,6 @@ export class TargetIssuePullRequest {
 
   public find(): Promise<GitHubPullRequest | null> {
     return this.github.findPullRequestByHead(this.branchName);
-  }
-
-  public diff(pullRequestNumber: number): Promise<string> {
-    return this.github.getPullRequestDiff(pullRequestNumber);
   }
 
   public async ensureReflectsSequence(
@@ -58,29 +52,6 @@ export class TargetIssuePullRequest {
       labels: [KRUTRIMBOX_LABEL]
     } satisfies CreatePullRequestInput);
     await this.github.setPullRequestLabels(created.number, [KRUTRIMBOX_LABEL]);
-  }
-
-  public async routeForReview(pullRequestNumber: number, targetIssueAuthor: string): Promise<void> {
-    await this.github.markPullRequestReadyForReview(pullRequestNumber);
-    this.logger.log(
-      `krutrimbox: marked Target Issue Pull Request #${pullRequestNumber} ready for review.`
-    );
-
-    const prAuthor = await this.github.getAuthenticatedUser();
-
-    if (targetIssueAuthor !== prAuthor) {
-      await this.github.requestPullRequestReview(pullRequestNumber, targetIssueAuthor);
-      this.logger.log(
-        `krutrimbox: requested review from ${targetIssueAuthor} for Target Issue Pull Request #${pullRequestNumber}.`
-      );
-      return;
-    }
-
-    const tagBody = `@${targetIssueAuthor} krutrimbox has completed all Implementation Issues for Target Issue #${this.targetIssue.number}. Please review the PR.`;
-    await this.github.createIssueComment(pullRequestNumber, tagBody);
-    this.logger.log(
-      `krutrimbox: tagged ${targetIssueAuthor} in Target Issue Pull Request #${pullRequestNumber} (self-review).`
-    );
   }
 
   private async renderBody(

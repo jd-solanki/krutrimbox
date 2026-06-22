@@ -31,9 +31,17 @@ export interface SandboxCommitInput extends SandboxBranchInput {
   issueNumber: number;
 }
 
-export interface SandboxFinalReviewInput extends SandboxInput {
+export interface SandboxAgentSessionInput extends SandboxInput {
   prompt: string;
   output?: NodeJS.WritableStream;
+}
+
+export interface SandboxReviewCommitInput extends SandboxBranchInput {
+  // The commit subject and body for an Agent Step's code changes. The body
+  // carries the step's prompt for traceability (ADR-0021). Unlike AFK commits,
+  // a review commit carries no `Refs #` footer, so it never enters the Done Set.
+  subject: string;
+  body: string;
 }
 
 interface SandboxExecOptions {
@@ -150,13 +158,13 @@ export class CommandSandboxRunner {
     await this.runAgent(input.sandboxName, input.prompt, input.output);
   }
 
-  public async runFinalReview(input: SandboxFinalReviewInput): Promise<string> {
+  public async runAgentSession(input: SandboxAgentSessionInput): Promise<string> {
     return this.runAgent(input.sandboxName, input.prompt, input.output);
   }
 
   // Runs one Sandboxed Agent session and returns its caller-facing text. The two
-  // public entry points differ only in whether they use that text: a final review
-  // returns it as the review body, an AFK Issue discards it.
+  // public entry points differ only in whether they use that text: a Review
+  // Pipeline Agent Step returns it as a Step Output, an AFK Issue discards it.
   //
   // A structured-output agent (one with a run-log codec) speaks newline-delimited
   // JSON: its raw stdout is decoded to readable lines on the way to the run log,
@@ -176,7 +184,7 @@ export class CommandSandboxRunner {
     }
 
     // Render to the run log only when there is one; the caller-facing text is
-    // extracted regardless (a final review needs it even with no run-log output).
+    // extracted regardless (an Agent Step needs it even with no run-log output).
     const renderStream = output ? new RunLogStream(codec, output) : undefined;
     const stdout = await this.exec(sandboxName, command, { output: renderStream ?? output });
     renderStream?.flush();
@@ -212,9 +220,45 @@ export class CommandSandboxRunner {
       `Refs #${input.issueNumber}`
     ]);
 
-    const sandboxRemote = `sandbox-${input.sandboxName}`;
-    await this.hostGit(["fetch", sandboxRemote, input.branchName]);
-    await this.hostGit(["push", "origin", `FETCH_HEAD:refs/heads/${input.branchName}`]);
+    await this.publishBranch(input.sandboxName, input.branchName);
+  }
+
+  // Whether the sandbox working tree has uncommitted changes — the signal that a
+  // Review Pipeline Agent Step modified code that should be committed (ADR-0021).
+  // Kept a pure query so the caller decides whether to commit (see commitReviewChanges).
+  public async hasWorkingTreeChanges(input: SandboxInput): Promise<boolean> {
+    const status = await this.exec(input.sandboxName, ["git", "status", "--porcelain"]);
+    return status.trim().length > 0;
+  }
+
+  // Commits an Agent Step's code changes in the sandbox and publishes them from the
+  // HOST, the same read-only-token-in / host-push-out boundary as commitAndPush.
+  // The body carries the step's prompt for traceability, and there is deliberately
+  // no `Refs #` footer: a review commit completes no Implementation Issue, so it
+  // must stay out of the Done Set.
+  public async commitReviewChanges(input: SandboxReviewCommitInput): Promise<void> {
+    await this.exec(input.sandboxName, ["git", "add", "-A"]);
+    await this.exec(input.sandboxName, [
+      "git",
+      "commit",
+      "-m",
+      input.subject,
+      "-m",
+      input.body
+    ]);
+
+    await this.publishBranch(input.sandboxName, input.branchName);
+  }
+
+  // Pushes the sandbox clone's branch tip to origin with the host's credentials.
+  // Docker clone mode exposes the sandbox clone as a `sandbox-<name>` host remote,
+  // so the host fetches the new commit through it and pushes to origin — no write
+  // credential ever enters the sandbox. A failed push throws and leaves the branch
+  // unchanged, so the work stays resumable.
+  private async publishBranch(sandboxName: string, branchName: string): Promise<void> {
+    const sandboxRemote = `sandbox-${sandboxName}`;
+    await this.hostGit(["fetch", sandboxRemote, branchName]);
+    await this.hostGit(["push", "origin", `FETCH_HEAD:refs/heads/${branchName}`]);
   }
 
   private exec(
@@ -288,6 +332,8 @@ export type SandboxRunner = Pick<
   | "checkoutBranch"
   | "runAfkIssue"
   | "commitAndPush"
-  | "runFinalReview"
+  | "runAgentSession"
+  | "hasWorkingTreeChanges"
+  | "commitReviewChanges"
   | "removeSandbox"
 >;

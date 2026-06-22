@@ -27,7 +27,7 @@ What krutrimbox does today, and the boundaries it doesn't cross yet.
 
 - One Target Issue Branch and one **draft** Target Issue Pull Request per Target Issue.
 - Issues stay open during the run and close via `Closes #<n>` keywords when the PR merges.
-- After every Implementation Issue is done, a **final review** session runs, the PR is marked ready for review, and the Final Reviewer is routed or tagged.
+- After every Implementation Issue is done, the PR is marked ready for review and the repository's configurable `pull-request:ready` **hook** runs against it (AI review, comments, or allowlisted `gh` commands).
 - The sandbox is removed after a successful completion.
 - Operational detail goes to per-run log files; GitHub comments are reserved for actionable states.
 

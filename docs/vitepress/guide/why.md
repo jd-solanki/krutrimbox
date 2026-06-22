@@ -20,4 +20,4 @@ Pointing an agent straight at your working tree is risky. It can change files yo
 
 ## How it fits together
 
-For the full mechanics of a run — branch creation, sandbox lifecycle, commits, pull request, HITL pauses, and final review — see [Factory Flow](./concepts/factory-flow).
+For the full mechanics of a run — branch creation, sandbox lifecycle, commits, pull request, HITL pauses, and lifecycle hooks — see [Factory Flow](./concepts/factory-flow).

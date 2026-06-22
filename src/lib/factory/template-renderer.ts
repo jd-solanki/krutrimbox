@@ -1,5 +1,6 @@
 import { loadBuiltInAsset } from "./asset-store";
 import { loadProjectConfig, type ResolvedProjectConfig } from "./config";
+import { interpolate, type InterpolationValues } from "../../utils/interpolate";
 import { PROMPT_ASSETS, TEMPLATE_SLOTS, type PromptName, type TemplateSlot } from "./template-slots";
 
 // Renders krutrimbox's prompts and templates by substituting `{{key}}`
@@ -9,14 +10,18 @@ import { PROMPT_ASSETS, TEMPLATE_SLOTS, type PromptName, type TemplateSlot } fro
 // injected by the Factory Run outside these templates, so a custom template body
 // can never break idempotent comment updates.
 
-type RenderValues = Record<string, string | number>;
+type RenderValues = InterpolationValues;
 
 export class ProjectTemplateRenderer {
   private readonly templateOverrides: Map<TemplateSlot, string>;
   private readonly promptExtensions: Map<PromptName, string>;
 
   public constructor(
-    config: ResolvedProjectConfig = { templateOverrides: new Map(), promptExtensions: new Map() }
+    config: ResolvedProjectConfig = {
+      templateOverrides: new Map(),
+      promptExtensions: new Map(),
+      hooks: new Map()
+    }
   ) {
     this.templateOverrides = config.templateOverrides;
     this.promptExtensions = config.promptExtensions;
@@ -33,7 +38,7 @@ export class ProjectTemplateRenderer {
   // present, otherwise the built-in Markdown default.
   public async renderTemplate(slot: TemplateSlot, values: RenderValues): Promise<string> {
     const source = this.templateOverrides.get(slot) ?? (await loadBuiltInAsset(TEMPLATE_SLOTS[slot]));
-    return substitute(source, values);
+    return interpolate(source, values);
   }
 
   // Renders a built-in Sandboxed Agent prompt. The prompt body is never
@@ -43,17 +48,8 @@ export class ProjectTemplateRenderer {
   // value — the renderer owns it from Project Configuration.
   public async renderPrompt(name: PromptName, values: RenderValues): Promise<string> {
     const repository_instructions = this.promptExtensions.get(name) ?? "";
-    return substitute(await loadBuiltInAsset(PROMPT_ASSETS[name]), { ...values, repository_instructions });
+    return interpolate(await loadBuiltInAsset(PROMPT_ASSETS[name]), { ...values, repository_instructions });
   }
-}
-
-// Substitutes `{{key}}` placeholders. A missing value renders as an empty string,
-// preserving the established placeholder substitution semantics.
-function substitute(template: string, values: RenderValues): string {
-  return template.replace(/{{(\w+)}}/g, (_match, key: string) => {
-    const value = values[key];
-    return typeof value === "undefined" ? "" : String(value);
-  });
 }
 
 // Injection seam: the public surface of ProjectTemplateRenderer, so fakes need no separate contract.

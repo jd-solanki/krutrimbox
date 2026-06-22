@@ -15,12 +15,15 @@ import {
   TargetIssuePullRequest,
   ProjectTemplateRenderer,
   resolveCodingAgent,
+  type KrutrimboxHookName,
+  type ResolvedHookAction,
   type TargetIssueLock,
   type TargetIssueLockStore,
   type SandboxRunner,
   type TemplateRenderer
 } from "../src/lib/factory/index";
 import type {
+  CommandRunner,
   CreatePullRequestInput,
   GitHubClient,
   GitHubComment,
@@ -43,6 +46,14 @@ vi.mock("../src/lib/factory/run-log", () => ({
 // The repository FakeGitHubClient resolves to. Shared by the fake and by sandbox-
 // name expectations so both speak of the same repository.
 const FAKE_REPOSITORY_SLUG = "jd-solanki/krutrimbox";
+
+// Builds a resolved hooks map with actions attached to the `pull-request:ready`
+// hook — the only hook fixtures use, so most tests read as a flat action list.
+function prReadyHook(
+  actions: ResolvedHookAction[]
+): Map<KrutrimboxHookName, ResolvedHookAction[]> {
+  return new Map([["pull-request:ready", actions]]);
+}
 
 // The Operator most fixtures are owned by: the default `getAuthenticatedUser`
 // login, so a Target Issue or sub-issue assigned to it is the Operator's to run.
@@ -437,8 +448,6 @@ describe("Krutrimbox", () => {
       "checkoutBranch",
       "runAfkIssue",
       "commitAndPush",
-      "ensureSandbox",
-      "runFinalReview",
       "removeSandbox"
     ]);
     expect(sandbox.calls[0].input).toEqual({ sandboxName: fakeCodexSandbox(1) });
@@ -644,20 +653,14 @@ describe("Krutrimbox", () => {
     expect(github.setPullRequestLabels).toHaveBeenCalledWith(12, ["krutrimbox"]);
   });
 
-  test("runs final review when all Implementation Issues are already resolved at run start", async () => {
+  test("marks the Target Issue Pull Request ready, and nothing else, when no hooks are configured", async () => {
     const github = new FakeGitHubClient({
-      targetIssues: [targetIssue({ body: "Full Target Issue body" })],
+      targetIssues: [targetIssue()],
       pullRequests: [{ number: 10, isDraft: true, labels: [{ name: "krutrimbox" }] }],
       subIssuesByTargetIssue: new Map([
-        [
-          1,
-          [
-            implementationIssue({ number: 3, title: "Bootstrap", labels: ["ready-for-agent"] }),
-            implementationIssue({ number: 4, title: "Factory loop", labels: ["ready-for-agent"] })
-          ]
-        ]
+        [1, [implementationIssue({ number: 3, title: "Bootstrap", labels: ["ready-for-agent"] })]]
       ]),
-      branchCommitMessages: ["Bootstrap\n\nRefs #3", "Factory loop\n\nRefs #4"]
+      branchCommitMessages: ["Bootstrap\n\nRefs #3"]
     });
     const sandbox = new FakeSandboxRunner();
     const factory = new Krutrimbox({
@@ -669,21 +672,45 @@ describe("Krutrimbox", () => {
 
     await factory.runExplicit(1, "codex");
 
-    expect(sandbox.calls.map((call) => call.name)).toEqual([
-      "ensureSandbox",
-      "runFinalReview",
-      "removeSandbox"
-    ]);
-    const reviewCall = sandbox.calls.find((call) => call.name === "runFinalReview");
-    expect(String(reviewCall?.input.prompt)).toContain("Full Target Issue body");
-    expect(String(reviewCall?.input.prompt)).toContain("- #3 - Bootstrap (CLOSED)");
-    expect(String(reviewCall?.input.prompt)).toContain("- #4 - Factory loop (CLOSED)");
     expect(github.markPullRequestReadyForReview).toHaveBeenCalledWith(10);
-    expect(github.requestPullRequestReview).toHaveBeenCalledWith(10, "jd-solanki");
+    expect(sandbox.runAgentSession).not.toHaveBeenCalled();
+    expect(github.createIssueComment).not.toHaveBeenCalled();
+  });
+
+  test("runs an agent action and posts its output through a later comment action", async () => {
+    const github = new FakeGitHubClient({
+      targetIssues: [targetIssue({ body: "Full Target Issue body" })],
+      pullRequests: [{ number: 10, isDraft: true, labels: [{ name: "krutrimbox" }] }],
+      subIssuesByTargetIssue: new Map([
+        [1, [implementationIssue({ number: 3, title: "Bootstrap", labels: ["ready-for-agent"] })]]
+      ]),
+      branchCommitMessages: ["Bootstrap\n\nRefs #3"]
+    });
+    const sandbox = new FakeSandboxRunner();
+    const factory = new Krutrimbox({
+      github,
+      sandbox,
+      lockStore: fakeLockStore(),
+      templates: fixtureTemplates,
+      hooks: prReadyHook([
+        { kind: "agent", id: "review", prompt: "Review PR #{{pr_number}}." },
+        { kind: "comment", body: "Review:\n\n{{steps.review.output}}" }
+      ])
+    });
+
+    await factory.runExplicit(1, "codex");
+
+    expect(github.markPullRequestReadyForReview).toHaveBeenCalledWith(10);
+    const reviewCall = sandbox.calls.find((call) => call.name === "runAgentSession");
+    expect(String(reviewCall?.input.prompt)).toBe("Review PR #10.");
+    expect(github.createIssueComment).toHaveBeenCalledWith(
+      10,
+      "Review:\n\n## krutrimbox Review\n\n### Findings\n\nNo findings."
+    );
     expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: fakeCodexSandbox(1) });
   });
 
-  test("skips final review when the Target Issue Pull Request is already ready for review", async () => {
+  test("skips the pull-request:ready hook when the pull request is already ready", async () => {
     const github = new FakeGitHubClient({
       targetIssues: [targetIssue()],
       pullRequests: [{ number: 10, isDraft: false, labels: [{ name: "krutrimbox" }] }],
@@ -697,59 +724,96 @@ describe("Krutrimbox", () => {
       github,
       sandbox,
       lockStore: fakeLockStore(),
-      templates: fixtureTemplates
+      templates: fixtureTemplates,
+      hooks: prReadyHook([{ kind: "agent", id: "review", prompt: "Review the PR." }])
     });
 
     await factory.runExplicit(1, "codex");
 
     expect(sandbox.ensureSandbox).not.toHaveBeenCalled();
-    expect(sandbox.runFinalReview).not.toHaveBeenCalled();
-    expect(github.getPullRequestDiff).not.toHaveBeenCalled();
+    expect(sandbox.runAgentSession).not.toHaveBeenCalled();
     expect(github.markPullRequestReadyForReview).not.toHaveBeenCalled();
-    expect(github.requestPullRequestReview).not.toHaveBeenCalled();
   });
 
-  test("updates an existing final review comment idempotently", async () => {
+  test("commits an agent action's code changes from the host when the working tree changed", async () => {
     const github = new FakeGitHubClient({
       targetIssues: [targetIssue()],
       pullRequests: [{ number: 10, isDraft: true, labels: [{ name: "krutrimbox" }] }],
       subIssuesByTargetIssue: new Map([
-        [1, [implementationIssue({ number: 3, title: "Bootstrap", labels: ["ready-for-agent"] })]]
+        [1, [implementationIssue({ number: 3, labels: ["ready-for-agent"] })]]
       ]),
-      branchCommitMessages: ["Bootstrap\n\nRefs #3"],
-      comments: new Map([
-        [
-          10,
-          [
-            {
-              id: "200",
-              body: "<!-- krutrimbox:final-review-issue-1 -->\nold review",
-              url: "https://github.com/jd-solanki/krutrimbox/issues/10#issuecomment-200"
-            }
-          ]
-        ]
-      ])
+      branchCommitMessages: ["Bootstrap\n\nRefs #3"]
     });
+    const sandbox = new FakeSandboxRunner();
+    sandbox.hasWorkingTreeChanges.mockResolvedValueOnce(true);
     const factory = new Krutrimbox({
       github,
-      sandbox: new FakeSandboxRunner(),
+      sandbox,
       lockStore: fakeLockStore(),
-      templates: fixtureTemplates
+      templates: fixtureTemplates,
+      hooks: prReadyHook([{ kind: "agent", id: "simplify", prompt: "Simplify the code." }])
     });
 
     await factory.runExplicit(1, "codex");
 
-    expect(github.updateIssueComment).toHaveBeenCalledWith(
-      "200",
-      expect.stringContaining("<!-- krutrimbox:final-review-issue-1 -->")
-    );
-    expect(github.createIssueComment).not.toHaveBeenCalledWith(
-      10,
-      expect.stringContaining("<!-- krutrimbox:final-review-issue-1 -->")
-    );
+    expect(sandbox.commitReviewChanges).toHaveBeenCalledWith({
+      sandboxName: fakeCodexSandbox(1),
+      branchName: "krutrimbox/issue-1",
+      subject: 'chore: agent action "simplify" changes',
+      body: "Simplify the code."
+    });
   });
 
-  test("requests review from Target Issue Author when they differ from PR Author", async () => {
+  test("does not commit when an agent action leaves the working tree clean", async () => {
+    const github = new FakeGitHubClient({
+      targetIssues: [targetIssue()],
+      pullRequests: [{ number: 10, isDraft: true, labels: [{ name: "krutrimbox" }] }],
+      subIssuesByTargetIssue: new Map([
+        [1, [implementationIssue({ number: 3, labels: ["ready-for-agent"] })]]
+      ]),
+      branchCommitMessages: ["Bootstrap\n\nRefs #3"]
+    });
+    const sandbox = new FakeSandboxRunner();
+    const factory = new Krutrimbox({
+      github,
+      sandbox,
+      lockStore: fakeLockStore(),
+      templates: fixtureTemplates,
+      hooks: prReadyHook([{ kind: "agent", id: "review", prompt: "Review only." }])
+    });
+
+    await factory.runExplicit(1, "codex");
+
+    expect(sandbox.commitReviewChanges).not.toHaveBeenCalled();
+  });
+
+  test("aborts the run fail-fast when a hook action throws, naming the action", async () => {
+    const github = new FakeGitHubClient({
+      targetIssues: [targetIssue()],
+      pullRequests: [{ number: 10, isDraft: true, labels: [{ name: "krutrimbox" }] }],
+      subIssuesByTargetIssue: new Map([
+        [1, [implementationIssue({ number: 3, labels: ["ready-for-agent"] })]]
+      ]),
+      branchCommitMessages: ["Bootstrap\n\nRefs #3"]
+    });
+    const sandbox = new FakeSandboxRunner();
+    sandbox.runAgentSession.mockRejectedValueOnce(new Error("agent crashed"));
+    const factory = new Krutrimbox({
+      github,
+      sandbox,
+      lockStore: fakeLockStore(),
+      templates: fixtureTemplates,
+      hooks: prReadyHook([{ kind: "agent", id: "review", prompt: "Review the PR." }])
+    });
+
+    // The pull request is marked ready first, so a failed pipeline does not retry.
+    await expect(factory.runExplicit(1, "codex")).rejects.toThrow(
+      /pull-request:ready hook agent action "review" failed/
+    );
+    expect(github.markPullRequestReadyForReview).toHaveBeenCalledWith(10);
+  });
+
+  test("runs a gh command action on the host with interpolated arguments", async () => {
     const github = new FakeGitHubClient({
       targetIssues: [targetIssue({ author: "jd-solanki" })],
       pullRequests: [{ number: 10, isDraft: true, labels: [{ name: "krutrimbox" }] }],
@@ -758,50 +822,33 @@ describe("Krutrimbox", () => {
       ]),
       branchCommitMessages: ["Bootstrap\n\nRefs #3"]
     });
-    github.getAuthenticatedUser.mockResolvedValue("factory-bot");
+    const commandRunner = vi.fn(async () => "");
     const factory = new Krutrimbox({
       github,
       sandbox: new FakeSandboxRunner(),
       lockStore: fakeLockStore(),
-      templates: fixtureTemplates
+      templates: fixtureTemplates,
+      commandRunner,
+      hooks: prReadyHook([
+        {
+          kind: "command",
+          run: ["gh", "pr", "edit", "{{pr_number}}", "--add-reviewer", "{{target_issue_author}}"]
+        }
+      ])
     });
 
     await factory.runExplicit(1, "codex");
 
-    expect(github.requestPullRequestReview).toHaveBeenCalledWith(10, "jd-solanki");
-    expect(github.createIssueComment).not.toHaveBeenCalledWith(
-      10,
-      expect.stringContaining("@jd-solanki")
-    );
+    expect(commandRunner).toHaveBeenCalledWith("gh", [
+      "pr",
+      "edit",
+      "10",
+      "--add-reviewer",
+      "jd-solanki"
+    ]);
   });
 
-  test("tags Target Issue Author in a comment instead of requesting self-review when authors match", async () => {
-    const github = new FakeGitHubClient({
-      targetIssues: [targetIssue({ author: "jd-solanki", assignees: ["jd-solanki"] })],
-      pullRequests: [{ number: 10, isDraft: true, labels: [{ name: "krutrimbox" }] }],
-      subIssuesByTargetIssue: new Map([
-        [1, [implementationIssue({ number: 3, labels: ["ready-for-agent"], assignees: ["jd-solanki"] })]]
-      ]),
-      branchCommitMessages: ["Bootstrap\n\nRefs #3"]
-    });
-    github.getAuthenticatedUser.mockResolvedValue("jd-solanki");
-    const factory = new Krutrimbox({
-      github,
-      sandbox: new FakeSandboxRunner(),
-      lockStore: fakeLockStore(),
-      templates: fixtureTemplates
-    });
-
-    await factory.runExplicit(1, "codex");
-
-    expect(github.requestPullRequestReview).not.toHaveBeenCalled();
-    expect(github.createIssueComment).toHaveBeenCalledWith(
-      10,
-      expect.stringContaining("@jd-solanki")
-    );
-  });
-
-  test("removes the Target Issue Sandbox after final review routing succeeds", async () => {
+  test("does not create a Target Issue Sandbox for a comment/command-only hook", async () => {
     const github = new FakeGitHubClient({
       targetIssues: [targetIssue()],
       pullRequests: [{ number: 10, isDraft: true, labels: [{ name: "krutrimbox" }] }],
@@ -815,37 +862,18 @@ describe("Krutrimbox", () => {
       github,
       sandbox,
       lockStore: fakeLockStore(),
-      templates: fixtureTemplates
+      templates: fixtureTemplates,
+      hooks: prReadyHook([{ kind: "comment", body: "@coderabbitai review" }])
     });
 
     await factory.runExplicit(1, "codex");
 
-    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: fakeCodexSandbox(1) });
+    expect(sandbox.ensureSandbox).not.toHaveBeenCalled();
+    expect(sandbox.removeSandbox).not.toHaveBeenCalled();
+    expect(github.createIssueComment).toHaveBeenCalledWith(10, "@coderabbitai review");
   });
 
-  test("never merges the Target Issue Pull Request during final review routing", async () => {
-    const github = new FakeGitHubClient({
-      targetIssues: [targetIssue()],
-      pullRequests: [{ number: 10, isDraft: true, labels: [{ name: "krutrimbox" }] }],
-      subIssuesByTargetIssue: new Map([
-        [1, [implementationIssue({ number: 3, labels: ["ready-for-agent"] })]]
-      ]),
-      branchCommitMessages: ["Bootstrap\n\nRefs #3"]
-    });
-    const factory = new Krutrimbox({
-      github,
-      sandbox: new FakeSandboxRunner(),
-      lockStore: fakeLockStore(),
-      templates: fixtureTemplates
-    });
-
-    await factory.runExplicit(1, "codex");
-
-    expect(github.markPullRequestReadyForReview).toHaveBeenCalledOnce();
-    expect("mergePullRequest" in github).toBe(false);
-  });
-
-  test("skips final review when no Target Issue Pull Request exists", async () => {
+  test("skips the hook entirely when no Target Issue Pull Request exists", async () => {
     const github = new FakeGitHubClient({
       targetIssues: [targetIssue()],
       subIssuesByTargetIssue: new Map([
@@ -858,27 +886,35 @@ describe("Krutrimbox", () => {
       github,
       sandbox,
       lockStore: fakeLockStore(),
-      templates: fixtureTemplates
+      templates: fixtureTemplates,
+      hooks: prReadyHook([{ kind: "agent", id: "review", prompt: "Review the PR." }])
     });
 
     await factory.runExplicit(1, "codex");
 
-    expect(sandbox.runFinalReview).not.toHaveBeenCalled();
+    expect(sandbox.runAgentSession).not.toHaveBeenCalled();
     expect(github.markPullRequestReadyForReview).not.toHaveBeenCalled();
   });
 
-  test("injects the Factory Comment Marker even when a custom comment template omits it", async () => {
-    const workdir = await mkdtemp(join(tmpdir(), "krutrimbox-marker-"));
+  test("loads hooks from .krutrimbox/config.json and runs them end to end", async () => {
+    const workdir = await mkdtemp(join(tmpdir(), "krutrimbox-hooks-"));
     try {
-      await mkdir(join(workdir, ".krutrimbox", "templates"), { recursive: true });
+      await mkdir(join(workdir, ".krutrimbox", "prompts"), { recursive: true });
       await writeFile(
-        join(workdir, ".krutrimbox", "templates", "review.md"),
-        "Custom review wrapper:\n\n{{review_body}}",
+        join(workdir, ".krutrimbox", "prompts", "review.md"),
+        "Review PR #{{pr_number}}.",
         "utf8"
       );
       await writeFile(
         join(workdir, ".krutrimbox", "config.json"),
-        JSON.stringify({ templates: { finalReviewComment: "templates/review.md" } }),
+        JSON.stringify({
+          hooks: {
+            "pull-request:ready": [
+              { type: "agent", id: "review", prompt: "prompts/review.md" },
+              { type: "comment", body: "{{steps.review.output}}" }
+            ]
+          }
+        }),
         "utf8"
       );
 
@@ -890,26 +926,21 @@ describe("Krutrimbox", () => {
         ]),
         branchCommitMessages: ["Bootstrap\n\nRefs #3"]
       });
+      const sandbox = new FakeSandboxRunner();
       const factory = new Krutrimbox({
         github,
-        sandbox: new FakeSandboxRunner(),
+        sandbox,
         lockStore: fakeLockStore(),
-        templates: ProjectTemplateRenderer.fromProjectDir(workdir)
+        cwd: workdir
       });
 
       await factory.runExplicit(1, "codex");
 
-      // First run creates the comment: krutrimbox injects the marker outside the
-      // custom template body so the comment stays idempotently updatable.
-      const created = github.createIssueComment.mock.calls.find(([number]) => number === 10);
-      expect(created?.[1]).toContain("<!-- krutrimbox:final-review-issue-1 -->");
-      expect(created?.[1]).toContain("Custom review wrapper:");
-
-      // Second run finds the marked comment and updates it rather than duplicating.
-      await factory.runExplicit(1, "codex");
-      expect(github.updateIssueComment).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.stringContaining("<!-- krutrimbox:final-review-issue-1 -->")
+      const reviewCall = sandbox.calls.find((call) => call.name === "runAgentSession");
+      expect(String(reviewCall?.input.prompt)).toBe("Review PR #10.");
+      expect(github.createIssueComment).toHaveBeenCalledWith(
+        10,
+        "## krutrimbox Review\n\n### Findings\n\nNo findings."
       );
     } finally {
       await rm(workdir, { recursive: true, force: true });
@@ -992,7 +1023,7 @@ describe("Krutrimbox MVP smoke", () => {
     vi.restoreAllMocks();
   });
 
-  test("explicit run completes ordered AFK issues through PR, final review, and cleanup seams", async () => {
+  test("explicit run completes ordered AFK issues through PR, pull-request:ready hook, and cleanup seams", async () => {
     const github = new FakeGitHubClient({
       targetIssues: [targetIssue({ body: "Full parent Target Issue smoke fixture" })],
       branchCommitMessages: ["Bootstrap CLI\n\nRefs #2"],
@@ -1023,18 +1054,6 @@ describe("Krutrimbox MVP smoke", () => {
             })
           ]
         ]
-      ]),
-      comments: new Map([
-        [
-          10,
-          [
-            {
-              id: "existing-final-review",
-              body: "<!-- krutrimbox:final-review-issue-1 -->\nold",
-              url: "https://github.com/jd-solanki/krutrimbox/issues/10#issuecomment-existing-final-review"
-            }
-          ]
-        ]
       ])
     });
     const sandbox = new FakeSandboxRunner();
@@ -1044,6 +1063,10 @@ describe("Krutrimbox MVP smoke", () => {
       sandbox,
       lockStore,
       templates: fixtureTemplates,
+      hooks: prReadyHook([
+        { kind: "agent", id: "review", prompt: "Review PR #{{pr_number}}." },
+        { kind: "comment", body: "{{steps.review.output}}" }
+      ]),
       logger: { log: vi.fn() }
     });
 
@@ -1061,7 +1084,9 @@ describe("Krutrimbox MVP smoke", () => {
       "runAfkIssue",
       "commitAndPush",
       "ensureSandbox",
-      "runFinalReview",
+      "checkoutBranch",
+      "runAgentSession",
+      "hasWorkingTreeChanges",
       "removeSandbox"
     ]);
     expect(sandbox.runAfkIssue).toHaveBeenCalledTimes(2);
@@ -1091,18 +1116,18 @@ describe("Krutrimbox MVP smoke", () => {
     expect(github.pullRequestBodies.at(-1)).toContain("- [x] #4 - Factory loop");
     expect(github.pullRequestBodies.at(-1)).toContain("- [x] #6 - Final review");
     expect(github.setPullRequestLabels).toHaveBeenLastCalledWith(10, ["krutrimbox"]);
-    expect(String(sandbox.runFinalReview.mock.calls[0]?.[0].prompt)).toContain("--- a/foo");
-    expect(github.updateIssueComment).toHaveBeenCalledWith(
-      "existing-final-review",
-      expect.stringContaining("## krutrimbox Review")
+    expect(String(sandbox.runAgentSession.mock.calls[0]?.[0].prompt)).toBe("Review PR #10.");
+    expect(github.createIssueComment).toHaveBeenCalledWith(
+      10,
+      "## krutrimbox Review\n\n### Findings\n\nNo findings."
     );
     expect(github.markPullRequestReadyForReview).toHaveBeenCalledWith(10);
-    expect(github.requestPullRequestReview).toHaveBeenCalledWith(10, "jd-solanki");
     expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: fakeCodexSandbox(1) });
 
-    const reviewOrder = sandbox.runFinalReview.mock.invocationCallOrder[0];
+    // The pull request is marked ready first, then the pull-request:ready hook runs.
     const readyOrder = github.markPullRequestReadyForReview.mock.invocationCallOrder[0];
-    expect(reviewOrder).toBeLessThan(readyOrder);
+    const reviewOrder = sandbox.runAgentSession.mock.invocationCallOrder[0];
+    expect(readyOrder).toBeLessThan(reviewOrder);
   });
 
   test("batch run orders discovered Target Issues and continues after Target-Issue-local stops", async () => {
@@ -1207,7 +1232,12 @@ describe("FactoryRun", () => {
     github: FakeGitHubClient,
     sandbox: FakeSandboxRunner,
     logger: Pick<Console, "log"> = silentLogger(),
-    options: { operator?: string; allowUnassigned?: boolean } = {}
+    options: {
+      operator?: string;
+      allowUnassigned?: boolean;
+      hooks?: Map<KrutrimboxHookName, ResolvedHookAction[]>;
+      hostCommandRunner?: CommandRunner;
+    } = {}
   ) {
     return {
       github,
@@ -1218,6 +1248,8 @@ describe("FactoryRun", () => {
       operator: options.operator ?? OPERATOR,
       allowUnassigned: options.allowUnassigned ?? false,
       templates: fixtureTemplates,
+      hooks: options.hooks ?? new Map(),
+      hostCommandRunner: options.hostCommandRunner ?? vi.fn(async () => ""),
       logger
     };
   }
@@ -1295,7 +1327,11 @@ describe("FactoryRun", () => {
     const run = new FactoryRun(runDependencies(github, sandbox), targetIssue());
 
     await expect(run.process()).resolves.toBe("completed");
-    expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: fakeCodexSandbox(1) });
+    // A resume with no implementation and no hooks marks the PR ready and
+    // never creates a sandbox, so there is nothing to tear down.
+    expect(github.markPullRequestReadyForReview).toHaveBeenCalledWith(10);
+    expect(sandbox.ensureSandbox).not.toHaveBeenCalled();
+    expect(sandbox.removeSandbox).not.toHaveBeenCalled();
   });
 
   test("exposes the deterministic Target Issue branch and sandbox as run invariants", () => {
@@ -1409,7 +1445,6 @@ describe("TargetIssuePullRequest", () => {
     return new TargetIssuePullRequest(
       github,
       fixtureTemplates,
-      { log: vi.fn() },
       targetIssue(),
       "krutrimbox/issue-1",
       fakeCodexSandbox(1),
@@ -1448,30 +1483,6 @@ describe("TargetIssuePullRequest", () => {
       expect.stringContaining("- [x] #3 - Bootstrap")
     );
     expect(github.setPullRequestLabels).toHaveBeenCalledWith(12, ["krutrimbox"]);
-  });
-
-  test("routeForReview requests review from the Target Issue Author when distinct from the PR Author", async () => {
-    const github = new FakeGitHubClient({ targetIssues: [targetIssue()] });
-    github.getAuthenticatedUser.mockResolvedValue("factory-bot");
-
-    await prModule(github).routeForReview(10, "jd-solanki");
-
-    expect(github.markPullRequestReadyForReview).toHaveBeenCalledWith(10);
-    expect(github.requestPullRequestReview).toHaveBeenCalledWith(10, "jd-solanki");
-    expect(github.createIssueComment).not.toHaveBeenCalled();
-  });
-
-  test("routeForReview tags the Target Issue Author for self-review when they are the PR Author", async () => {
-    const github = new FakeGitHubClient({ targetIssues: [targetIssue()] });
-    github.getAuthenticatedUser.mockResolvedValue("jd-solanki");
-
-    await prModule(github).routeForReview(10, "jd-solanki");
-
-    expect(github.requestPullRequestReview).not.toHaveBeenCalled();
-    expect(github.createIssueComment).toHaveBeenCalledWith(
-      10,
-      expect.stringContaining("@jd-solanki")
-    );
   });
 });
 
@@ -1542,9 +1553,7 @@ class FakeGitHubClient implements GitHubClient {
   });
   public readonly setPullRequestLabels = vi.fn(async () => undefined);
   public readonly getAuthenticatedUser = vi.fn(async () => "factory-bot");
-  public readonly getPullRequestDiff = vi.fn(async () => "--- a/foo\n+++ b/foo\n@@ -1 +1 @@\n-old\n+new");
   public readonly markPullRequestReadyForReview = vi.fn(async () => undefined);
-  public readonly requestPullRequestReview = vi.fn(async () => undefined);
 
   public readonly targetIssues: GitHubIssue[];
   public readonly issues = new Map<number, GitHubIssue>();
@@ -1616,10 +1625,19 @@ class FakeSandboxRunner implements SandboxRunner {
       this.calls.push({ name: "commitAndPush", input });
     }
   );
-  public readonly runFinalReview = vi.fn(async (input: { sandboxName: string; prompt: string }) => {
-    this.calls.push({ name: "runFinalReview", input });
+  public readonly runAgentSession = vi.fn(async (input: { sandboxName: string; prompt: string }) => {
+    this.calls.push({ name: "runAgentSession", input });
     return "## krutrimbox Review\n\n### Findings\n\nNo findings.";
   });
+  public readonly hasWorkingTreeChanges = vi.fn(async (input: { sandboxName: string }) => {
+    this.calls.push({ name: "hasWorkingTreeChanges", input });
+    return false;
+  });
+  public readonly commitReviewChanges = vi.fn(
+    async (input: { sandboxName: string; branchName: string; subject: string; body: string }) => {
+      this.calls.push({ name: "commitReviewChanges", input });
+    }
+  );
   public readonly removeSandbox = vi.fn(async (input: { sandboxName: string }) => {
     this.calls.push({ name: "removeSandbox", input });
   });
@@ -1860,10 +1878,12 @@ describe("run logging end-to-end", () => {
         input.output?.write("[codex] implementing the issue\n");
       },
       commitAndPush: async () => undefined,
-      runFinalReview: async (input) => {
-        input.output?.write("[codex] running the final review\n");
+      runAgentSession: async (input) => {
+        input.output?.write("[codex] running the review\n");
         return "## krutrimbox Review\n\n### Findings\n\nNo findings.";
       },
+      hasWorkingTreeChanges: async () => false,
+      commitReviewChanges: async () => undefined,
       removeSandbox: async () => undefined
     };
 
@@ -1874,6 +1894,7 @@ describe("run logging end-to-end", () => {
         sandbox,
         lockStore: fakeLockStore(),
         templates: fixtureTemplates,
+        hooks: prReadyHook([{ kind: "agent", id: "review", prompt: "Review." }]),
         // Silent terminal so the run is quiet; the file still receives everything.
         openRunLog: createFileRunLogFactory(workdir, { log: () => undefined })
       });
@@ -1887,7 +1908,7 @@ describe("run logging end-to-end", () => {
 
       const content = await readFile(join(logsDir, files[0]), "utf8");
       expect(content).toContain("[codex] implementing the issue");
-      expect(content).toContain("[codex] running the final review");
+      expect(content).toContain("[codex] running the review");
       expect(content).toContain("krutrimbox: completed AFK Issue #4.");
     } finally {
       await rm(workdir, { recursive: true, force: true });

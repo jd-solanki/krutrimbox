@@ -6,7 +6,7 @@ const repo = 'https://github.com/jd-solanki/krutrimbox'
 export default defineConfig({
   title: 'Krutrimbox',
   description:
-    'A local orchestrator that turns agent-ready GitHub issues into coordinated agent work, human handoffs, and final review routing.',
+    'A local orchestrator that turns agent-ready GitHub issues into coordinated agent work, human handoffs, and configurable lifecycle hooks.',
   lastUpdated: true,
   cleanUrls: true,
 

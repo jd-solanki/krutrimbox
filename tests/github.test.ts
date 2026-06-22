@@ -491,20 +491,6 @@ describe("GitHubCliClient", () => {
     expect(runner.calls[0]).toEqual({ command: "gh", args: ["api", "/user"] });
   });
 
-  test("fetches the pull request diff", async () => {
-    const runner = fixtureRunner(
-      new Map([
-        [commandKey("gh", ["pr", "diff", "8"]), "--- a/foo\n+++ b/foo\n@@ -1 +1 @@\n-old\n+new"]
-      ])
-    );
-    const client = createGitHubCliClient(runner);
-
-    await expect(client.getPullRequestDiff(8)).resolves.toBe(
-      "--- a/foo\n+++ b/foo\n@@ -1 +1 @@\n-old\n+new"
-    );
-    expect(runner.calls[0]).toEqual({ command: "gh", args: ["pr", "diff", "8"] });
-  });
-
   test("lists branch commit messages and treats an absent branch as empty", async () => {
     const calls: Array<{ command: string; args: string[] }> = [];
     const runner: CommandRunner = async (command, args) => {
@@ -580,22 +566,6 @@ describe("GitHubCliClient", () => {
     await client.markPullRequestReadyForReview(8);
 
     expect(runner.calls[0]).toEqual({ command: "gh", args: ["pr", "ready", "8"] });
-  });
-
-  test("requests review on a pull request from a specific reviewer", async () => {
-    const runner = fixtureRunner(
-      new Map([
-        [commandKey("gh", ["pr", "edit", "8", "--add-reviewer", "jd-solanki"]), ""]
-      ])
-    );
-    const client = createGitHubCliClient(runner);
-
-    await client.requestPullRequestReview(8, "jd-solanki");
-
-    expect(runner.calls[0]).toEqual({
-      command: "gh",
-      args: ["pr", "edit", "8", "--add-reviewer", "jd-solanki"]
-    });
   });
 
   test("updates a Target Issue Pull Request body and applies only the krutrimbox label", async () => {

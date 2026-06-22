@@ -1,7 +1,17 @@
-import type { GitHubClient, GitHubIssue } from "../github";
+import type { Hookable } from "hookable";
+import type { CommandRunner, GitHubClient, GitHubIssue } from "../github";
 import type { CodingAgent } from "./coding-agent";
+import type { ResolvedHookAction } from "./config";
 import { fetchDoneSet } from "./done-set";
 import { formatEarlierIssues, formatLaterIssues } from "./format";
+import {
+  createKrutrimboxHooks,
+  registerHookActions,
+  type HookActionDependencies,
+  type KrutrimboxHookName,
+  type KrutrimboxHooks
+} from "./hooks";
+import { type InterpolationValues } from "../../utils/interpolate";
 import { TargetIssuePullRequest } from "./target-issue-pull-request";
 import type { SandboxRunner } from "./sandbox-runner";
 import {
@@ -46,6 +56,12 @@ export interface FactoryRunDependencies {
   // hatch that disables the single-assignee collision guard.
   allowUnassigned: boolean;
   templates: TemplateRenderer;
+  // The repository's committed lifecycle hooks (ADR-0021), resolved once at load:
+  // each hook name maps to its ordered Hook Actions. The `pull-request:ready` hook
+  // runs once the Target Issue finishes and its pull request is marked ready.
+  hooks: Map<KrutrimboxHookName, ResolvedHookAction[]>;
+  // Runs allowlisted `gh` Command Actions on the host with the Operator's credential.
+  hostCommandRunner: CommandRunner;
   logger: Pick<Console, "log">;
   // Where the sandbox/agent output stream is sent for this run. Omitted in tests
   // and when no per-run log file is in use.
@@ -74,11 +90,20 @@ export class FactoryRun {
   private readonly baseBranch: string;
   private readonly operator: string;
   private readonly allowUnassigned: boolean;
+  private readonly repositorySlug: string;
+  private readonly hooks: Map<KrutrimboxHookName, ResolvedHookAction[]>;
+  private readonly hostCommandRunner: CommandRunner;
+  // The per-run hook bus: configured Hook Actions are registered onto it once, and
+  // krutrimbox fires lifecycle hooks (e.g. `pull-request:ready`) through it.
+  private readonly hookable: Hookable<KrutrimboxHooks>;
   public readonly branchName: string;
   public readonly sandboxName: string;
   private readonly targetIssuePullRequest: TargetIssuePullRequest;
   private readonly doneSet = new Set<number>();
   private readonly processedIssues: ResolvedIssue[] = [];
+  // Whether this run created the Target Issue Sandbox, so teardown happens exactly
+  // once and only when something actually used it (ADR-0006).
+  private sandboxEnsured = false;
 
   public constructor(
     dependencies: FactoryRunDependencies,
@@ -93,6 +118,10 @@ export class FactoryRun {
     this.baseBranch = dependencies.baseBranch;
     this.operator = dependencies.operator;
     this.allowUnassigned = dependencies.allowUnassigned;
+    this.repositorySlug = dependencies.repositorySlug;
+    this.hooks = dependencies.hooks;
+    this.hostCommandRunner = dependencies.hostCommandRunner;
+    this.hookable = this.buildHookable();
     this.branchName = deterministicTargetIssueBranch(targetIssue.number);
     this.sandboxName = deterministicTargetIssueSandbox(
       targetIssue.number,
@@ -102,7 +131,6 @@ export class FactoryRun {
     this.targetIssuePullRequest = new TargetIssuePullRequest(
       this.github,
       this.templates,
-      this.logger,
       targetIssue,
       this.branchName,
       this.sandboxName,
@@ -152,7 +180,7 @@ export class FactoryRun {
     );
 
     if (sequence.resolvedIssues.length > 0) {
-      await this.routeFinalReview(sequence);
+      await this.markReadyAndRunHooks();
     }
 
     return "completed";
@@ -190,11 +218,7 @@ export class FactoryRun {
       this.recordCompletedIssue(issue);
     }
 
-    const allResolvedSequence: ImplementationSequence = {
-      openIssues: [],
-      resolvedIssues: [...sequence.resolvedIssues, ...this.processedIssues]
-    };
-    await this.routeFinalReview(allResolvedSequence);
+    await this.markReadyAndRunHooks();
 
     return "completed";
   }
@@ -255,7 +279,7 @@ export class FactoryRun {
         return "error";
       }
 
-      await this.sandbox.ensureSandbox({ sandboxName: this.sandboxName });
+      await this.ensureSandbox();
       await this.sandbox.checkoutBranch({
         sandboxName: this.sandboxName,
         branchName: this.branchName,
@@ -351,57 +375,122 @@ export class FactoryRun {
     return comment.url;
   }
 
-  private async routeFinalReview(sequence: ImplementationSequence): Promise<void> {
+  // Registers every configured hook's actions onto a fresh hook bus, so krutrimbox
+  // can later fire lifecycle hooks through it (ADR-0021).
+  private buildHookable(): Hookable<KrutrimboxHooks> {
+    const hookable = createKrutrimboxHooks();
+    const deps: HookActionDependencies = {
+      github: this.github,
+      sandbox: this.sandbox,
+      runHostCommand: this.hostCommandRunner,
+      logger: this.logger,
+      output: this.output
+    };
+
+    for (const [hookName, actions] of this.hooks) {
+      registerHookActions(hookable, hookName, actions, deps);
+    }
+
+    return hookable;
+  }
+
+  // Once a Target Issue finishes, krutrimbox always marks its pull request ready —
+  // the only built-in behavior — then fires the `pull-request:ready` hook so the
+  // operator's configured Hook Actions run against the now-ready pull request
+  // (ADR-0021). Draft state is the run-once guard: marking ready flips it, so a
+  // later Factory Run or Batch re-discovery sees a ready pull request and skips.
+  private async markReadyAndRunHooks(): Promise<void> {
     const { targetIssue } = this;
     const pr = await this.targetIssuePullRequest.find();
 
     if (!pr) {
       this.logger.log(
-        `krutrimbox: no Target Issue Pull Request found for Target Issue #${targetIssue.number}; skipping final review.`
+        `krutrimbox: no Target Issue Pull Request found for Target Issue #${targetIssue.number}; skipping review.`
       );
       return;
     }
 
     if (!pr.isDraft) {
       this.logger.log(
-        `krutrimbox: Target Issue Pull Request #${pr.number} for Target Issue #${targetIssue.number} is already ready for review; skipping final review.`
+        `krutrimbox: Target Issue Pull Request #${pr.number} for Target Issue #${targetIssue.number} is already ready; skipping review.`
       );
       return;
     }
 
-    this.logger.log(`krutrimbox: running final review for Target Issue #${targetIssue.number}.`);
+    await this.github.markPullRequestReadyForReview(pr.number);
+    this.logger.log(
+      `krutrimbox: marked Target Issue Pull Request #${pr.number} ready for review.`
+    );
 
-    const diff = await this.targetIssuePullRequest.diff(pr.number);
-    const prompt = await this.buildFinalReviewPrompt(sequence, diff);
+    await this.runPullRequestReadyHook(pr.number);
+    await this.teardownSandbox();
+  }
 
-    await this.sandbox.ensureSandbox({ sandboxName: this.sandboxName });
-    const reviewBody = await this.sandbox.runFinalReview({
+  // Fires the `pull-request:ready` hook against the ready pull request. The Target
+  // Issue Sandbox is prepared lazily — only when an Agent Action needs it — so a
+  // comment/command-only hook never spins one up.
+  private async runPullRequestReadyHook(pullRequestNumber: number): Promise<void> {
+    const actions = this.hooks.get("pull-request:ready") ?? [];
+
+    if (actions.length === 0) {
+      return;
+    }
+
+    if (actions.some((action) => action.kind === "agent")) {
+      await this.ensureSandbox();
+      await this.sandbox.checkoutBranch({
+        sandboxName: this.sandboxName,
+        branchName: this.branchName,
+        baseBranch: this.baseBranch
+      });
+    }
+
+    await this.hookable.callHook("pull-request:ready", {
+      pullRequestNumber,
+      branchName: this.branchName,
       sandboxName: this.sandboxName,
-      prompt,
-      output: this.output
+      variables: this.hookVariables(pullRequestNumber),
+      outputs: new Map()
     });
 
-    const commentBody = await this.templates.renderTemplate("finalReviewComment", {
+    this.logger.log(
+      `krutrimbox: ran pull-request:ready hook for Target Issue #${this.targetIssue.number}.`
+    );
+  }
+
+  // The documented interpolation surface available to every Hook Action (ADR-0021).
+  // Action Outputs are layered on top of these by the hook runtime as actions run.
+  private hookVariables(pullRequestNumber: number): InterpolationValues {
+    const { targetIssue } = this;
+    return {
+      pr_number: pullRequestNumber,
+      pr_url: `https://github.com/${this.repositorySlug}/pull/${pullRequestNumber}`,
       target_issue_number: targetIssue.number,
-      review_body: reviewBody
-    });
+      target_issue_title: targetIssue.title,
+      target_issue_author: targetIssue.author.login,
+      target_issue_branch: this.branchName,
+      operator: this.operator,
+      base_branch: this.baseBranch
+    };
+  }
 
-    await this.upsertComment(pr.number, finalReviewMarker(targetIssue.number), commentBody);
-    await this.targetIssuePullRequest.routeForReview(pr.number, targetIssue.author.login);
+  // Ensures the Target Issue Sandbox exists and records that it now needs teardown.
+  // Both AFK implementation and Agent Steps route through here so cleanup is
+  // decided in one place (ADR-0006).
+  private async ensureSandbox(): Promise<void> {
+    await this.sandbox.ensureSandbox({ sandboxName: this.sandboxName });
+    this.sandboxEnsured = true;
+  }
+
+  // Removes the Target Issue Sandbox on a successful run, but only if this run
+  // actually created it — a comment/command-only review never does.
+  private async teardownSandbox(): Promise<void> {
+    if (!this.sandboxEnsured) {
+      return;
+    }
 
     await this.sandbox.removeSandbox({ sandboxName: this.sandboxName });
     this.logger.log(`krutrimbox: removed Target Issue Sandbox ${this.sandboxName}.`);
-  }
-
-  private async buildFinalReviewPrompt(
-    sequence: ImplementationSequence,
-    diff: string
-  ): Promise<string> {
-    return this.templates.renderPrompt("finalReview", {
-      target_issue_body: this.targetIssue.body,
-      implementation_issues: formatEarlierIssues(sequence.resolvedIssues),
-      pr_diff: diff
-    });
   }
 
   // krutrimbox owns the Factory Comment Marker, not the template author: the
@@ -427,10 +516,6 @@ function hitlMarker(targetIssueNumber: number, issueNumber: number): string {
 
 function afkErrorMarker(issueNumber: number): string {
   return `<!-- krutrimbox:afk-error-issue-${issueNumber} -->`;
-}
-
-function finalReviewMarker(targetIssueNumber: number): string {
-  return `<!-- krutrimbox:final-review-issue-${targetIssueNumber} -->`;
 }
 
 function formatError(error: unknown): string {
