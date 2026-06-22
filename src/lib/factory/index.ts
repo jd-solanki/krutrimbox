@@ -4,20 +4,13 @@
 // template classes behind their injection seams (the Pick<Class, ...> types each
 // module exports).
 export * from "./constants";
-export * from "./coding-agent";
-export * from "./ownership";
-export * from "./sequence";
-export * from "./done-set";
-export * from "./format";
-export * from "./target-issue-pull-request";
+export * from "./agents";
+export * from "./issue";
 export * from "./hooks";
 export * from "./factory-run";
-export * from "./template-slots";
-export * from "./asset-store";
+export * from "./templates";
 export * from "./config";
-export * from "./template-renderer";
 export * from "./lock-store";
 export * from "./run-log";
-export * from "./run-log-stream";
 export * from "./sandbox-runner";
 export * from "./krutrimbox";

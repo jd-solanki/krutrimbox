@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { claudeRunLogCodec } from "../src/lib/factory/claude-run-log-codec";
+import { claudeRunLogCodec } from "../src/lib/factory/agents/claude-run-log-codec";
 
 const { renderLine, extractResultText } = claudeRunLogCodec;
 

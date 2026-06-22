@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { classifyOwnership, isImplementable } from "../src/lib/factory/ownership";
+import { classifyOwnership, isImplementable } from "../src/lib/factory/issue/ownership";
 
 describe("classifyOwnership", () => {
   test("an issue assigned only to the Operator is owned", () => {

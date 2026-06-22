@@ -1,5 +1,5 @@
 import { Writable } from "node:stream";
-import type { RunLogCodec } from "./coding-agent";
+import type { RunLogCodec } from "../agents/coding-agent";
 
 // A write-through stream that turns an Agent Backend's raw, line-delimited output
 // into readable run-log lines as it streams. It sits between the sandbox exec and

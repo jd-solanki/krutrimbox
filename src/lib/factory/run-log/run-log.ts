@@ -1,6 +1,6 @@
 import { createWriteStream, mkdirSync } from "node:fs";
 import path from "node:path";
-import { deterministicTargetIssueSlug } from "./sequence";
+import { deterministicTargetIssueSlug } from "../issue/sequence";
 
 // A per-Target-Issue log sink for one Factory Run. Status lines (`log`) are
 // tee'd to the terminal and the file so a run stays visible while it happens;

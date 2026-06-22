@@ -1,7 +1,7 @@
 import type { CommandRunner } from "../github";
 import { diagnostics } from "../diagnostics";
-import type { CodingAgent } from "./coding-agent";
-import { RunLogStream } from "./run-log-stream";
+import type { CodingAgent } from "./agents/coding-agent";
+import { RunLogStream } from "./run-log/run-log-stream";
 
 export interface SandboxInput {
   sandboxName: string;

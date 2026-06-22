@@ -6,8 +6,8 @@ import {
   type GitHubClient,
   type GitHubIssue
 } from "../github";
-import { resolveCodingAgent, type AgentName, type CodingAgent } from "./coding-agent";
-import { classifyOwnership, isImplementable } from "./ownership";
+import { resolveCodingAgent, type AgentName, type CodingAgent } from "./agents/coding-agent";
+import { classifyOwnership, isImplementable } from "./issue/ownership";
 import {
   FactoryRun,
   type FactoryRunDependencies,
@@ -16,9 +16,9 @@ import {
 import { loadProjectConfig, type ResolvedHookAction } from "./config";
 import { type KrutrimboxHookName } from "./hooks/names";
 import { FileTargetIssueLockStore, type TargetIssueLockStore } from "./lock-store";
-import { createFileRunLogFactory, type RunLogFactory } from "./run-log";
+import { createFileRunLogFactory, type RunLogFactory } from "./run-log/run-log";
 import { CommandSandboxRunner, type SandboxRunner } from "./sandbox-runner";
-import { ProjectTemplateRenderer, type TemplateRenderer } from "./template-renderer";
+import { ProjectTemplateRenderer, type TemplateRenderer } from "./templates/template-renderer";
 
 export interface KrutrimboxDependencies {
   github?: GitHubClient;

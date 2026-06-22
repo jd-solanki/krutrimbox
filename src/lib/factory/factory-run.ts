@@ -1,9 +1,9 @@
 import type { Hookable } from "hookable";
 import type { CommandRunner, GitHubClient, GitHubIssue } from "../github";
-import type { CodingAgent } from "./coding-agent";
+import type { CodingAgent } from "./agents/coding-agent";
 import type { ResolvedHookAction } from "./config";
-import { fetchDoneSet } from "./done-set";
-import { formatEarlierIssues, formatLaterIssues } from "./format";
+import { fetchDoneSet } from "./issue/done-set";
+import { formatEarlierIssues, formatLaterIssues } from "./issue/format";
 import {
   createKrutrimboxHooks,
   registerHookActions,
@@ -12,7 +12,7 @@ import {
   type KrutrimboxHooks
 } from "./hooks";
 import { type InterpolationValues } from "../../utils/interpolate";
-import { TargetIssuePullRequest } from "./target-issue-pull-request";
+import { TargetIssuePullRequest } from "./issue/target-issue-pull-request";
 import type { SandboxRunner } from "./sandbox-runner";
 import {
   buildImplementationSequence,
@@ -22,9 +22,9 @@ import {
   type ImplementationIssue,
   type ImplementationSequence,
   type ResolvedIssue
-} from "./sequence";
-import { classifyOwnership, isImplementable, type IssueOwnership } from "./ownership";
-import type { TemplateRenderer } from "./template-renderer";
+} from "./issue/sequence";
+import { classifyOwnership, isImplementable, type IssueOwnership } from "./issue/ownership";
+import type { TemplateRenderer } from "./templates/template-renderer";
 
 // The terminal outcome of one Factory Run against a locked Target Issue. `skipped` is a
 // dispatch concern (no run ever started), so it is not a Factory Run outcome.

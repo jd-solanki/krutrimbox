@@ -1,13 +1,13 @@
 import { createHash } from "node:crypto";
-import type { GitHubIssue } from "../github";
-import { diagnostics } from "../diagnostics";
-import type { AgentName } from "./coding-agent";
+import type { GitHubIssue } from "../../github";
+import { diagnostics } from "../../diagnostics";
+import type { AgentName } from "../agents/coding-agent";
 import {
   AFK_LABEL,
   HITL_LABEL,
   TARGET_ISSUE_BRANCH_PREFIX,
   TARGET_ISSUE_SANDBOX_PREFIX
-} from "./constants";
+} from "../constants";
 
 export interface ImplementationIssue {
   number: number;

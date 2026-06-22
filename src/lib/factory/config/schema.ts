@@ -1,6 +1,6 @@
 import * as v from "valibot";
 import { KRUTRIMBOX_HOOK_NAMES } from "../hooks/names";
-import { SUPPORTED_PROMPT_NAMES, SUPPORTED_TEMPLATE_SLOTS } from "../template-slots";
+import { SUPPORTED_PROMPT_NAMES, SUPPORTED_TEMPLATE_SLOTS } from "../templates/template-slots";
 import { ALLOWED_GH_COMMANDS, isAllowedGhCommand } from "./gh-allowlist";
 
 // The complete shape of `.krutrimbox/config.json` (ADR-0013), and the single

@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { diagnostics } from "../diagnostics";
+import { diagnostics } from "../../diagnostics";
 
 // Loads the built-in Markdown prompts and templates that ship with the CLI
 // package. Keeping the defaults as real Markdown files (instead of escaped
@@ -13,10 +13,11 @@ const moduleDir = dirname(fileURLToPath(import.meta.url));
 
 // The assets sit beside the compiled bundle at `dist/assets`, but when the tests
 // run against TypeScript source the same files live at `src/assets`. Probe both
-// so loading works identically from the published package and from source.
+// so loading works identically from the published package and from source. The
+// source candidate climbs out of `src/lib/factory/templates/` to reach `src/`.
 const ASSET_DIR_CANDIDATES = [
   join(moduleDir, "assets"),
-  join(moduleDir, "..", "..", "assets")
+  join(moduleDir, "..", "..", "..", "assets")
 ];
 
 let cachedAssetsDir: string | undefined;

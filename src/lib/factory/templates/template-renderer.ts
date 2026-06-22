@@ -1,6 +1,6 @@
 import { loadBuiltInAsset } from "./asset-store";
-import { loadProjectConfig, type ResolvedProjectConfig } from "./config";
-import { interpolate, type InterpolationValues } from "../../utils/interpolate";
+import { loadProjectConfig, type ResolvedProjectConfig } from "../config";
+import { interpolate, type InterpolationValues } from "../../../utils/interpolate";
 import { PROMPT_ASSETS, TEMPLATE_SLOTS, type PromptName, type TemplateSlot } from "./template-slots";
 
 // Renders krutrimbox's prompts and templates by substituting `{{key}}`

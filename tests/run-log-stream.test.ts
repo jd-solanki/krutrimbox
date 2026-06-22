@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { Writable } from "node:stream";
-import { RunLogStream } from "../src/lib/factory/run-log-stream";
+import { RunLogStream } from "../src/lib/factory/run-log/run-log-stream";
 import type { RunLogCodec } from "../src/lib/factory/index";
 
 // A codec stand-in that upper-cases each line and drops any line containing

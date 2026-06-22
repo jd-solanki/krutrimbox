@@ -6,7 +6,7 @@ import { diagnostics } from "../../diagnostics";
 import { ConfigSchema, type HookAction, type ProjectConfig } from "./schema";
 import { resolveRepoOwnedFile } from "./path-safety";
 import { type KrutrimboxHookName } from "../hooks/names";
-import { type PromptName, type TemplateSlot } from "../template-slots";
+import { type PromptName, type TemplateSlot } from "../templates/template-slots";
 
 // Committed, repository-owned Project Configuration (ADR-0013). A repository may
 // commit `.krutrimbox/config.json` to partially override Template Slots and to

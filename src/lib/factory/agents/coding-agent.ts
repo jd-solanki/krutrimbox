@@ -6,7 +6,7 @@
 // (branch checkout, commit/push, Done Set, prompts, PR orchestration) stays
 // agent-agnostic.
 
-import { diagnostics } from "../diagnostics";
+import { diagnostics } from "../../diagnostics";
 import { claudeRunLogCodec } from "./claude-run-log-codec";
 
 // The selectable Agent Backend names, in CLI-presentation order. Doubles as the

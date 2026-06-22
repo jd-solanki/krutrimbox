@@ -3,11 +3,11 @@ import type {
   GitHubClient,
   GitHubIssue,
   GitHubPullRequest
-} from "../github";
-import { KRUTRIMBOX_LABEL } from "./constants";
+} from "../../github";
+import { KRUTRIMBOX_LABEL } from "../constants";
 import { formatClosingKeywords, formatImplementationChecklist } from "./format";
 import type { ImplementationSequence } from "./sequence";
-import type { TemplateRenderer } from "./template-renderer";
+import type { TemplateRenderer } from "../templates/template-renderer";
 
 // The single pull request that accumulates a Target Issue's AFK Issue commits,
 // identified by its Target Issue Branch. Owns find-or-create, the deterministic

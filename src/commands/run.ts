@@ -1,6 +1,6 @@
 import { Command, Option } from "commander";
 import { diagnostics } from "../lib/diagnostics";
-import { AGENT_NAMES, type AgentName } from "../lib/factory/coding-agent";
+import { AGENT_NAMES, type AgentName } from "../lib/factory/agents/coding-agent";
 import { runKrutrimbox, type RunOptions } from "../lib/factory/index";
 
 // Injection seam: the CLI layer only needs these two entry points, so tests can
