@@ -24,6 +24,11 @@ export default defineConfig({
         }
         return defaultFence(tokens, idx, options, env, self)
       }
+
+      // Render inline code with v-pre so literal `{{ }}` placeholders (e.g. `{{steps.<id>.output}}`)
+      // aren't parsed as Vue interpolation. Fenced blocks already get v-pre from VitePress; inline doesn't.
+      md.renderer.rules.code_inline = (tokens, idx) =>
+        `<code v-pre>${md.utils.escapeHtml(tokens[idx].content)}</code>`
     },
   },
 
