@@ -25,4 +25,6 @@ features:
     details: The sandbox only ever reads GitHub. All commits, pushes, and PR mutations happen on the host with your credential, so a stray agent cannot change GitHub state.
   - title: Human-in-the-loop handoffs
     details: Pauses on ready-for-human issues with an idempotent comment, resumes from Refs commit footers, and marks the PR ready for review when the sequence completes.
+  - title: Configurable lifecycle hooks
+    details: Attach your own actions to named lifecycle points (today pull-request:ready) — run an AI review pass, post a comment, or invoke an allowlisted gh command — all from .krutrimbox/config.json.
 ---

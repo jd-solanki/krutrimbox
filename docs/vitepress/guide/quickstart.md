@@ -18,7 +18,7 @@ flowchart TD
   F --> G["Opens or updates a draft pull request"]
   G --> H{"More issues in the sequence?"}
   H -- yes --> E
-  H -- no --> I["Final review pass; PR marked ready for review"]
+  H -- no --> I["PR marked ready for review; any configured hooks run"]
   I --> J["You review and merge — GitHub closes the issues"]
 ```
 

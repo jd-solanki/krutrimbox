@@ -10,23 +10,27 @@ List existing sandboxes:
 sbx ls
 ```
 
+::: tip Target Issue Sandbox names are long and deterministic
+A sandbox name is keyed on the repository, the Target Issue, and the agent — `krutrimbox-issue-<number>-<repository-slug>-<fingerprint>-<agent>` (e.g. `krutrimbox-issue-1-acme-webapp-1a2b3c4d-codex`), never just `krutrimbox-issue-1`. Copy the exact name from `sbx ls` and substitute it for `<sandbox-name>` in the commands below.
+:::
+
 Check an existing Target Issue Sandbox:
 
 ```sh
-sbx exec -w "$(pwd)" krutrimbox-issue-1 -- pnpm --version   # or whatever tool your template adds
-sbx exec -w "$(pwd)" krutrimbox-issue-1 -- gh auth status
+sbx exec -w "$(pwd)" <sandbox-name> -- pnpm --version   # or whatever tool your template adds
+sbx exec -w "$(pwd)" <sandbox-name> -- gh auth status
 ```
 
 If your project's tool is not found or `gh` is not authenticated, inspect for uncommitted work first:
 
 ```sh
-sbx exec -w "$(pwd)" krutrimbox-issue-1 -- git status --short --branch
+sbx exec -w "$(pwd)" <sandbox-name> -- git status --short --branch
 ```
 
 If there is no work to preserve, remove the old sandbox:
 
 ```sh
-sbx rm --force krutrimbox-issue-1
+sbx rm --force <sandbox-name>
 ```
 
 The next factory run will recreate it with the configured template and current global secrets.
@@ -38,13 +42,13 @@ In clone mode, Docker Sandboxes exposes the private repository clone at the orig
 This works:
 
 ```sh
-sbx exec -w "$(pwd)" krutrimbox-issue-1 -- git status --short --branch
+sbx exec -w "$(pwd)" <sandbox-name> -- git status --short --branch
 ```
 
 This may fail:
 
 ```sh
-sbx exec krutrimbox-issue-1 -- git status --short --branch
+sbx exec <sandbox-name> -- git status --short --branch
 ```
 
 Without `-w`, `sbx exec` can start in a default directory that is not a Git repository. krutrimbox handles this internally by resolving the host repository path and passing it to `sbx exec --workdir`.
@@ -76,7 +80,7 @@ The factory does this automatically. If you still see this from the factory, rei
 The sandbox is missing a tool your project needs. Add it to your [sandbox template](./sandbox-template), reload the image, then recreate any old Target Issue Sandbox that was created before the template existed:
 
 ```sh
-sbx rm --force krutrimbox-issue-<number>-<agent>
+sbx rm --force <sandbox-name>
 ```
 
 ### `pull failed for image "..."`
@@ -113,14 +117,14 @@ echo "$CREATE_READ_ONLY_TOKEN" | sbx secret set -g github
 If the Target Issue Sandbox already exists, either remove it after confirming there is no work to preserve:
 
 ```sh
-sbx exec -w "$(pwd)" krutrimbox-issue-<number>-<agent> -- git status --short --branch
-sbx rm --force krutrimbox-issue-<number>-<agent>
+sbx exec -w "$(pwd)" <sandbox-name> -- git status --short --branch
+sbx rm --force <sandbox-name>
 ```
 
 Or apply the secret directly to that running sandbox:
 
 ```sh
-echo "$CREATE_READ_ONLY_TOKEN" | sbx secret set krutrimbox-issue-<number>-<agent> github
+echo "$CREATE_READ_ONLY_TOKEN" | sbx secret set <sandbox-name> github
 ```
 
 ### A sandbox is left behind after a failure
@@ -136,14 +140,31 @@ sbx ls
 Inspect a Target Issue Sandbox:
 
 ```sh
-sbx exec -w "$(pwd)" krutrimbox-issue-<number>-<agent> -- git status --short --branch
+sbx exec -w "$(pwd)" <sandbox-name> -- git status --short --branch
 ```
 
 Remove it when you are sure no work needs preserving:
 
 ```sh
-sbx rm --force krutrimbox-issue-<number>-<agent>
+sbx rm --force <sandbox-name>
 ```
+
+### `krutrimbox: <hook> hook <action> failed` (`KB_R0008`)
+
+A [lifecycle hook](/guide/configuration#hooks) action threw. Hook actions run in order and **fail fast**: the first failing action aborts the run with this error, naming the hook and the action.
+
+For the `pull-request:ready` hook the pull request has **already been marked ready for review** by the time actions run, so a plain re-run finds a ready pull request and skips the hook entirely. Fix the failing action in `.krutrimbox/config.json` (a bad `gh` invocation, an agent prompt that errored, an unreachable interpolation), then re-trigger it yourself — for example by re-running the command an Agent or Command Action wraps.
+
+### Config errors (`KB_C0001`–`KB_C0004`)
+
+`.krutrimbox/config.json` failed to load. These surface before any run work starts:
+
+| Code | Meaning | Fix |
+|---|---|---|
+| `KB_C0001` | The file is not valid JSON. | Fix the JSON syntax. |
+| `KB_C0002` | Valid JSON but the wrong shape. | Match the accepted shape: optional `templates`/`prompts` objects mapping known keys to Markdown paths under `.krutrimbox/`, and an optional `hooks` object mapping a hook name to an array of `{type:"agent"\|"comment"\|"command"}` actions. See [Configuration](./configuration). |
+| `KB_C0003` | A configured Template Slot / Prompt path escapes `.krutrimbox/`. | Point the path at a file **inside** `.krutrimbox/`. |
+| `KB_C0004` | A configured path resolves inside `.krutrimbox/` but the file is missing. | Create the file, or fix the path. |
 
 ## Useful references
 

@@ -34,4 +34,4 @@ krutrimbox writes per-run state into a `.krutrimbox/` directory in your reposito
 .krutrimbox/locks/
 ```
 
-Everything else under `.krutrimbox/` — `config.json`, comment templates, and prompt extensions — is shared team policy that you *do* commit. See [Configuration](./configuration) for what the directory can hold.
+Everything else under `.krutrimbox/` — `config.json` (including any lifecycle `hooks`), comment templates, and prompt files (prompt extensions and any hook Agent Action prompts) — is shared team policy that you *do* commit. See [Configuration](./configuration) for what the directory can hold.

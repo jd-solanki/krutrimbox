@@ -21,7 +21,7 @@ pnpm start run --issue 1 --agent codex
 pnpm start run --agent claude
 ```
 
-The Agent Backend is chosen per run. Because the Done Set is rebuilt from `Refs #<number>` commit footers on the agent-blind Target Issue Branch, you can even resume a Target Issue with a different agent than an earlier run used; each agent gets its own Target Issue Sandbox (`krutrimbox-issue-<number>-<agent>`).
+The Agent Backend is chosen per run. Because the Done Set is rebuilt from `Refs #<number>` commit footers on the agent-blind Target Issue Branch, you can even resume a Target Issue with a different agent than an earlier run used; each agent gets its own Target Issue Sandbox, whose name embeds the issue number, a repository fingerprint, and the agent (e.g. `krutrimbox-issue-1-acme-webapp-1a2b3c4d-codex`).
 
 ## Choosing the base branch
 

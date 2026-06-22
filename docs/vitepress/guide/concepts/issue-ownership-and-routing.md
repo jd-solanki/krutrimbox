@@ -72,9 +72,9 @@ For a standalone issue (no sub-issues), or for any individual issue krutrimbox i
 | Assignees | Batch `kb run` (default) | Explicit `kb run --issue N` (default) | With `--implement-unassigned` |
 |---|---|---|---|
 | **Exactly you** | ✅ runs | ✅ runs | — (already runs) |
-| **One other person** | not discovered (`assignee:@me` excludes it) | ❌ error: *"#N is assigned to @other, not you."* | ❌ still refused |
-| **Zero** | not discovered | ❌ error: *"#N is not assigned to you — pass `--implement-unassigned`."* | ✅ **runs** (the only cell the flag changes) |
-| **Multiple** | if you're one of them: surfaced by `assignee:@me`, then ⚠️ skip + warn, batch continues; otherwise not discovered → never runs | ❌ error: *"#N has multiple assignees; can't decide who implements."* | ❌ still refused |
+| **One other person** | not discovered (`assignee:@me` excludes it) | ❌ error: *"Due Issue #N is assigned to @other, not you."* | ❌ still refused |
+| **Zero** | not discovered | ❌ error: *"Due Issue #N is not assigned to you; pass `--implement-unassigned` to run unowned issues."* | ✅ **runs** (the only cell the flag changes) |
+| **Multiple** | if you're one of them: surfaced by `assignee:@me`, then ⚠️ skip + warn, batch continues; otherwise not discovered → never runs | ❌ error: *"Due Issue #N has multiple assignees (…); krutrimbox can't decide who implements it."* | ❌ still refused |
 
 With `--implement-unassigned` in batch, discovery can't use `assignee:@me` (it excludes unowned issues), so it switches to **label-only** discovery and then keeps only *exactly-you* and *zero* issues, skipping foreign and multiple.
 

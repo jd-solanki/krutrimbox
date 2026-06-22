@@ -48,7 +48,7 @@ The MVP does not use an `in-progress` issue label. Strict sequential execution u
 4. If the outer check finds an unresolved Blocking Issue, krutrimbox comments on the current AFK Issue with a helpful idempotent error comment, leaves the issue open, and exits the Factory Run.
 5. An open AFK Issue whose Blocking Issues are resolved is delegated to a fresh non-resumed Sandboxed Agent session (the run's Agent Backend) inside a Docker sandbox.
 6. The Sandboxed Agent session receives the Target Issue body and the current Implementation Issue body as its task context.
-7. Before implementation, the Sandboxed Agent session verifies Blocking Issues again with Read-Only GitHub Access.
+7. Before implementation, the Sandboxed Agent session re-verifies Blocking Issues by exploring the current repository state, not by querying GitHub.
 8. If a Blocking Issue is not resolved, the Sandboxed Agent session throws an error; krutrimbox catches that error, comments on the current AFK Issue with a helpful idempotent error comment, leaves the issue open, and exits the Factory Run.
 9. If Blocking Issues are resolved, the Sandboxed Agent session checks out or creates the Target Issue Branch and implements the AFK Issue.
 10. After the Sandboxed Agent exits successfully, the outer krutrimbox creates a commit whose subject is the Implementation Issue title, includes `Refs #<issue-number>`, pushes the Target Issue Branch, and creates or reuses the Target Issue Pull Request using the Authenticated GitHub User.
@@ -92,7 +92,7 @@ When reusing an existing Target Issue Pull Request, krutrimbox identifies it by 
 
 ## Sandboxed Agent Prompt
 
-For each AFK Issue, krutrimbox generates a strict per-issue prompt for the fresh Sandboxed Agent session. The prompt includes the full Target Issue body, the current AFK Issue body, earlier Implementation Issue numbers, titles, and current state, lightweight future Implementation Issue context, the Target Issue Branch name, and explicit boundaries that the Sandboxed Agent may inspect GitHub with read-only commands but must not mutate GitHub state, create commits, push branches, or process future Implementation Issues. Lightweight future context includes issue numbers, titles, type, and blocked-by relationships, not full future issue bodies.
+For each AFK Issue, krutrimbox generates a strict per-issue prompt for the fresh Sandboxed Agent session. The prompt includes the full Target Issue body, the current AFK Issue body, earlier Implementation Issue numbers, titles, and current state, lightweight future Implementation Issue context, the Target Issue Branch name, and explicit boundaries that the Sandboxed Agent may inspect GitHub with read-only commands but must not mutate GitHub state, create commits, push branches, or process future Implementation Issues. Lightweight future context includes issue numbers, titles, kind (AFK or HITL), and blocked-by relationships, not full future issue bodies.
 
 The custom prompt must instruct the Sandboxed Agent to work on exactly one AFK Issue: the current issue. The Sandboxed Agent must not implement future Implementation Issues, even when future issue metadata is included for awareness.
 
@@ -136,4 +136,4 @@ krutrimbox never merges the Target Issue Branch into the default branch. A human
 
 ## Sandbox Cleanup
 
-The Factory Run uses a deterministic Target Issue Sandbox name derived from the Target Issue number: `krutrimbox-issue-<target-issue-number>`. When the Target Issue completes and its `pull-request:ready` hook finishes, krutrimbox removes the Target Issue Sandbox it created automatically. When the Factory Run exits for HITL or an error, it keeps the Target Issue Sandbox for debugging and includes the cleanup command in the relevant comment or log.
+The Factory Run uses a deterministic Target Issue Sandbox name keyed on the **(Repository, Target Issue, Agent Backend)** triple (ADR-0007), so one repository's run never reuses a sandbox built for another agent's CLI or template image, and two repositories that share an issue number never collide in `sbx`'s host-global namespace. The shape is `krutrimbox-issue-<target-issue-number>-<repository-slug>-<fingerprint>-<agent>` — for example `krutrimbox-issue-1-acme-webapp-1a2b3c4d-codex`. (The Target Issue Branch, by contrast, stays repository- and agent-blind at `krutrimbox/issue-<target-issue-number>`, since branches live inside each repository's own git.) When the Target Issue completes and its `pull-request:ready` hook finishes, krutrimbox removes the Target Issue Sandbox it created automatically. When the Factory Run exits for HITL or an error, it keeps the Target Issue Sandbox for debugging and includes the cleanup command in the relevant comment or log.

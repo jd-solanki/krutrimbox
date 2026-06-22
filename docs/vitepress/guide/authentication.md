@@ -74,6 +74,8 @@ krutrimbox uses two separate GitHub credentials, and the split is what keeps the
 
 The outer `kb` process performs all writes on the host. The sandbox only ever reads from GitHub — so the credential injected into it can, and should, be read-only. Keeping it a separate, named token (rather than reusing your host `gh auth token`) makes it least-privilege and independently revocable.
 
+[Lifecycle hooks](./configuration#hooks) follow the same boundary. A hook **Comment Action** posts a PR comment and a hook **Command Action** runs a single allowlisted `gh` command — both on the **host**, with the host credential, gated by a narrow verb allowlist (`pr ready`/`pr edit`/`pr comment`/`pr review`/`issue comment`/`issue edit`/`label create`; `gh api`, `gh secret`, and destructive verbs like `pr merge` are rejected). A hook **Agent Action** still runs inside the sandbox under the read-only token, and any code it produces is committed and pushed from the host — so hooks add no write capability inside the sandbox.
+
 The `-g` flag stores the secret globally for future sandboxes. Existing sandboxes do not receive newly created or changed global secrets; recreate them after setting the secret.
 
 All sandbox git reads go over HTTPS through this `github` secret, so the sandbox never needs your SSH config or keys — even when your repo's `origin` is an SSH remote. See [SSH remotes](./advanced/ssh) for the details.

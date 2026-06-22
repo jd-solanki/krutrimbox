@@ -16,6 +16,8 @@ Pointing an agent straight at your working tree is risky. It can change files yo
 
 **Human-in-the-loop where it matters.** An issue labeled `ready-for-human` pauses the run with an idempotent comment. A person finishes it and pushes a commit, and the next run picks up automatically.
 
+**Extensible at lifecycle points.** krutrimbox fires named lifecycle hooks (today `pull-request:ready`) that a repository can attach actions to from `.krutrimbox/config.json` — run an AI review pass over the finished PR, post a comment, or invoke an allowlisted `gh` command — without changing krutrimbox. See [Configuration › Hooks](./configuration#hooks).
+
 **Language-agnostic.** krutrimbox orchestrates; it doesn't build. The `kb` CLI is written in Node + TypeScript, but the issues it implements can live in any language. You make project tooling available to the agent through the [sandbox template](./sandbox-template), not by changing krutrimbox.
 
 ## How it fits together
