@@ -30,5 +30,11 @@ try {
     console.error(formatDiagnostic(error));
     process.exit(1);
   }
+  // An uncoded error reached the top: by krutrimbox's Expected/Unexpected split
+  // this is a likely bug. Point the operator at the issue tracker, then rethrow so
+  // the stack still prints for debugging and the exit code stays non-zero.
+  console.error(
+    `\nkrutrimbox hit an unexpected error (likely a bug). Please report it at ${packageJson.bugs.url} with the steps to reproduce.`
+  );
   throw error;
 }

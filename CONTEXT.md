@@ -184,6 +184,18 @@ _Avoid_: mutex, concurrency guard, run lock
 A hidden HTML marker in a krutrimbox comment that lets later Factory Runs update or skip the same comment instead of posting duplicates.
 _Avoid_: comment tag, marker, dedupe token
 
+**Run Phase**:
+The coarse stage a Factory Run is in when something happens — discovery, sandbox-setup, agent, commit, pull-request, or hook. The Run Phase a failure occurred in is the primary context krutrimbox reports, alongside the specific operation that failed.
+_Avoid_: step, stage, state
+
+**Expected Failure**:
+A failure krutrimbox anticipated and raised as a coded diagnostic carrying a diagnosis and an actionable remedy — one the operator can fix (e.g. the Sandboxed Agent could not complete an issue). An Expected Failure flagged as a krutrimbox invariant is treated as report-worthy like an Unexpected Failure.
+_Avoid_: handled error, known error, user error
+
+**Unexpected Failure**:
+An uncoded error that reaches krutrimbox's top-level handler — by definition a place krutrimbox mishandled something. It is presented as a likely krutrimbox bug and invites the operator to report it with the run log attached.
+_Avoid_: crash, unhandled error, panic
+
 ## Relationships
 
 - A **Target Issue** is either **Standalone** (zero sub-issues, body is the work) or a **Parent Target Issue** (one or more **Implementation Issues**, body is context).

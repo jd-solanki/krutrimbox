@@ -219,7 +219,8 @@ export class Krutrimbox {
       hooks: this.hooks,
       hostCommandRunner: this.commandRunner,
       logger: runLog,
-      output: runLog.stream
+      output: runLog.stream,
+      logFilePath: runLog.filePath
     };
 
     try {

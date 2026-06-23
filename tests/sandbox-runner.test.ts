@@ -209,6 +209,47 @@ describe("CommandSandboxRunner", () => {
     ]);
   });
 
+  test("tolerates a non-JSON preamble in `sbx ls` output instead of failing to parse it", async () => {
+    // `sbx ls --json` can print progress (e.g. "Starting sandbox daemon...") before
+    // the JSON. The existing sandbox must still be recognized so no duplicate create runs.
+    const calls: Array<{ command: string; args: string[] }> = [];
+    const runner: CommandRunner = async (command, args) => {
+      calls.push({ command, args });
+      if (command === "sbx" && args[0] === "ls") {
+        return 'Starting sandbox daemon...\n{"sandboxes":[{"name":"krutrimbox-issue-1-codex"}]}';
+      }
+      return "";
+    };
+    const sandbox = new CommandSandboxRunner(runner, "/workspace/krutrimbox", codex, "template");
+
+    await sandbox.ensureSandbox({ sandboxName: "krutrimbox-issue-1-codex" });
+
+    expect(calls.some((call) => call.command === "sbx" && call.args[0] === "create")).toBe(false);
+  });
+
+  test("raises an Expected agent-failure diagnostic, keeping the exec error as its cause", async () => {
+    const execError = new Error(
+      "Command failed with exit code 1: sbx exec ... claude\nagent stderr here"
+    );
+    const runner: CommandRunner = async () => {
+      throw execError;
+    };
+    const sandbox = new CommandSandboxRunner(runner, "/workspace/krutrimbox", claude, "template");
+
+    const failure = await sandbox
+      .runAfkIssue({
+        sandboxName: "krutrimbox-issue-1-claude",
+        branchName: "krutrimbox/issue-1",
+        prompt: "implement #4"
+      })
+      .then(() => null)
+      .catch((error: unknown) => error);
+
+    expect((failure as Error).name).toBe("KB_R0009");
+    expect((failure as Error).message).toContain("Sandboxed Agent");
+    expect(((failure as Error).cause as Error)).toBe(execError);
+  });
+
   test("runs an Agent Step session through the Codex Agent Backend's exec command", async () => {
     const calls: Array<{ command: string; args: string[] }> = [];
     const runner: CommandRunner = async (command, args) => {

@@ -1,7 +1,9 @@
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Writable } from "node:stream";
 import { afterEach, describe, expect, test, vi } from "vitest";
+import { diagnostics } from "../src/lib/diagnostics";
 import {
   buildImplementationSequence,
   FileTargetIssueLockStore,
@@ -1314,6 +1316,57 @@ describe("FactoryRun", () => {
     );
   });
 
+  test("an unexpected (uncoded) failure asks the operator to report a krutrimbox bug", async () => {
+    const github = afkFailureGitHub();
+    const sandbox = new FakeSandboxRunner();
+    sandbox.runAfkIssue.mockRejectedValueOnce(new Error("Unexpected token 'S'"));
+    const run = new FactoryRun(runDependencies(github, sandbox), targetIssue());
+
+    await run.process();
+
+    const body = lastCommentBody(github, 4);
+    expect(body.toLowerCase()).toContain("likely a krutrimbox bug");
+    expect(body).toContain("github.com/jd-solanki/krutrimbox/issues/new?");
+  });
+
+  test("an Expected agent failure shows the fix and sandbox guidance, not a bug report", async () => {
+    const github = afkFailureGitHub();
+    const sandbox = new FakeSandboxRunner();
+    sandbox.runAfkIssue.mockRejectedValueOnce(diagnostics.KB_R0009({ detail: "exit code 1" }));
+    const run = new FactoryRun(runDependencies(github, sandbox), targetIssue());
+
+    await run.process();
+
+    const body = lastCommentBody(github, 4);
+    expect(body).not.toContain("issues/new?");
+    expect(body).toContain("Review the agent's output");
+    // The sandbox was created before the agent ran, so its inspection guidance shows.
+    expect(body).toContain("sbx shell");
+  });
+
+  test("writes a structured FAILURE block to the run log for a failed AFK Issue", async () => {
+    const github = afkFailureGitHub();
+    const sandbox = new FakeSandboxRunner();
+    sandbox.runAfkIssue.mockRejectedValueOnce(diagnostics.KB_R0009({ detail: "exit code 1" }));
+
+    let logged = "";
+    const output = new Writable({
+      write(chunk, _encoding, callback) {
+        logged += chunk.toString();
+        callback();
+      }
+    });
+    const run = new FactoryRun(
+      { ...runDependencies(github, sandbox), output, logFilePath: "/repo/.krutrimbox/logs/run.log" },
+      targetIssue()
+    );
+
+    await run.process();
+
+    expect(logged).toContain("--- FAILURE [phase: agent] ---");
+    expect(logged).toContain("KB_R0009");
+  });
+
   test("process() returns \"completed\" when every Implementation Issue is already resolved", async () => {
     const github = new FakeGitHubClient({
       targetIssues: [targetIssue()],
@@ -1683,6 +1736,21 @@ function recordingLockStore({ lockedTargetIssues = new Set<number>() }: { locked
 // so they exercise built-in Markdown loading and Factory Comment Marker
 // injection end to end rather than asserting against a hand-written fixture.
 const fixtureTemplates: TemplateRenderer = new ProjectTemplateRenderer();
+
+// The common AFK-failure fixture: a Target Issue #1 with one agent-ready
+// Implementation Issue #4, so a run reaches the agent step and can fail there.
+function afkFailureGitHub(): FakeGitHubClient {
+  return new FakeGitHubClient({
+    targetIssues: [targetIssue()],
+    subIssuesByTargetIssue: new Map([[1, [implementationIssue({ number: 4, labels: ["ready-for-agent"] })]]])
+  });
+}
+
+// The body of the most recent comment krutrimbox posted on an issue.
+function lastCommentBody(github: FakeGitHubClient, issueNumber: number): string {
+  const calls = github.createIssueComment.mock.calls.filter(([number]) => number === issueNumber);
+  return String(calls.at(-1)?.[1] ?? "");
+}
 
 function targetIssue({
   number = 1,

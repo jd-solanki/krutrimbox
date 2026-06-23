@@ -68,7 +68,7 @@ export class CommandSandboxRunner {
 
   public async ensureSandbox(input: SandboxInput): Promise<void> {
     const output = await this.runner("sbx", ["ls", "--json"]);
-    const { sandboxes } = JSON.parse(output) as { sandboxes: Array<{ name: string }> };
+    const { sandboxes } = parseSandboxList(output);
     if (!sandboxes.some((s) => s.name === input.sandboxName)) {
       await this.runner("sbx", [
         "create",
@@ -179,17 +179,25 @@ export class CommandSandboxRunner {
     const command = this.agent.buildExecCommand(prompt);
     const codec = this.agent.runLogCodec;
 
-    if (!codec) {
-      return this.exec(sandboxName, command, { output });
+    try {
+      if (!codec) {
+        return await this.exec(sandboxName, command, { output });
+      }
+
+      // Render to the run log only when there is one; the caller-facing text is
+      // extracted regardless (an Agent Step needs it even with no run-log output).
+      const renderStream = output ? new RunLogStream(codec, output) : undefined;
+      const stdout = await this.exec(sandboxName, command, { output: renderStream ?? output });
+      renderStream?.flush();
+
+      return codec.extractResultText(stdout);
+    } catch (error) {
+      // A non-zero agent exit is the common, legitimate failure (the agent could
+      // not finish), so it becomes an Expected Failure (KB_R0009) rather than an
+      // Unexpected one — the operator reviews the agent's output, not files a bug.
+      // The raw exec error is kept as the cause so the run log still shows it.
+      throw agentFailure(error);
     }
-
-    // Render to the run log only when there is one; the caller-facing text is
-    // extracted regardless (an Agent Step needs it even with no run-log output).
-    const renderStream = output ? new RunLogStream(codec, output) : undefined;
-    const stdout = await this.exec(sandboxName, command, { output: renderStream ?? output });
-    renderStream?.flush();
-
-    return codec.extractResultText(stdout);
   }
 
   public async removeSandbox(input: SandboxInput): Promise<void> {
@@ -279,6 +287,35 @@ export class CommandSandboxRunner {
   private hostGit(command: string[]): Promise<string> {
     return this.runner("git", ["-C", this.workspacePath, ...command]);
   }
+}
+
+// Parses `sbx ls --json`, tolerating any non-JSON preamble `sbx` prints before
+// the object (e.g. "Starting sandbox daemon..."). Without this, that benign
+// progress line makes a strict `JSON.parse` throw and aborts the whole run before
+// the agent ever starts. The JSON object is the substring from the first `{` to
+// the last `}`.
+function parseSandboxList(output: string): { sandboxes: Array<{ name: string }> } {
+  const start = output.indexOf("{");
+  const end = output.lastIndexOf("}");
+  const json = start === -1 || end === -1 ? output : output.slice(start, end + 1);
+  return JSON.parse(json) as { sandboxes: Array<{ name: string }> };
+}
+
+// Wraps a failed Sandboxed Agent session as the Expected KB_R0009 diagnostic,
+// distilling the exit reason for its message while keeping the raw exec error as
+// the diagnostic's cause for the run log's FAILURE block.
+function agentFailure(error: unknown) {
+  return diagnostics.KB_R0009({ detail: agentExitReason(error), cause: error });
+}
+
+function agentExitReason(error: unknown): string {
+  if (error instanceof Error) {
+    const match = /exit code \d+|signal \w+/.exec(error.message);
+    if (match) {
+      return match[0];
+    }
+  }
+  return "non-zero exit";
 }
 
 // Converts an `origin` remote URL to its HTTPS GitHub form (see `normalizeOrigin`

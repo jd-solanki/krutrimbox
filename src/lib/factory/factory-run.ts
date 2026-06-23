@@ -1,7 +1,17 @@
 import type { Hookable } from "hookable";
+import packageJson from "../../../package.json" with { type: "json" };
 import type { CommandRunner, GitHubClient, GitHubIssue } from "../github";
+import { diagnostics } from "../diagnostics";
 import type { CodingAgent } from "./agents/coding-agent";
 import type { ResolvedHookAction } from "./config";
+import {
+  buildReportUrl,
+  diagnose,
+  formatFailureBlock,
+  renderFailureBody,
+  type DiagnosedFailure,
+  type RunPhase
+} from "./failure";
 import { fetchDoneSet } from "./issue/done-set";
 import { formatEarlierIssues, formatLaterIssues } from "./issue/format";
 import {
@@ -66,6 +76,10 @@ export interface FactoryRunDependencies {
   // Where the sandbox/agent output stream is sent for this run. Omitted in tests
   // and when no per-run log file is in use.
   output?: NodeJS.WritableStream;
+  // The run log's file path, surfaced in failure comments and bug-report links so
+  // the operator knows which file to inspect or attach. Null when no log file is
+  // in use (e.g. tests).
+  logFilePath?: string | null;
 }
 
 // Per-Implementation-Issue outcome used to drive the sequence walk. Distinct
@@ -84,6 +98,10 @@ export class FactoryRun {
   private readonly templates: TemplateRenderer;
   private readonly logger: Pick<Console, "log">;
   private readonly output?: NodeJS.WritableStream;
+  private readonly logFilePath: string | null;
+  // The Run Phase this run is currently in, advanced as the run progresses. Read
+  // when a failure is diagnosed so the run log and comment can name where it broke.
+  private phase: RunPhase = "discovery";
   // The run's Agent Backend name, surfaced in rerun commands so a resumed run
   // re-selects the same agent (`--agent` is required and has no default).
   private readonly agentName: string;
@@ -114,6 +132,7 @@ export class FactoryRun {
     this.templates = dependencies.templates;
     this.logger = dependencies.logger;
     this.output = dependencies.output;
+    this.logFilePath = dependencies.logFilePath ?? null;
     this.agentName = dependencies.agent.name;
     this.baseBranch = dependencies.baseBranch;
     this.operator = dependencies.operator;
@@ -268,29 +287,33 @@ export class FactoryRun {
     const { targetIssue } = this;
 
     try {
+      this.phase = "discovery";
       const unresolvedBlockers = await this.findUnresolvedBlockers(issue);
 
       if (unresolvedBlockers.length > 0) {
-        const issueUrl = await this.github.getIssueUrl(issue.number);
-        const commentUrl = await this.postAfkErrorComment(issue, unresolvedBlockers);
-        this.logger.log(
-          `krutrimbox: stopped Target Issue #${targetIssue.number}; AFK Issue #${issue.number} has unresolved blockers. See ${commentUrl} (issue: ${issueUrl}).`
-        );
-        return "error";
+        throw diagnostics.KB_R0010({
+          issueNumber: issue.number,
+          blockers: unresolvedBlockers.join("\n")
+        });
       }
 
+      this.phase = "sandbox-setup";
       await this.ensureSandbox();
       await this.sandbox.checkoutBranch({
         sandboxName: this.sandboxName,
         branchName: this.branchName,
         baseBranch: this.baseBranch
       });
+
+      this.phase = "agent";
       await this.sandbox.runAfkIssue({
         sandboxName: this.sandboxName,
         branchName: this.branchName,
         prompt: await this.buildAfkPrompt(issue, priorIssues, laterIssues),
         output: this.output
       });
+
+      this.phase = "commit";
       await this.sandbox.commitAndPush({
         sandboxName: this.sandboxName,
         branchName: this.branchName,
@@ -298,6 +321,7 @@ export class FactoryRun {
         issueNumber: issue.number
       });
 
+      this.phase = "pull-request";
       const doneAfterCurrent = new Set(this.doneSet);
       doneAfterCurrent.add(issue.number);
       await this.targetIssuePullRequest.ensureReflectsSequence(sequence, doneAfterCurrent);
@@ -305,13 +329,29 @@ export class FactoryRun {
 
       return "completed";
     } catch (error) {
-      const issueUrl = await this.github.getIssueUrl(issue.number);
-      const commentUrl = await this.postAfkErrorComment(issue, [formatError(error)]);
-      this.logger.log(
-        `krutrimbox: stopped Target Issue #${targetIssue.number}; AFK Issue #${issue.number} failed. See ${commentUrl} (issue: ${issueUrl}).`
-      );
-      return "error";
+      return this.failAfkIssue(issue, error);
     }
+  }
+
+  // Records an AFK Issue failure everywhere an operator looks: a structured
+  // FAILURE block in the run log, a diagnosed comment on the issue (its fix or a
+  // bug-report link), and the run-log summary line that points at both.
+  private async failAfkIssue(issue: ImplementationIssue, error: unknown): Promise<IssueOutcome> {
+    const failure = diagnose(error, this.phase);
+    this.appendFailureBlock(failure);
+
+    const issueUrl = await this.github.getIssueUrl(issue.number);
+    const commentUrl = await this.postAfkErrorComment(issue, failure);
+    this.logger.log(
+      `krutrimbox: stopped Target Issue #${this.targetIssue.number}; AFK Issue #${issue.number} failed. See ${commentUrl} (issue: ${issueUrl}).`
+    );
+    return "error";
+  }
+
+  // Appends the FAILURE block to the run log so a failure that happens outside the
+  // agent's own streamed output (e.g. sandbox setup) still leaves a record there.
+  private appendFailureBlock(failure: DiagnosedFailure): void {
+    this.output?.write(`\n${formatFailureBlock(failure)}\n`);
   }
 
   private async findUnresolvedBlockers(issue: ImplementationIssue): Promise<string[]> {
@@ -361,18 +401,41 @@ export class FactoryRun {
     await this.upsertComment(this.targetIssue.number, hitlMarker(this.targetIssue.number, issue.number), body);
   }
 
-  private async postAfkErrorComment(issue: ImplementationIssue, errors: string[]): Promise<string> {
+  private async postAfkErrorComment(
+    issue: ImplementationIssue,
+    failure: DiagnosedFailure
+  ): Promise<string> {
     const body = await this.templates.renderTemplate("afkErrorComment", {
       target_issue_number: this.targetIssue.number,
       issue_number: issue.number,
-      error_summary: errors.join("\n"),
-      target_issue_branch: this.branchName,
-      target_issue_sandbox: this.sandboxName,
-      agent_name: this.agentName
+      agent_name: this.agentName,
+      failure_body: renderFailureBody({
+        failure,
+        reportUrl: failure.reportable ? this.buildFailureReportUrl(failure) : null,
+        // Gate the sandbox guidance on a sandbox actually existing, so krutrimbox
+        // never points the operator at one that was never created.
+        sandbox: this.sandboxEnsured
+          ? { name: this.sandboxName, branchName: this.branchName }
+          : null,
+        logFilePath: this.logFilePath
+      })
     });
 
     const comment = await this.upsertComment(issue.number, afkErrorMarker(issue.number), body);
     return comment.url;
+  }
+
+  private buildFailureReportUrl(failure: DiagnosedFailure): string {
+    return buildReportUrl({
+      issuesUrl: packageJson.bugs.url,
+      version: packageJson.version,
+      agentName: this.agentName,
+      phase: failure.phase,
+      summary: failure.summary,
+      code: failure.code,
+      logFilePath: this.logFilePath,
+      environment: { os: process.platform, node: process.version }
+    });
   }
 
   // Registers every configured hook's actions onto a fresh hook bus, so krutrimbox
@@ -400,6 +463,7 @@ export class FactoryRun {
   // (ADR-0021). Draft state is the run-once guard: marking ready flips it, so a
   // later Factory Run or Batch re-discovery sees a ready pull request and skips.
   private async markReadyAndRunHooks(): Promise<void> {
+    this.phase = "pull-request";
     const { targetIssue } = this;
     const pr = await this.targetIssuePullRequest.find();
 
@@ -435,6 +499,8 @@ export class FactoryRun {
     if (actions.length === 0) {
       return;
     }
+
+    this.phase = "hook";
 
     if (actions.some((action) => action.kind === "agent")) {
       await this.ensureSandbox();
@@ -516,10 +582,6 @@ function hitlMarker(targetIssueNumber: number, issueNumber: number): string {
 
 function afkErrorMarker(issueNumber: number): string {
   return `<!-- krutrimbox:afk-error-issue-${issueNumber} -->`;
-}
-
-function formatError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 // A run-log reason explaining why a Due Issue is not the Operator's to implement,

@@ -113,6 +113,34 @@ export const diagnostics = /*#__PURE__*/ defineDiagnostics({
       why: (p: { hook: string; action: string; detail: string }) =>
         `krutrimbox: ${p.hook} hook ${p.action} failed: ${p.detail}`,
       fix: "Fix the failing hook action in .krutrimbox/config.json, then re-run krutrimbox."
+    },
+
+    // sandbox-runner.ts — the Sandboxed Agent session exited non-zero. This is the
+    // common, legitimate failure (the agent could not finish the issue), so it is
+    // coded rather than left as an Unexpected Failure: the operator's remedy is to
+    // read what the agent did, not to report a krutrimbox bug. The agent's own
+    // output already streamed to the run log; the non-zero exec error is kept as
+    // the diagnostic's `cause` so the run log's FAILURE block shows it too.
+    KB_R0009: {
+      why: (p: { detail: string }) =>
+        `The Sandboxed Agent exited without completing the issue (${p.detail}).`,
+      fix: "Review the agent's output in the run log and inspect the sandbox (sbx shell), refine the issue, then rerun krutrimbox."
+    },
+
+    // factory-run.ts — an AFK Issue lists `Blocked by` issues that are neither in
+    // the Done Set nor closed, so krutrimbox cannot implement it yet. Expected and
+    // the operator's to resolve, not a krutrimbox bug.
+    KB_R0010: {
+      why: (p: { issueNumber: number; blockers: string }) =>
+        `AFK Issue #${p.issueNumber} has unresolved blockers:\n${p.blockers}`,
+      fix: "Resolve the blocking issues (land their work or close them), then rerun krutrimbox."
     }
   }
 });
+
+// Coded (Expected) diagnostics that are nonetheless krutrimbox's own invariants
+// rather than something the operator can fix: a future reader should never hit them.
+// They are routed to the same bug-report affordance an uncoded Unexpected Failure
+// gets (see lib/factory/failure.ts). Kept beside the catalog so a new invariant
+// code is flagged here, next to where it is defined, not in a distant module.
+export const REPORTABLE_INTERNAL_CODES: ReadonlySet<string> = new Set(["KB_R0005", "KB_R0007"]);

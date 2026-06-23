@@ -7,6 +7,7 @@ export * from "./constants";
 export * from "./agents";
 export * from "./issue";
 export * from "./hooks";
+export * from "./failure";
 export * from "./factory-run";
 export * from "./templates";
 export * from "./config";

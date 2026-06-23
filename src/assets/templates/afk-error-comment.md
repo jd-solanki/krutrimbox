@@ -1,25 +1,11 @@
-krutrimbox could not complete this AFK issue.
+krutrimbox could not complete AFK Issue #{{issue_number}} on Target Issue #{{target_issue_number}}.
 
-Reason:
+{{failure_body}}
 
-```text
-{{error_summary}}
-```
+---
 
-Factory context:
-
-- Target Issue: #{{target_issue_number}}
-- Branch: `{{target_issue_branch}}`
-- Sandbox: `{{target_issue_sandbox}}`
-
-The issue remains open. Inspect the sandbox if needed, then rerun:
+The issue stays open. Once the cause is addressed, rerun:
 
 ```sh
 kb run --issue {{target_issue_number}} --agent {{agent_name}}
-```
-
-Cleanup, if you decide the sandbox is no longer needed:
-
-```sh
-sbx rm {{target_issue_sandbox}}
 ```
