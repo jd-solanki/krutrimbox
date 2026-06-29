@@ -2,7 +2,7 @@
 
 krutrimbox starts from a Target Issue: an open issue labeled `ready-for-agent`, assigned to the Operator, with no parent issue. A Target Issue can be Standalone, where its own body is the unit of work, or a Parent Target Issue, where sub-issues form the ordered Implementation Sequence. Sub-issues are discovered through [GitHub's native sub-issue feature](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/adding-sub-issues) — the built-in parent/child relationship, not task-list checkboxes or `## Parent` body sections (ADR-0001).
 
-The MVP supports Explicit Runs for a specified Target Issue and Batch Runs that discover eligible Target Issues. Batch Runs process discovered Target Issues sequentially in issue-number order. A HITL pause or issue-level error stops the current Target Issue but does not stop the rest of the Batch Run unless the factory itself hits a fatal error.
+krutrimbox supports Explicit Runs for a specified Target Issue and Batch Runs that discover eligible Target Issues. Batch Runs process discovered Target Issues sequentially in issue-number order. A HITL pause or issue-level error stops the current Target Issue but does not stop the rest of the Batch Run unless the factory itself hits a fatal error.
 
 Before discovery or processing, krutrimbox ensures required GitHub labels exist: `krutrimbox`, `ready-for-agent`, and `ready-for-human`.
 
@@ -24,7 +24,7 @@ Explicit Runs are entered by the parent issue id (`kb run --issue <parent>`) and
 
 Each Factory Run rebuilds the Implementation Sequence from GitHub state and the Done Set, then walks it from first to last.
 
-Before processing a Target Issue, krutrimbox acquires a Target Issue Lock. For the MVP, the lock is local to the single machine running the factory.
+Before processing a Target Issue, krutrimbox acquires a Target Issue Lock. The lock is local to the single machine running the factory.
 
 If a Target Issue is already locked, krutrimbox skips it and continues.
 
@@ -40,7 +40,7 @@ GitHub mutation commands run from the host through the outer krutrimbox's authen
 
 For sandbox `gh` access and HTTPS GitHub reads, operators store a read-only token as Docker Sandboxes' built-in `github` secret, as documented in [Authentication](/guide/authentication); the host push uses the operator's own `gh`/git credentials and is the only write path. Existing sandboxes created before the secret is configured must be recreated or given a sandbox-scoped `github` secret. If the host push or the sandbox's read-only `gh`/`fetch` fails because credentials are unavailable, krutrimbox treats it as an environment error and stops the current Target Issue.
 
-The MVP does not use an `in-progress` issue label. Strict sequential execution under the Target Issue Lock prevents krutrimbox from starting the next AFK Issue until the current AFK Issue reaches Sandbox Success and is committed to the Target Issue Branch.
+krutrimbox does not use an `in-progress` issue label. Strict sequential execution under the Target Issue Lock prevents krutrimbox from starting the next AFK Issue until the current AFK Issue reaches Sandbox Success and is committed to the Target Issue Branch.
 
 1. Implementation Issues in the Done Set are skipped.
 2. An open HITL Issue causes krutrimbox to comment on the Target Issue, tag the Target Issue Author, and exit.
@@ -68,7 +68,7 @@ krutrimbox creates one commit per completed AFK Issue, even when multiple AFK Is
 
 The outer krutrimbox stages all working tree changes inside the Target Issue Sandbox private clone after the Sandboxed Agent succeeds. The outer krutrimbox is responsible for committing, pushing the Target Issue Branch, creating or updating the Target Issue Pull Request, and changing the Target Issue Pull Request from draft to ready for review.
 
-The MVP treats a successful Sandboxed Agent process exit (`codex exec` or `claude -p`, per the run's Agent Backend) as the completion signal. Structured output can be introduced later if the completion signal proves too loose or difficult for krutrimbox to interpret.
+krutrimbox treats a successful Sandboxed Agent process exit (`codex exec` or `claude -p`, per the run's Agent Backend) as the completion signal. Structured output can be introduced later if the completion signal proves too loose or difficult for krutrimbox to interpret.
 
 Each AFK Issue gets a fresh Sandboxed Agent context window. The Factory Run may reuse the Target Issue Branch for code continuity, but it must not resume a previous agent conversation between Implementation Issues.
 
@@ -108,7 +108,7 @@ HITL comments on the Target Issue use the built-in `templates/hitl-pause-comment
 
 Helpful error comments on AFK Issues use `templates/afk-error-comment.md` with Factory Comment Markers keyed by the issue and error class, so repeated Factory Runs update or skip the existing marked comment instead of posting duplicate comments.
 
-The MVP does not automatically retry failed Sandboxed Agent runs. If the Sandboxed Agent exits non-zero or the outer krutrimbox fails to commit or push, krutrimbox comments on the current AFK Issue with a helpful idempotent error comment, leaves the issue open, keeps the Target Issue Sandbox for debugging, and exits the Factory Run.
+krutrimbox does not automatically retry failed Sandboxed Agent runs. If the Sandboxed Agent exits non-zero or the outer krutrimbox fails to commit or push, krutrimbox comments on the current AFK Issue with a helpful idempotent error comment, leaves the issue open, keeps the Target Issue Sandbox for debugging, and exits the Factory Run.
 
 If commit or push fails after the Sandboxed Agent exits successfully, krutrimbox treats the issue as incomplete. The error comment includes the Target Issue Sandbox name, Target Issue Branch name, failed command summary, cleanup command, and rerun command.
 

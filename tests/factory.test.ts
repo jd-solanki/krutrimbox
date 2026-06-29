@@ -81,7 +81,7 @@ describe("buildImplementationSequence", () => {
     expect(sequence.openIssues).toEqual([
       {
         number: 9,
-        title: "Target Issue: krutrimbox MVP",
+        title: "Target Issue: krutrimbox",
         body: "Standalone body\n\n## Blocked by\n\n- #3",
         state: "OPEN",
         kind: "afk",
@@ -362,12 +362,12 @@ describe("Krutrimbox", () => {
     expect(sandbox.commitAndPush).toHaveBeenCalledWith({
       sandboxName: fakeCodexSandbox(1),
       branchName: "krutrimbox/issue-1",
-      subject: "Target Issue: krutrimbox MVP",
+      subject: "Target Issue: krutrimbox",
       issueNumber: 1
     });
     expect(github.createDraftPullRequest).toHaveBeenCalledWith({
-      title: "Target Issue: krutrimbox MVP",
-      body: expect.stringContaining("- [x] #1 - Target Issue: krutrimbox MVP"),
+      title: "Target Issue: krutrimbox",
+      body: expect.stringContaining("- [x] #1 - Target Issue: krutrimbox"),
       head: "krutrimbox/issue-1",
       base: "main",
       labels: ["krutrimbox"]
@@ -468,7 +468,7 @@ describe("Krutrimbox", () => {
       "Do not create commits or push branches."
     );
     expect(github.createDraftPullRequest).toHaveBeenCalledWith({
-      title: "Target Issue: krutrimbox MVP",
+      title: "Target Issue: krutrimbox",
       body: expect.stringContaining("- [x] #4 - Factory loop"),
       head: "krutrimbox/issue-1",
       base: "main",
@@ -1020,7 +1020,7 @@ describe("Krutrimbox", () => {
   });
 });
 
-describe("Krutrimbox MVP smoke", () => {
+describe("Krutrimbox smoke", () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -1108,7 +1108,7 @@ describe("Krutrimbox MVP smoke", () => {
     ]);
     expect(github.closeIssue).not.toHaveBeenCalled();
     expect(github.createDraftPullRequest).toHaveBeenCalledWith({
-      title: "Target Issue: krutrimbox MVP",
+      title: "Target Issue: krutrimbox",
       body: expect.stringContaining("Closes #1"),
       head: "krutrimbox/issue-1",
       base: "main",
@@ -1511,7 +1511,7 @@ describe("TargetIssuePullRequest", () => {
     await prModule(github).ensureReflectsSequence(sequence, new Set([3]));
 
     expect(github.createDraftPullRequest).toHaveBeenCalledWith({
-      title: "Target Issue: krutrimbox MVP",
+      title: "Target Issue: krutrimbox",
       body: expect.stringContaining("- [x] #3 - Bootstrap"),
       head: "krutrimbox/issue-1",
       base: "main",
@@ -1765,7 +1765,7 @@ function targetIssue({
 } = {}): GitHubIssue {
   return {
     number,
-    title: "Target Issue: krutrimbox MVP",
+    title: "Target Issue: krutrimbox",
     body,
     state: "OPEN",
     author: { login: author },
