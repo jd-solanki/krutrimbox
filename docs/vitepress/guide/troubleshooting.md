@@ -131,6 +131,10 @@ echo "$CREATE_READ_ONLY_TOKEN" | sbx secret set <sandbox-name> github
 
 krutrimbox intentionally keeps Target Issue Sandboxes after HITL pauses and failures so you can inspect them.
 
+::: tip Let an AI inspect it for you
+Instead of running these commands by hand, you can hand a coding agent the ready-made prompt in [Inspect a Sandbox with AI](./inspect-sandbox-with-ai) — it reports whether the sandboxed agent is busy, blocked, wedged, or crashed, with the evidence.
+:::
+
 List sandboxes:
 
 ```sh

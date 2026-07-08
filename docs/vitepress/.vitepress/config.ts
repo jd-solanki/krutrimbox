@@ -68,6 +68,7 @@ export default defineConfig({
           { text: 'Team Workflows', link: '/guide/team-workflows' },
           { text: 'Configuration', link: '/guide/configuration' },
           { text: 'Troubleshooting', link: '/guide/troubleshooting' },
+          { text: 'Inspect a Sandbox with AI', link: '/guide/inspect-sandbox-with-ai' },
         ],
       },
       {
