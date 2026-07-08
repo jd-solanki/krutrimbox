@@ -49,10 +49,12 @@ export interface FactoryRunDependencies {
   // The Agent Backend chosen for this run. It scopes the Target Issue Sandbox
   // name; the SandboxRunner is already wired to the same agent.
   agent: CodingAgent;
-  // The run-level Model (`kb run --model`, ADR-0023): the default Model for every
-  // Sandboxed Agent session this run starts — AFK implementation and any Agent
-  // Action (which may override it). Omitted, the backend CLI auto-picks its default.
+  // The run-level Model (`kb run --model`, ADR-0023) and Reasoning Effort
+  // (`kb run --effort`, ADR-0024): the defaults for every Sandboxed Agent session
+  // this run starts — AFK implementation and any Agent Action (which may override
+  // them). Each omitted, the backend CLI auto-picks its default.
   model?: string;
+  effort?: string;
   // The current repository's `owner/name`, resolved once at dispatch. Scopes the
   // Target Issue Sandbox name to this repository (ADR-0007).
   repositorySlug: string;
@@ -109,8 +111,10 @@ export class FactoryRun {
   // The run's Agent Backend name, surfaced in rerun commands so a resumed run
   // re-selects the same agent (`--agent` is required and has no default).
   private readonly agentName: string;
-  // The run-level Model, applied to AFK sessions and inherited by Agent Actions.
+  // The run-level Model and Reasoning Effort, applied to AFK sessions and inherited
+  // by Agent Actions.
   private readonly model?: string;
+  private readonly effort?: string;
   private readonly baseBranch: string;
   private readonly operator: string;
   private readonly allowUnassigned: boolean;
@@ -141,6 +145,7 @@ export class FactoryRun {
     this.logFilePath = dependencies.logFilePath ?? null;
     this.agentName = dependencies.agent.name;
     this.model = dependencies.model;
+    this.effort = dependencies.effort;
     this.baseBranch = dependencies.baseBranch;
     this.operator = dependencies.operator;
     this.allowUnassigned = dependencies.allowUnassigned;
@@ -318,6 +323,7 @@ export class FactoryRun {
         branchName: this.branchName,
         prompt: await this.buildAfkPrompt(issue, priorIssues, laterIssues),
         model: this.model,
+        effort: this.effort,
         output: this.output
       });
 
@@ -456,6 +462,7 @@ export class FactoryRun {
       runHostCommand: this.hostCommandRunner,
       logger: this.logger,
       runModel: this.model,
+      runEffort: this.effort,
       output: this.output
     };
 

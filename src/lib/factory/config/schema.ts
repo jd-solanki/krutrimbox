@@ -21,15 +21,17 @@ import { ALLOWED_GH_COMMANDS, isAllowedGhCommand } from "./gh-allowlist";
 //   - comment: posts `body` as a pull request comment.
 //   - command: runs the `gh` invocation in `run` on the host (allowlisted).
 //
-// `model` selects the Model this step's session runs (ADR-0023); omitted, the step
-// inherits the run-level `--model`, or the backend CLI's default when that too is
-// absent. It is passed through verbatim, so an unknown value fails the step at the
-// backend rather than being rejected here.
+// `model` selects the Model this step's session runs (ADR-0023) and `effort` its
+// Reasoning Effort (ADR-0024); omitted, each inherits the run-level `--model` /
+// `--effort`, or the backend CLI's default when that too is absent. Both are passed
+// through verbatim, so an unknown value is handled by the backend rather than being
+// rejected here.
 const AgentActionSchema = v.strictObject({
   type: v.literal("agent"),
   id: v.optional(v.string()),
   prompt: v.string(),
-  model: v.optional(v.string())
+  model: v.optional(v.string()),
+  effort: v.optional(v.string())
 });
 
 const CommentActionSchema = v.strictObject({

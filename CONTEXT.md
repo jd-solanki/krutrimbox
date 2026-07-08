@@ -20,6 +20,10 @@ _Avoid_: agent type, model, provider, Sandboxed Agent
 The specific LLM the selected Agent Backend runs, chosen by the optional `kb run --model` flag and overridable per hook Agent Action by an optional `model` field; the string is passed through verbatim to the backend CLI's own model flag, and when omitted the backend CLI auto-picks its default. Orthogonal to the Agent Backend, which selects the CLI, not the LLM.
 _Avoid_: agent, backend, provider, LLM
 
+**Reasoning Effort**:
+How much reasoning the Model spends on a Sandboxed Agent session, chosen by the optional `kb run --effort` flag and overridable per hook Agent Action by an optional `effort` field; passed through verbatim to the backend CLI's own effort setting and auto-picked by that CLI when omitted. Its valid levels are backend-specific, and krutrimbox surfaces only the level it passed in, never a level read back from the session.
+_Avoid_: thinking effort, thinking budget, effort level, reasoning level
+
 **Read-Only GitHub Access**:
 Permission for a Sandboxed Agent to inspect GitHub state with non-mutating GitHub CLI commands while leaving issue, pull request, and label mutations to krutrimbox.
 _Avoid_: GitHub access, gh permissions, live state
@@ -211,6 +215,7 @@ _Avoid_: crash, unhandled error, panic
 - A **Factory Run** runs against exactly one **Agent Backend**, chosen by the required `--agent` flag; the Agent Backend supplies the **Sandboxed Agent** session and the **krutrimbox Sandbox Template** for that run's **Target Issue Sandbox**.
 - A built-in Sandboxed Agent prompt may carry one **Prompt Extension** per prompt, supplied through **Project Configuration**; unlike a **Template Slot**, it appends to the prompt rather than replacing it, so krutrimbox keeps ownership of the prompt's safety boundaries.
 - The **Model** an **Agent Backend** runs is chosen by the optional `--model` flag (auto-picked by the backend CLI when omitted) and defaults through to every **Agent Action** in the run, which may override it with its own `model`. It is orthogonal to the Agent Backend: one Agent Backend serves an entire **Factory Run**'s lifecycle, so a run's Model always belongs to that one backend's namespace.
+- The **Reasoning Effort** is chosen by the optional `--effort` flag and defaults through to every **Agent Action** (which may override it with its own `effort`), exactly like the **Model**. Its levels are **Agent Backend**-specific and passed through verbatim; the level actually used is not reported back by either backend, so krutrimbox surfaces only the level it passed in — never a level read from the session.
 
 ## Flagged ambiguities
 

@@ -15,6 +15,30 @@ export const AGENT_NAMES = ["codex", "claude"] as const;
 
 export type AgentName = (typeof AGENT_NAMES)[number];
 
+// The operator-selected tuning for one Sandboxed Agent session, orthogonal to the
+// Agent Backend: which Model the backend runs (ADR-0023) and how much Reasoning
+// Effort it spends (ADR-0024). Each is optional; an omitted knob adds no flag, so
+// the backend CLI auto-picks its own default. Values are passed through verbatim.
+export interface AgentSessionOptions {
+  model?: string;
+  effort?: string;
+}
+
+// Formats the selected tuning for a run-log line — ` (model: X, effort: Y)`, naming
+// only the knobs actually set, and empty when neither is, so an all-defaults run
+// reads exactly as before. This reports what krutrimbox passed in (intent): the
+// resolved values are not reliably echoed back by either backend (ADR-0024).
+export function formatSessionOptions(options: AgentSessionOptions): string {
+  const parts: string[] = [];
+  if (options.model) {
+    parts.push(`model: ${options.model}`);
+  }
+  if (options.effort) {
+    parts.push(`effort: ${options.effort}`);
+  }
+  return parts.length > 0 ? ` (${parts.join(", ")})` : "";
+}
+
 // Decodes an Agent Backend whose exec command emits structured (machine-readable)
 // session output rather than plain prose. It keeps that structured stream from
 // leaking into human-facing surfaces, in two independent directions:
@@ -46,10 +70,11 @@ export interface CodingAgent {
   // prompt. Each agent runs non-interactively (no human is attached to an AFK
   // Issue) and never resumes a prior session, keeping context fresh per issue.
   //
-  // `model` is the operator-selected Model (ADR-0023), passed through verbatim to
-  // the backend CLI's own model flag. Omitted, no model flag is added and the
-  // backend CLI auto-picks its default — the pre-Model behavior, byte-for-byte.
-  buildExecCommand(prompt: string, model?: string): string[];
+  // `options` carries the operator-selected Model (ADR-0023) and Reasoning Effort
+  // (ADR-0024), each passed through verbatim to the backend CLI's own surface. With
+  // neither set, no tuning flags are added and the backend auto-picks its defaults —
+  // the pre-tuning behavior, byte-for-byte.
+  buildExecCommand(prompt: string, options?: AgentSessionOptions): string[];
   // Present only for an agent that emits structured session output; absent for a
   // plain-prose agent (Codex), whose output streams and returns verbatim.
   readonly runLogCodec?: RunLogCodec;
@@ -59,11 +84,12 @@ const CODEX_AGENT: CodingAgent = {
   name: "codex",
   sbxAgentName: "codex",
   defaultTemplate: "docker.io/library/krutrimbox-codex:pnpm",
-  buildExecCommand(prompt, model) {
+  buildExecCommand(prompt, options) {
     return [
       "codex",
       "exec",
-      ...modelFlag(model),
+      ...modelFlag(options?.model),
+      ...codexReasoningEffort(options?.effort),
       "--ephemeral",
       "--dangerously-bypass-approvals-and-sandbox",
       prompt
@@ -75,7 +101,7 @@ const CLAUDE_AGENT: CodingAgent = {
   name: "claude",
   sbxAgentName: "claude",
   defaultTemplate: "docker.io/library/krutrimbox-claude:pnpm",
-  buildExecCommand(prompt, model) {
+  buildExecCommand(prompt, options) {
     // `claude -p` is a fresh one-shot by construction — never `--continue` or
     // `--resume` — so it satisfies the fresh-context-per-AFK-Issue invariant
     // (ADR-0005). `--dangerously-skip-permissions` is the no-human analog of
@@ -91,7 +117,8 @@ const CLAUDE_AGENT: CodingAgent = {
       "claude",
       "-p",
       prompt,
-      ...modelFlag(model),
+      ...modelFlag(options?.model),
+      ...claudeReasoningEffort(options?.effort),
       "--output-format",
       "stream-json",
       "--verbose",
@@ -107,6 +134,21 @@ const CLAUDE_AGENT: CodingAgent = {
 // CLI validates it (ADR-0023).
 function modelFlag(model?: string): string[] {
   return model ? ["--model", model] : [];
+}
+
+// Claude Code takes Reasoning Effort as a first-class `--effort <level>` flag; an
+// unknown level is validated locally, warned about, and softened to the default,
+// so passthrough is safe (ADR-0024).
+function claudeReasoningEffort(effort?: string): string[] {
+  return effort ? ["--effort", effort] : [];
+}
+
+// Codex has no reasoning-effort flag: it reads the `model_reasoning_effort` config
+// key, set here through the generic `-c key=value` override. The value is TOML, so a
+// string level is quoted. Passed through verbatim — Codex coerces a model-unsupported
+// level and rejects an unknown one, both operator-facing (ADR-0024).
+function codexReasoningEffort(effort?: string): string[] {
+  return effort ? ["-c", `model_reasoning_effort="${effort}"`] : [];
 }
 
 const AGENTS_BY_NAME: Record<AgentName, CodingAgent> = {

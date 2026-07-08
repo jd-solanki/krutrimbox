@@ -53,6 +53,15 @@ export function createRunCommand(dispatch: CliDispatch = runKrutrimbox): Command
         "the model the Agent Backend runs (default: the backend CLI's own default)"
       )
     )
+    .addOption(
+      // Optional: the Reasoning Effort the Model spends (ADR-0024). Passed through
+      // verbatim to the backend CLI's own effort surface; omitted, that CLI
+      // auto-picks. Levels are backend-specific and not validated here.
+      new Option(
+        "--effort <effort>",
+        "how much reasoning effort the model spends (default: the backend CLI's own default)"
+      )
+    )
     .action(
       async (options: {
         issue?: number;
@@ -60,11 +69,13 @@ export function createRunCommand(dispatch: CliDispatch = runKrutrimbox): Command
         baseBranch?: string;
         implementUnassigned?: boolean;
         model?: string;
+        effort?: string;
       }) => {
         const runOptions: RunOptions = {
           baseBranch: options.baseBranch,
           implementUnassigned: options.implementUnassigned,
-          model: options.model
+          model: options.model,
+          effort: options.effort
         };
 
         if (typeof options.issue === "number") {

@@ -301,6 +301,35 @@ describe("Project Configuration fails fast", () => {
     ]);
   });
 
+  test("resolves an agent action's optional Reasoning Effort, carrying it onto the loaded action", async () => {
+    await project.writeFileUnder("prompts/review.md", "Review the PR.");
+    await project.writeConfig(
+      JSON.stringify({
+        hooks: {
+          "pull-request:ready": [
+            { type: "agent", id: "review", prompt: "prompts/review.md", effort: "max" }
+          ]
+        }
+      })
+    );
+
+    expect(loadProjectConfig(project.dir).hooks.get("pull-request:ready")).toEqual([
+      { kind: "agent", id: "review", prompt: "Review the PR.", effort: "max" }
+    ]);
+  });
+
+  test("rejects a non-string Reasoning Effort on an agent action", async () => {
+    await project.writeFileUnder("prompts/review.md", "Review the PR.");
+    await project.writeConfig(
+      JSON.stringify({
+        hooks: {
+          "pull-request:ready": [{ type: "agent", prompt: "prompts/review.md", effort: 3 }]
+        }
+      })
+    );
+    expectInvalid(/hooks\.pull-request:ready\.0\.effort/);
+  });
+
   test("rejects a non-string Model on an agent action", async () => {
     await project.writeFileUnder("prompts/review.md", "Review the PR.");
     await project.writeConfig(

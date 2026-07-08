@@ -30,9 +30,11 @@ export interface HookActionDependencies {
   // credential — the same write boundary as every other krutrimbox GitHub change.
   runHostCommand: CommandRunner;
   logger: Pick<Console, "log">;
-  // The run-level Model (`kb run --model`, ADR-0023). An Agent Action inherits it
-  // when it sets no `model` of its own; omitted here too, the backend CLI auto-picks.
+  // The run-level Model (`kb run --model`, ADR-0023) and Reasoning Effort
+  // (`kb run --effort`, ADR-0024). An Agent Action inherits each when it sets no
+  // value of its own; omitted here too, the backend CLI auto-picks.
   runModel?: string;
+  runEffort?: string;
   // Where an Agent Action's session output streams while it runs; omitted in tests.
   output?: NodeJS.WritableStream;
 }

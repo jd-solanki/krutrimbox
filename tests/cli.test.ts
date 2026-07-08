@@ -91,6 +91,22 @@ describe("krutrimbox CLI", () => {
     });
   });
 
+  test("forwards an explicit Reasoning Effort to a run", async () => {
+    const dispatch = createTestDispatch();
+    const program = createTestProgram(dispatch);
+
+    await program.parseAsync([
+      "node", "kb", "run", "--issue", "42", "--agent", "claude", "--effort", "high"
+    ]);
+
+    expect(dispatch.runExplicit).toHaveBeenCalledWith(42, "claude", {
+      baseBranch: undefined,
+      implementUnassigned: undefined,
+      model: undefined,
+      effort: "high"
+    });
+  });
+
   test("leaves the Model unset when --model is omitted, so the backend auto-picks", async () => {
     const dispatch = createTestDispatch();
     const program = createTestProgram(dispatch);

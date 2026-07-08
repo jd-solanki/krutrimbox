@@ -1,6 +1,6 @@
 import { commandFailureDetail, type CommandRunner } from "../github";
 import { diagnostics } from "../diagnostics";
-import type { CodingAgent } from "./agents/coding-agent";
+import type { AgentSessionOptions, CodingAgent } from "./agents/coding-agent";
 import { RunLogStream } from "./run-log/run-log-stream";
 
 export interface SandboxInput {
@@ -20,9 +20,11 @@ export interface SandboxCheckoutInput extends SandboxBranchInput {
 
 export interface SandboxAfkInput extends SandboxBranchInput {
   prompt: string;
-  // The run-level Model for this AFK Issue's Sandboxed Agent session (ADR-0023);
-  // omitted, the backend CLI auto-picks its default.
+  // The run-level Model (ADR-0023) and Reasoning Effort (ADR-0024) for this AFK
+  // Issue's Sandboxed Agent session; each omitted knob lets the backend CLI
+  // auto-pick its default.
   model?: string;
+  effort?: string;
   output?: NodeJS.WritableStream;
 }
 
@@ -36,10 +38,11 @@ export interface SandboxCommitInput extends SandboxBranchInput {
 
 export interface SandboxAgentSessionInput extends SandboxInput {
   prompt: string;
-  // The Model for this Agent Action's session (ADR-0023): the step's own `model`
-  // when set, otherwise the run-level Model it inherits. Omitted, the backend CLI
-  // auto-picks its default.
+  // The Model (ADR-0023) and Reasoning Effort (ADR-0024) for this Agent Action's
+  // session: the step's own value when set, otherwise the run-level value it
+  // inherits. Each omitted knob lets the backend CLI auto-pick its default.
   model?: string;
+  effort?: string;
   output?: NodeJS.WritableStream;
 }
 
@@ -162,11 +165,11 @@ export class CommandSandboxRunner {
   }
 
   public async runAfkIssue(input: SandboxAfkInput): Promise<void> {
-    await this.runAgent(input.sandboxName, input.prompt, input.model, input.output);
+    await this.runAgent(input.sandboxName, input.prompt, sessionOptions(input), input.output);
   }
 
   public async runAgentSession(input: SandboxAgentSessionInput): Promise<string> {
-    return this.runAgent(input.sandboxName, input.prompt, input.model, input.output);
+    return this.runAgent(input.sandboxName, input.prompt, sessionOptions(input), input.output);
   }
 
   // Runs one Sandboxed Agent session and returns its caller-facing text. The two
@@ -181,10 +184,10 @@ export class CommandSandboxRunner {
   private async runAgent(
     sandboxName: string,
     prompt: string,
-    model?: string,
+    options: AgentSessionOptions,
     output?: NodeJS.WritableStream
   ): Promise<string> {
-    const command = this.agent.buildExecCommand(prompt, model);
+    const command = this.agent.buildExecCommand(prompt, options);
     const codec = this.agent.runLogCodec;
 
     try {
@@ -302,6 +305,12 @@ export class CommandSandboxRunner {
       });
     });
   }
+}
+
+// Narrows a sandbox input to just the per-session tuning the Agent Backend needs,
+// so the AFK and Agent-Action paths hand buildExecCommand the same shape.
+function sessionOptions(input: AgentSessionOptions): AgentSessionOptions {
+  return { model: input.model, effort: input.effort };
 }
 
 // Turns a host `git` failure into a remedy aimed at the most likely cause, read

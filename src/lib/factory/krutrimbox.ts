@@ -6,7 +6,12 @@ import {
   type GitHubClient,
   type GitHubIssue
 } from "../github";
-import { resolveCodingAgent, type AgentName, type CodingAgent } from "./agents/coding-agent";
+import {
+  formatSessionOptions,
+  resolveCodingAgent,
+  type AgentName,
+  type CodingAgent
+} from "./agents/coding-agent";
 import { classifyOwnership, isImplementable } from "./issue/ownership";
 import {
   FactoryRun,
@@ -56,6 +61,9 @@ export interface RunOptions {
   // default for every Sandboxed Agent session this run starts. Omitted, the backend
   // CLI auto-picks its default.
   model?: string;
+  // The run-level Reasoning Effort (`--effort`, ADR-0024): how much the Model thinks,
+  // the default for every session this run starts. Omitted, the backend CLI auto-picks.
+  effort?: string;
 }
 
 // The resolved per-run context: everything a dispatch needs that does not vary
@@ -66,8 +74,10 @@ interface RunContext {
   baseBranch: string;
   operator: string;
   allowUnassigned: boolean;
-  // The run-level Model, resolved once and passed to every dispatched Factory Run.
+  // The run-level Model and Reasoning Effort, resolved once and passed to every
+  // dispatched Factory Run.
   model?: string;
+  effort?: string;
 }
 
 // The top-level orchestrator: discovers the Operator's Target Issues and
@@ -120,7 +130,8 @@ export class Krutrimbox {
     const context = await this.buildRunContext(agent, options);
 
     this.logger.log(
-      `krutrimbox: starting Explicit Run for Target Issue #${issueNumber} with the ${agent.name} Agent Backend.`
+      `krutrimbox: starting Explicit Run for Target Issue #${issueNumber} with the ${agent.name} Agent Backend`
+      + `${formatSessionOptions({ model: options.model, effort: options.effort })}.`
     );
 
     const targetIssue = await this.github.getIssue(issueNumber);
@@ -130,7 +141,8 @@ export class Krutrimbox {
   public async runBatch(agentName: AgentName, options: RunOptions = {}): Promise<void> {
     const agent = resolveCodingAgent(agentName);
     this.logger.log(
-      `krutrimbox: starting Batch Run for ready Target Issues with the ${agent.name} Agent Backend.`
+      `krutrimbox: starting Batch Run for ready Target Issues with the ${agent.name} Agent Backend`
+      + `${formatSessionOptions({ model: options.model, effort: options.effort })}.`
     );
     await this.github.ensureRequiredLabels();
     const context = await this.buildRunContext(agent, options);
@@ -156,7 +168,8 @@ export class Krutrimbox {
       baseBranch: options.baseBranch ?? (await this.github.getDefaultBranch()),
       operator: await this.github.getAuthenticatedUser(),
       allowUnassigned: options.implementUnassigned ?? false,
-      model: options.model
+      model: options.model,
+      effort: options.effort
     };
   }
 
@@ -219,6 +232,7 @@ export class Krutrimbox {
       sandbox: this.buildSandbox(context.agent),
       agent: context.agent,
       model: context.model,
+      effort: context.effort,
       repositorySlug: await this.github.getRepositorySlug(),
       baseBranch: context.baseBranch,
       operator: context.operator,

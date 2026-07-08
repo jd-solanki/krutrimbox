@@ -1,6 +1,7 @@
 import type { Hookable } from "hookable";
 import { diagnostics } from "../../diagnostics";
 import { interpolate, type InterpolationValues } from "../../../utils/interpolate";
+import { formatSessionOptions, type AgentSessionOptions } from "../agents/coding-agent";
 import type { ResolvedHookAction } from "../config";
 import type { KrutrimboxHookName } from "./names";
 import type { HookActionDependencies, HookContext, KrutrimboxHooks } from "./types";
@@ -80,11 +81,21 @@ class HookActionRunner {
     values: InterpolationValues
   ): Promise<string> {
     const prompt = interpolate(action.prompt, values);
+    // The step's own tuning overrides; absent, it inherits the run-level Model
+    // (ADR-0023) and Reasoning Effort (ADR-0024). We log what we pass — the
+    // resolved values are not echoed back by the backend.
+    const options: AgentSessionOptions = {
+      model: action.model ?? this.deps.runModel,
+      effort: action.effort ?? this.deps.runEffort
+    };
+    this.deps.logger.log(
+      `krutrimbox: running ${describeAgentAction(action)}${formatSessionOptions(options)}.`
+    );
     const output = await this.deps.sandbox.runAgentSession({
       sandboxName: context.sandboxName,
       prompt,
-      // The step's own Model overrides; absent, it inherits the run-level Model (ADR-0023).
-      model: action.model ?? this.deps.runModel,
+      model: options.model,
+      effort: options.effort,
       output: this.deps.output
     });
 

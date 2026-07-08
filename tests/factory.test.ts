@@ -762,6 +762,105 @@ describe("Krutrimbox", () => {
     expect(sessionModels).toEqual(["sonnet", "opus"]);
   });
 
+  test("applies the run-level Reasoning Effort to the AFK Issue's Sandboxed Agent session", async () => {
+    const github = new FakeGitHubClient({
+      targetIssues: [targetIssue()],
+      subIssuesByTargetIssue: new Map([
+        [1, [implementationIssue({ number: 3, title: "Bootstrap", labels: ["ready-for-agent"] })]]
+      ])
+    });
+    const sandbox = new FakeSandboxRunner();
+    const factory = new Krutrimbox({
+      github,
+      sandbox,
+      lockStore: fakeLockStore(),
+      templates: fixtureTemplates
+    });
+
+    await factory.runExplicit(1, "codex", { effort: "high" });
+
+    const afkCall = sandbox.calls.find((call) => call.name === "runAfkIssue");
+    expect(afkCall?.input.effort).toBe("high");
+  });
+
+  test("an Agent Action inherits the run-level Reasoning Effort, and its own effort overrides it", async () => {
+    const github = new FakeGitHubClient({
+      targetIssues: [targetIssue()],
+      pullRequests: [{ number: 10, isDraft: true, labels: [{ name: "krutrimbox" }] }],
+      subIssuesByTargetIssue: new Map([
+        [1, [implementationIssue({ number: 3, title: "Bootstrap", labels: ["ready-for-agent"] })]]
+      ]),
+      branchCommitMessages: ["Bootstrap\n\nRefs #3"]
+    });
+    const sandbox = new FakeSandboxRunner();
+    const factory = new Krutrimbox({
+      github,
+      sandbox,
+      lockStore: fakeLockStore(),
+      templates: fixtureTemplates,
+      hooks: prReadyHook([
+        { kind: "agent", id: "inherits", prompt: "Inherit the run Effort." },
+        { kind: "agent", id: "overrides", prompt: "Use my own Effort.", effort: "max" }
+      ])
+    });
+
+    await factory.runExplicit(1, "codex", { effort: "high" });
+
+    const sessionEfforts = sandbox.calls
+      .filter((call) => call.name === "runAgentSession")
+      .map((call) => call.input.effort);
+    expect(sessionEfforts).toEqual(["high", "max"]);
+  });
+
+  test("prints the injected model and effort on the run startup line", async () => {
+    const github = new FakeGitHubClient({
+      targetIssues: [targetIssue()],
+      subIssuesByTargetIssue: new Map([
+        [1, [implementationIssue({ number: 3, labels: ["ready-for-agent"] })]]
+      ])
+    });
+    const logger = { log: vi.fn() };
+    const factory = new Krutrimbox({
+      github,
+      sandbox: new FakeSandboxRunner(),
+      lockStore: fakeLockStore(),
+      templates: fixtureTemplates,
+      logger
+    });
+
+    await factory.runExplicit(1, "codex", { model: "opus", effort: "high" });
+
+    expect(logger.log).toHaveBeenCalledWith(
+      expect.stringContaining("with the codex Agent Backend (model: opus, effort: high).")
+    );
+  });
+
+  test("prints the resolved model and effort on a hook agent action line", async () => {
+    const github = new FakeGitHubClient({
+      targetIssues: [targetIssue()],
+      pullRequests: [{ number: 10, isDraft: true, labels: [{ name: "krutrimbox" }] }],
+      subIssuesByTargetIssue: new Map([
+        [1, [implementationIssue({ number: 3, title: "Bootstrap", labels: ["ready-for-agent"] })]]
+      ]),
+      branchCommitMessages: ["Bootstrap\n\nRefs #3"]
+    });
+    const logger = { log: vi.fn() };
+    const factory = new Krutrimbox({
+      github,
+      sandbox: new FakeSandboxRunner(),
+      lockStore: fakeLockStore(),
+      templates: fixtureTemplates,
+      hooks: prReadyHook([{ kind: "agent", id: "review", prompt: "Review the PR.", effort: "max" }]),
+      logger
+    });
+
+    await factory.runExplicit(1, "codex", { model: "opus", effort: "high" });
+
+    expect(logger.log).toHaveBeenCalledWith(
+      'krutrimbox: running agent action "review" (model: opus, effort: max).'
+    );
+  });
+
   test("skips the pull-request:ready hook when the pull request is already ready", async () => {
     const github = new FakeGitHubClient({
       targetIssues: [targetIssue()],

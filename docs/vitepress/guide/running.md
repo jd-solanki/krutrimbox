@@ -51,6 +51,20 @@ kb run --agent claude                               # no --model → backend aut
 
 To review with a different model than you implemented with — for example implement with a fast model but review with a stronger one — set a per-step `model` on a hook Agent Action; see [Configuration → Hooks](/guide/configuration#hooks).
 
+## Choosing the reasoning effort
+
+`--effort` sets how much reasoning the model spends, the same way `--model` sets which model runs — optional, passed straight to the backend's own effort control:
+
+```sh
+kb run --issue 1 --agent claude --effort high   # Claude Code's --effort
+kb run --issue 1 --agent codex  --effort xhigh  # Codex's model_reasoning_effort
+kb run --agent claude                            # no --effort → backend default
+```
+
+The valid levels are **backend-specific** (for example Claude accepts `low, medium, high, xhigh, max`; Codex accepts `minimal, low, medium, high, xhigh`), and — like `--model` — the value is passed through unchanged with no krutrimbox-side list. An unrecognized level is left to the backend: Claude warns and falls back to its default; Codex either uses the nearest supported level or, for a level it doesn't recognize at all, fails the run. As with `--model`, a per-step `effort` on a hook Agent Action lets you review at a different effort than you implemented with (see [Configuration → Hooks](/guide/configuration#hooks)).
+
+The model and effort krutrimbox passes are echoed in the run log (on the run's startup line and each agent-action line) so you can see what a run used — note this is what krutrimbox *requested*; neither backend reports the level it ultimately resolved to.
+
 ## Which issues krutrimbox works on
 
 krutrimbox works on issues assigned to **you** — the GitHub account `gh` is authenticated as — that carry the `ready-for-agent` label. An issue must be assigned to you alone; one assigned to someone else or to several people is skipped. Solo developers who don't assign issues can pass `--implement-unassigned` to also run issues with no assignee.

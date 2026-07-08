@@ -34,25 +34,36 @@ describe("resolveCodingAgent", () => {
     ]);
   });
 
-  test("passes an explicit Model through to Codex's own `--model` flag", () => {
-    expect(resolveCodingAgent("codex").buildExecCommand("do the work", "gpt-5-codex")).toEqual([
+  test("passes an explicit Model and Reasoning Effort through to Codex's own surfaces", () => {
+    expect(
+      resolveCodingAgent("codex").buildExecCommand("do the work", {
+        model: "gpt-5-codex",
+        effort: "high"
+      })
+    ).toEqual([
       "codex",
       "exec",
       "--model",
       "gpt-5-codex",
+      "-c",
+      'model_reasoning_effort="high"',
       "--ephemeral",
       "--dangerously-bypass-approvals-and-sandbox",
       "do the work"
     ]);
   });
 
-  test("passes an explicit Model through to Claude's own `--model` flag", () => {
-    expect(resolveCodingAgent("claude").buildExecCommand("do the work", "opus")).toEqual([
+  test("passes an explicit Model and Reasoning Effort through to Claude's own flags", () => {
+    expect(
+      resolveCodingAgent("claude").buildExecCommand("do the work", { model: "opus", effort: "max" })
+    ).toEqual([
       "claude",
       "-p",
       "do the work",
       "--model",
       "opus",
+      "--effort",
+      "max",
       "--output-format",
       "stream-json",
       "--verbose",
@@ -60,9 +71,38 @@ describe("resolveCodingAgent", () => {
     ]);
   });
 
-  test("omits the Model flag entirely when none is given, leaving the backend to auto-pick", () => {
-    expect(resolveCodingAgent("codex").buildExecCommand("work")).not.toContain("--model");
-    expect(resolveCodingAgent("claude").buildExecCommand("work")).not.toContain("--model");
+  test("omits the Model and Effort flags entirely when neither is given, leaving the backend to auto-pick", () => {
+    for (const command of [
+      resolveCodingAgent("codex").buildExecCommand("work"),
+      resolveCodingAgent("claude").buildExecCommand("work")
+    ]) {
+      expect(command).not.toContain("--model");
+      expect(command).not.toContain("--effort");
+      expect(command).not.toContain("-c");
+    }
+  });
+
+  test("carries only the Reasoning Effort when the Model is left to auto-pick", () => {
+    expect(resolveCodingAgent("codex").buildExecCommand("work", { effort: "high" })).toEqual([
+      "codex",
+      "exec",
+      "-c",
+      'model_reasoning_effort="high"',
+      "--ephemeral",
+      "--dangerously-bypass-approvals-and-sandbox",
+      "work"
+    ]);
+    expect(resolveCodingAgent("claude").buildExecCommand("work", { effort: "high" })).toEqual([
+      "claude",
+      "-p",
+      "work",
+      "--effort",
+      "high",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--dangerously-skip-permissions"
+    ]);
   });
 
   test("gives Claude a run-log codec to decode its structured output, but not Codex", () => {

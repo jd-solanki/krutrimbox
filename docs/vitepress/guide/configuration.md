@@ -76,7 +76,7 @@ A Hook Action is one of three kinds:
 
 | Action    | Does                                                                                                    |
 | --------- | ------------------------------------------------------------------------------------------------------ |
-| `agent`   | Runs a fresh AI session in the Target Issue Sandbox with your `prompt` (a file under `.krutrimbox/`) and an optional `model`. Captures its text as `{{steps.<id>.output}}`, and if the session changed code, commits and pushes it. |
+| `agent`   | Runs a fresh AI session in the Target Issue Sandbox with your `prompt` (a file under `.krutrimbox/`) and optional `model` and `effort`. Captures its text as `{{steps.<id>.output}}`, and if the session changed code, commits and pushes it. |
 | `comment` | Posts `body` as a pull request comment.                                                                 |
 | `command` | Runs one allowlisted `gh` command on the host (`run[0]` must be `gh`).                                  |
 
@@ -112,19 +112,19 @@ Agent prompts, comment bodies, and command arguments interpolate `{{...}}` place
 
 An Agent Action owns its whole prompt (unlike the append-only Prompt Extensions above). The session runs with the sandbox's **read-only** GitHub token, so it gathers context itself — for example `gh pr diff {{pr_number}}` — and never mutates GitHub. If it changes code, krutrimbox commits and pushes that change **from the host**, with a message referencing the action and its prompt; these commits carry no `Refs` footer, so they stay out of the Done Set.
 
-An Agent Action may set its own `model`. When omitted, it **inherits** the run's [`--model`](/guide/running#choosing-the-model) (and, failing that, the backend CLI's default); when set, it overrides — so you can implement with one model and review with another:
+An Agent Action may set its own `model` and `effort`. When omitted, each **inherits** the run's [`--model`](/guide/running#choosing-the-model) / [`--effort`](/guide/running#choosing-the-reasoning-effort) (and, failing that, the backend CLI's default); when set, it overrides — so you can implement with one model and review with another, stronger one at higher effort:
 
 ```json
 {
   "hooks": {
     "pull-request:ready": [
-      { "type": "agent", "id": "review", "prompt": "prompts/final-review.md", "model": "opus" }
+      { "type": "agent", "id": "review", "prompt": "prompts/final-review.md", "model": "opus", "effort": "max" }
     ]
   }
 }
 ```
 
-The `model` is passed through to the same Agent Backend the run uses (a run never switches backends), so name a model that backend accepts; an unknown one fails the hook rather than falling back silently.
+Both are passed through to the same Agent Backend the run uses (a run never switches backends), so name a model and effort that backend accepts. The resolved `model` and `effort` are logged on the action's run-log line. An unknown `model` fails the hook; an unknown `effort` is handled by the backend (Claude warns and falls back, Codex coerces or fails) — krutrimbox validates neither.
 
 ### Command actions
 
