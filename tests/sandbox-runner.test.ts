@@ -358,6 +358,58 @@ describe("CommandSandboxRunner", () => {
     expect(((failure as Error).cause as Error)).toBe(execError);
   });
 
+  test("classifies a transient provider API error in the agent's output as KB_R0013, not a KB_R0009 agent failure", async () => {
+    // A 529 arrives in the agent's stdout — which the message (stderr only) never
+    // carries — so the classifier must read the failure's captured stdout.
+    const execError = Object.assign(
+      new Error("Command failed with exit code 1: sbx exec ... claude"),
+      { stdout: "…writing files…\nAPI Error: 529 Overloaded. This is a server-side issue.\n" }
+    );
+    const runner: CommandRunner = async () => {
+      throw execError;
+    };
+    const sandbox = new CommandSandboxRunner(runner, "/workspace/krutrimbox", claude, "template");
+
+    const failure = await sandbox
+      .runAfkIssue({
+        sandboxName: "krutrimbox-issue-1-claude",
+        branchName: "krutrimbox/issue-1",
+        prompt: "implement #4"
+      })
+      .catch((error: unknown) => error);
+
+    expect((failure as Error).name).toBe("KB_R0013");
+    expect((failure as Error).message).toContain("API Error: 529 Overloaded");
+    expect((failure as Diagnostic).fix).toContain("Rerun krutrimbox");
+    expect((failure as Diagnostic).fix).not.toContain("refine the issue");
+    expect((failure as Diagnostic).fix).not.toContain("inspect the sandbox");
+    expect(((failure as Error).cause as Error)).toBe(execError);
+    expect(REPORTABLE_INTERNAL_CODES.has((failure as Error).name)).toBe(false);
+  });
+
+  test("does not misclassify an agent that merely wrote about HTTP 500s as a provider error", async () => {
+    // The agent's own work product mentioning a 500 must not trip KB_R0013 — only
+    // the CLI's explicit "API Error: <status>" notice counts.
+    const execError = Object.assign(
+      new Error("Command failed with exit code 1: sbx exec ... claude"),
+      { stdout: "Added a handler that returns HTTP 500 on validation failure.\n" }
+    );
+    const runner: CommandRunner = async () => {
+      throw execError;
+    };
+    const sandbox = new CommandSandboxRunner(runner, "/workspace/krutrimbox", claude, "template");
+
+    const failure = await sandbox
+      .runAfkIssue({
+        sandboxName: "krutrimbox-issue-1-claude",
+        branchName: "krutrimbox/issue-1",
+        prompt: "implement #4"
+      })
+      .catch((error: unknown) => error);
+
+    expect((failure as Error).name).toBe("KB_R0009");
+  });
+
   test("runs an Agent Action session through the Codex Agent Backend's exec command", async () => {
     const calls: Array<{ command: string; args: string[] }> = [];
     const runner: CommandRunner = async (command, args) => {

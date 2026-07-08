@@ -165,6 +165,19 @@ export const diagnostics = /*#__PURE__*/ defineDiagnostics({
     KB_R0012: {
       why: (p: { detail: string }) => `krutrimbox: a git command failed on the host.\n${p.detail}`,
       fix: (p: { guidance: string }) => p.guidance
+    },
+
+    // sandbox-runner.ts — the Sandboxed Agent exited non-zero, but its output shows
+    // the exit was a transient error from the model provider's API (e.g. Claude
+    // Code's "API Error: 529 Overloaded"), not the agent giving up on the issue.
+    // Split out from KB_R0009 so the operator is not sent to inspect the sandbox or
+    // refine the issue for something that is neither their code nor their config:
+    // the only remedy is to rerun. Expected and operator-facing — a provider
+    // outage is not a krutrimbox bug — so it stays out of REPORTABLE_INTERNAL_CODES.
+    KB_R0013: {
+      why: (p: { detail: string }) =>
+        `The Sandboxed Agent stopped on a transient model-provider API error (${p.detail}) — an upstream problem, not your issue, configuration, or sandbox.`,
+      fix: "Rerun krutrimbox. If it persists, check the model provider's status page for an outage."
     }
   }
 });

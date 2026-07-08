@@ -51,6 +51,22 @@ describe("ExecFileCommandRunner", () => {
     expect(streamed).toContain("hello");
     expect(streamed).toContain("warn");
   });
+
+  test("elides an over-length argument from the failure message but keeps short flags", async () => {
+    const runner = createExecFileCommandRunner();
+    const longArg = "x".repeat(5000);
+
+    const error = (await runner(process.execPath, [
+      "-e",
+      "process.exit(1)",
+      "--flag",
+      longArg
+    ]).catch((e: unknown) => e)) as Error;
+
+    expect(error.message).toContain("--flag");
+    expect(error.message).not.toContain(longArg);
+    expect(error.message).toContain("5000-char argument elided");
+  });
 });
 
 describe("GitHubCliClient", () => {

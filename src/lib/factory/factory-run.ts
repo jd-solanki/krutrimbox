@@ -8,6 +8,7 @@ import {
   buildReportUrl,
   diagnose,
   formatFailureBlock,
+  formatFailureNotice,
   renderFailureBody,
   type DiagnosedFailure,
   type RunPhase
@@ -353,6 +354,13 @@ export class FactoryRun {
   private async failAfkIssue(issue: ImplementationIssue, error: unknown): Promise<IssueOutcome> {
     const failure = diagnose(error, this.phase);
     this.appendFailureBlock(failure);
+
+    // Print the diagnosis to the terminal first, so the operator reads *why* the
+    // run stopped without opening the log or the issue; the pointer line below
+    // then links the comment and the full log for the detail.
+    this.logger.log(
+      `krutrimbox: AFK Issue #${issue.number} failed.\n${formatFailureNotice(failure, this.logFilePath)}`
+    );
 
     const issueUrl = await this.github.getIssueUrl(issue.number);
     const commentUrl = await this.postAfkErrorComment(issue, failure);

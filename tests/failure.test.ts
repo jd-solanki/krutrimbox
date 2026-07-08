@@ -4,6 +4,7 @@ import {
   buildReportUrl,
   diagnose,
   formatFailureBlock,
+  formatFailureNotice,
   isReportable,
   renderFailureBody
 } from "../src/lib/factory/failure";
@@ -70,6 +71,31 @@ describe("formatFailureBlock", () => {
     expect(block).toContain("KB_R0009");
     expect(block).toContain("Fix:");
     expect(block.toLowerCase()).not.toContain("likely a krutrimbox bug");
+  });
+});
+
+describe("formatFailureNotice", () => {
+  test("shows the diagnosis, fix, docs, and log path for an expected failure, but not the verbose detail", () => {
+    const failure = diagnose(diagnostics.KB_R0009({ detail: "exit code 1" }), "agent");
+    (failure as { detail: string }).detail = "long stack trace\nCaused by: ...";
+
+    const notice = formatFailureNotice(failure, "/repo/.krutrimbox/logs/x.log");
+
+    expect(notice).toContain("exit code 1");
+    expect(notice).toContain("[KB_R0009]");
+    expect(notice).toContain("Fix:");
+    expect(notice).toContain("kb_r0009");
+    expect(notice).toContain("Full log: /repo/.krutrimbox/logs/x.log");
+    expect(notice).not.toContain("Caused by:");
+  });
+
+  test("points at the issue comment's report link for a reportable failure instead of a fix", () => {
+    const notice = formatFailureNotice(diagnose(new Error("boom"), "sandbox-setup"), null);
+
+    expect(notice).toContain("boom");
+    expect(notice.toLowerCase()).toContain("krutrimbox bug");
+    expect(notice).not.toContain("Fix:");
+    expect(notice).not.toContain("Full log:");
   });
 });
 

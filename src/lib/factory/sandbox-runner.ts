@@ -1,4 +1,4 @@
-import { commandFailureDetail, type CommandRunner } from "../github";
+import { commandFailureDetail, commandFailureOutput, type CommandRunner } from "../github";
 import { diagnostics } from "../diagnostics";
 import type { AgentSessionOptions, CodingAgent } from "./agents/coding-agent";
 import { RunLogStream } from "./run-log/run-log-stream";
@@ -206,9 +206,9 @@ export class CommandSandboxRunner {
       return codec.extractResultText(stdout);
     } catch (error) {
       // A non-zero agent exit is the common, legitimate failure (the agent could
-      // not finish), so it becomes an Expected Failure (KB_R0009) rather than an
-      // Unexpected one — the operator reviews the agent's output, not files a bug.
-      // The raw exec error is kept as the cause so the run log still shows it.
+      // not finish), so it becomes an Expected Failure rather than an Unexpected
+      // one — the operator reviews the agent's output, not files a bug. The raw
+      // exec error is kept as the cause so the run log still shows it.
       throw agentFailure(error);
     }
   }
@@ -344,11 +344,44 @@ function parseSandboxList(output: string): { sandboxes: Array<{ name: string }> 
   return JSON.parse(json) as { sandboxes: Array<{ name: string }> };
 }
 
-// Wraps a failed Sandboxed Agent session as the Expected KB_R0009 diagnostic,
-// distilling the exit reason for its message while keeping the raw exec error as
-// the diagnostic's cause for the run log's FAILURE block.
+// Wraps a failed Sandboxed Agent session as an Expected diagnostic, keeping the raw
+// exec error as the cause for the run log's FAILURE block. A transient
+// model-provider API error (KB_R0013) is split from a genuine agent failure
+// (KB_R0009): the two point the operator at very different remedies — rerun versus
+// inspect-and-refine — so misclassifying the former sends them chasing a problem
+// that is not theirs.
 function agentFailure(error: unknown) {
+  const providerError = providerApiError(error);
+  if (providerError) {
+    return diagnostics.KB_R0013({ detail: providerError, cause: error });
+  }
   return diagnostics.KB_R0009({ detail: agentExitReason(error), cause: error });
+}
+
+// Signature of a transient error from the model provider's API, as the backend CLI
+// prints it (Claude Code emits e.g. "API Error: 529 Overloaded"). Kept narrow — an
+// explicit "API Error:" prefix on a 429 or 5xx status — so it matches the CLI's own
+// notice and not, say, an agent that merely wrote about rate limits or HTTP 500s in
+// the code it was implementing.
+const PROVIDER_API_ERROR_PATTERN = /API Error:\s*(?:429|5\d\d)[^\n]*/i;
+
+// How much of the matched notice to keep as KB_R0013's detail. When the backend
+// speaks stream-json, the notice can sit inside a long JSON record, so the "line"
+// the pattern captures may run on; this caps it to a readable phrase for the
+// terminal and comment.
+const MAX_PROVIDER_ERROR_DETAIL = 120;
+
+// The provider's API-error notice from a failed session's output, or null when the
+// exit was not a provider error. The (length-capped) match becomes KB_R0013's detail.
+function providerApiError(error: unknown): string | null {
+  const match = PROVIDER_API_ERROR_PATTERN.exec(commandFailureOutput(error));
+  if (!match) {
+    return null;
+  }
+  const notice = match[0].trim();
+  return notice.length > MAX_PROVIDER_ERROR_DETAIL
+    ? `${notice.slice(0, MAX_PROVIDER_ERROR_DETAIL - 1)}…`
+    : notice;
 }
 
 function agentExitReason(error: unknown): string {

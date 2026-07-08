@@ -101,6 +101,31 @@ export function formatFailureBlock(failure: DiagnosedFailure): string {
   return lines.join("\n");
 }
 
+// The concise diagnosis krutrimbox prints straight to the terminal the moment an
+// AFK Issue fails. It carries the same diagnosis, remedy, and docs the run log's
+// FAILURE block and the issue comment do — deliberately without the verbose
+// `detail` (stack and agent output), which belongs only in the log. This is what
+// spares the operator from scrolling a long run log or opening the issue just to
+// learn *why* the run stopped; the caller still appends the pointer line that
+// links the comment and the full log.
+export function formatFailureNotice(failure: DiagnosedFailure, logFilePath: string | null): string {
+  const lines = [failure.code ? `${failure.summary} [${failure.code}]` : failure.summary];
+
+  if (failure.reportable) {
+    lines.push("Likely a krutrimbox bug — the issue comment has a prefilled report link.");
+  } else if (failure.fix) {
+    lines.push(`Fix: ${failure.fix}`);
+  }
+  if (failure.docs) {
+    lines.push(`Docs: ${failure.docs}`);
+  }
+  if (logFilePath) {
+    lines.push(`Full log: ${logFilePath}`);
+  }
+
+  return lines.join("\n");
+}
+
 export interface ReportUrlInput {
   // The repository's `bugs.url`, e.g. `https://github.com/owner/repo/issues`.
   issuesUrl: string;

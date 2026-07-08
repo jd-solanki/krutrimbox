@@ -424,14 +424,40 @@ export function createExecFileCommandRunner(): CommandRunner {
           return;
         }
 
-        const commandText = [command, ...args].join(" ");
+        const commandText = formatCommandLine(command, args);
         const reason = signal ? `signal ${signal}` : `exit code ${code}`;
-        const error = new Error(
+        const error: CommandFailure = new Error(
           [`Command failed with ${reason}: ${commandText}`, stderrText].filter(Boolean).join("\n")
         );
+        // Carry the child's captured streams on the error so a caller can classify
+        // the failure by what the command actually printed. The message already
+        // includes stderr; `stdout` is otherwise lost on a non-zero exit, yet it is
+        // where an agent CLI streams its own notices (e.g. a transient provider
+        // API error). See `commandFailureOutput` and KB_R0013.
+        error.stdout = stdoutText;
+        error.stderr = stderrText;
         reject(error);
       });
     });
+}
+
+// A failed command's Error, augmented by the default runner with the child's
+// captured output. The message already carries stderr; these expose both streams
+// verbatim so a caller can classify the failure by what the command printed
+// without re-running it (see `commandFailureOutput`).
+export interface CommandFailure extends Error {
+  stdout?: string;
+  stderr?: string;
+}
+
+// The full text a failed command emitted, as one string to scan when classifying
+// the failure: its message (which carries stderr) plus any captured stdout. A
+// custom runner that attaches no output still contributes its message.
+export function commandFailureOutput(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return String(error);
+  }
+  return [error.message, (error as CommandFailure).stdout].filter(Boolean).join("\n");
 }
 
 // The command line plus the failure's own message (which, from the default runner,
@@ -440,8 +466,28 @@ export function createExecFileCommandRunner(): CommandRunner {
 // Shared by the `gh` (runGh) and host-`git` (hostGit) failure wraps.
 export function commandFailureDetail(command: string, args: string[], error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
-  const commandLine = [command, ...args].join(" ");
+  const commandLine = formatCommandLine(command, args);
   return message.includes(commandLine) ? message : `${commandLine}\n${message}`;
+}
+
+// The longest a single argument may be before it is elided from an echoed command
+// line. In practice the only argument that ever exceeds this is the multi-KB agent
+// prompt passed to `claude -p`: echoed verbatim it buried the exit reason under the
+// whole prompt in the run log's FAILURE block (and the issue comment's tail). The
+// threshold is generous enough that every real flag and path survives untouched.
+const MAX_ECHOED_ARG_LENGTH = 200;
+
+// Renders a command and its arguments as a single line for a failure message,
+// replacing any over-length argument with a short placeholder so the message stays
+// readable. Kept the one place both the default runner's error and
+// `commandFailureDetail`'s `includes` check derive their command line, so the two
+// always agree on how a command is spelled.
+function formatCommandLine(command: string, args: string[]): string {
+  return [command, ...args.map(elideLongArg)].join(" ");
+}
+
+function elideLongArg(arg: string): string {
+  return arg.length > MAX_ECHOED_ARG_LENGTH ? `<${arg.length}-char argument elided>` : arg;
 }
 
 // Turns a `gh` failure into a remedy aimed at the most likely cause. The signals
