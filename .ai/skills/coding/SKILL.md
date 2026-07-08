@@ -6,3 +6,4 @@ description: Composition skill which invokes sub-skills for coding tasks. It is 
 Load following skills:
 - /clean-code
 - /comment-code
+- /code-organisation
