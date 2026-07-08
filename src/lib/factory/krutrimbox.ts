@@ -131,7 +131,7 @@ export class Krutrimbox {
 
     this.logger.log(
       `krutrimbox: starting Explicit Run for Target Issue #${issueNumber} with the ${agent.name} Agent Backend`
-      + `${formatSessionOptions({ model: options.model, effort: options.effort })}.`
+      + `${formatSessionOptions(options)}.`
     );
 
     const targetIssue = await this.github.getIssue(issueNumber);
@@ -142,7 +142,7 @@ export class Krutrimbox {
     const agent = resolveCodingAgent(agentName);
     this.logger.log(
       `krutrimbox: starting Batch Run for ready Target Issues with the ${agent.name} Agent Backend`
-      + `${formatSessionOptions({ model: options.model, effort: options.effort })}.`
+      + `${formatSessionOptions(options)}.`
     );
     await this.github.ensureRequiredLabels();
     const context = await this.buildRunContext(agent, options);

@@ -165,11 +165,13 @@ export class CommandSandboxRunner {
   }
 
   public async runAfkIssue(input: SandboxAfkInput): Promise<void> {
-    await this.runAgent(input.sandboxName, input.prompt, sessionOptions(input), input.output);
+    // `input` carries the model/effort `runAgent` reads plus fields it ignores;
+    // passing it straight through avoids re-picking the same tuning by hand.
+    await this.runAgent(input.sandboxName, input.prompt, input, input.output);
   }
 
   public async runAgentSession(input: SandboxAgentSessionInput): Promise<string> {
-    return this.runAgent(input.sandboxName, input.prompt, sessionOptions(input), input.output);
+    return this.runAgent(input.sandboxName, input.prompt, input, input.output);
   }
 
   // Runs one Sandboxed Agent session and returns its caller-facing text. The two
@@ -305,12 +307,6 @@ export class CommandSandboxRunner {
       });
     });
   }
-}
-
-// Narrows a sandbox input to just the per-session tuning the Agent Backend needs,
-// so the AFK and Agent-Action paths hand buildExecCommand the same shape.
-function sessionOptions(input: AgentSessionOptions): AgentSessionOptions {
-  return { model: input.model, effort: input.effort };
 }
 
 // Turns a host `git` failure into a remedy aimed at the most likely cause, read
