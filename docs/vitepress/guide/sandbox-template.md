@@ -14,7 +14,9 @@ The krutrimbox repository is a `pnpm` project, and `pnpm` isn't in the default i
 
 A template is just the agent's stock image plus your tools. Here is the example krutrimbox uses (`Dockerfile.sandbox`). The `BASE` build argument selects the agent's stock image, and the `RUN` line is where you add your toolchain:
 
-```Dockerfile
+::: code-group
+
+```Dockerfile [Dockerfile.sandbox]
 # check=skip=InvalidDefaultArgInFrom
 ARG BASE
 FROM ${BASE}
@@ -24,6 +26,8 @@ RUN npm install -g pnpm@10.23.0   # 👈 replace with your project's tooling
 USER agent
 ```
 
+:::
+
 `BASE` selects the agent's stock template:
 
 - `docker/sandbox-templates:codex` — for `--agent codex`
@@ -31,12 +35,27 @@ USER agent
 
 Build the image, then load it into Docker Sandboxes' own template store. A plain `docker build` is not enough: `sbx` keeps a separate store, so `sbx template load` is what makes the image available to `sbx create --template`.
 
-```sh
+:::info
+It's suggested to place this at the repo root just like other docker files.
+:::
+
+::: code-group
+
+```sh [Codex]
 # Example for the codex agent — repeat with the claude-code BASE for --agent claude
 docker build -f Dockerfile.sandbox --build-arg BASE=docker/sandbox-templates:codex -t my-template:codex .
 docker image save my-template:codex -o /tmp/my-template-codex.tar
 sbx template load /tmp/my-template-codex.tar
 ```
+
+```sh [Claude]
+# Example for the claude-code agent — repeat with the claude-code BASE for --agent claude
+docker build -f Dockerfile.sandbox --build-arg BASE=docker/sandbox-templates:claude-code -t my-template:claude .
+docker image save my-template:claude -o /tmp/my-template-claude.tar
+sbx template load /tmp/my-template-claude.tar
+```
+
+:::
 
 Verify the image is loaded:
 
@@ -47,7 +66,7 @@ sbx template ls
 Rebuild and reload whenever your `Dockerfile.sandbox` changes.
 
 ::: tip
-In the krutrimbox repository these three steps are wrapped as `pnpm sandbox:prepare-template:codex` / `:claude` (or `pnpm sandbox:prepare-template` for both). Those scripts are specific to krutrimbox's own repo — for your project, run the commands above or wrap them in your own scripts.
+In the krutrimbox repository these three steps are wrapped as `pnpm sandbox:prepare-template:codex` / `:claude` (or `pnpm sandbox:prepare-template` for both). [Those scripts](https://github.com/jd-solanki/krutrimbox/blob/main/package.json) are specific to krutrimbox's own repo — for your project, run the commands above or wrap them in your own scripts.
 :::
 
 ## Point krutrimbox at your template

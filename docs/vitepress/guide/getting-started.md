@@ -16,22 +16,36 @@ krutrimbox is **language-agnostic**: it orchestrates issues and Git/GitHub state
 
 ## Setup checklist
 
-Complete these once per machine:
+Setup comes in two kinds, and it helps to keep them apart. The first group you do **once per machine** — install tools and sign in, and every future project inherits it. The second group you do **once per project** — teach the sandbox about that repository's toolchain.
+
+### Once per machine
 
 1. **Install the prerequisites and the CLI** — [Quickstart › Prerequisites](./quickstart#prerequisites) lists everything and the per-OS `sbx` install.
 2. **[Authentication](./authentication)** — a write-capable GitHub login on the host, a read-only token for sandboxes, and your agent's credentials.
 3. **[Network Policy](./network-policy)** — let sandboxes reach GitHub, package registries, and your model.
-4. **[Sandbox Template](./sandbox-template)** — *optional, but usually needed:* bake your project's toolchain into the sandbox image.
 
-Once those are done, you're ready to [run krutrimbox](./running).
+::: tip One token, many projects
+Create a single read-only token named `krutrimbox` (Authentication, step 2). It's stored as one global `sbx` secret and reused everywhere — so when you add another project later, don't issue a new token. Just grant that same token access to the new repository in its [GitHub token settings](https://github.com/settings/personal-access-tokens).
+:::
+
+### Once per project
+
+1. **[Sandbox Template](./sandbox-template)** — *optional, but usually needed:* bake this project's toolchain into the sandbox image so the agent's build and tests find their tools.
+2. **Prepare your repository** — gitignore krutrimbox's generated state, and commit any shared `.krutrimbox/` policy ([below](#prepare-your-repository)).
+
+Once both groups are done, you're ready to [run krutrimbox](./running).
 
 ## Prepare your repository
 
 krutrimbox writes per-run state into a `.krutrimbox/` directory in your repository — log files and lock files. Add those generated subdirectories to the repository's `.gitignore` so they're never committed:
 
-```txt
+::: code-group
+
+```txt [.gitignore]
 .krutrimbox/logs/
 .krutrimbox/locks/
 ```
+
+:::
 
 Everything else under `.krutrimbox/` — `config.json` (including any lifecycle `hooks`), comment templates, and prompt files (prompt extensions and any hook Agent Action prompts) — is shared team policy that you *do* commit. See [Configuration](./configuration) for what the directory can hold.
