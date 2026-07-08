@@ -1,6 +1,8 @@
+import { Diagnostic } from "nostics";
 import { readFileSync } from "node:fs";
 import { Writable } from "node:stream";
 import { describe, expect, test } from "vitest";
+import { REPORTABLE_INTERNAL_CODES } from "../src/lib/diagnostics";
 import {
   CommandSandboxRunner,
   resolveCodingAgent,
@@ -418,6 +420,34 @@ describe("CommandSandboxRunner", () => {
 
     const sandboxGit = calls.filter((call) => call.command === "sbx").map((call) => call.args.slice(5));
     expect(sandboxGit.some((command) => command.includes("push"))).toBe(false);
+  });
+
+  test("wraps a rejected host git push as the operator-facing KB_R0012 diagnostic", async () => {
+    const runner: CommandRunner = async (command, args) => {
+      if (command === "git" && args.includes("push")) {
+        throw new Error(
+          "Command failed with exit code 1: git -C /workspace/krutrimbox push origin FETCH_HEAD:refs/heads/krutrimbox/issue-1\n ! [rejected] FETCH_HEAD -> krutrimbox/issue-1 (non-fast-forward)"
+        );
+      }
+      return "";
+    };
+    const sandbox = new CommandSandboxRunner(runner, "/workspace/krutrimbox", codex, "template");
+
+    const error = await sandbox
+      .commitAndPush({
+        sandboxName: "krutrimbox-issue-1-codex",
+        branchName: "krutrimbox/issue-1",
+        subject: "Some work",
+        issueNumber: 4
+      })
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(Diagnostic);
+    const diagnostic = error as Diagnostic;
+    expect(diagnostic.name).toBe("KB_R0012");
+    expect(REPORTABLE_INTERNAL_CODES.has(diagnostic.name)).toBe(false);
+    expect(diagnostic.fix).toContain("branch protection");
+    expect(diagnostic.message).toContain("non-fast-forward");
   });
 
   test("removes clone sandboxes without an interactive confirmation prompt", async () => {

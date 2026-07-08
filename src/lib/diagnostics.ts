@@ -134,6 +134,37 @@ export const diagnostics = /*#__PURE__*/ defineDiagnostics({
       why: (p: { issueNumber: number; blockers: string }) =>
         `AFK Issue #${p.issueNumber} has unresolved blockers:\n${p.blockers}`,
       fix: "Resolve the blocking issues (land their work or close them), then rerun krutrimbox."
+    },
+
+    // github.ts (runGh) — a host `gh` command exited non-zero. Unlike the codes
+    // above this is not raised by krutrimbox logic; it wraps any failure of the
+    // GitHub CLI itself. `gh` runs on the host under the operator's own
+    // credentials, so a failure here is almost always an environment condition —
+    // the wrong `gh` account is active, that account lacks write access to the
+    // repository, or the network is down — not a krutrimbox bug. Coding it keeps
+    // the raw child-process Error from reaching the top-level "likely a bug"
+    // handler and points the operator at their gh setup instead. `detail` carries
+    // the command and its stderr; the original error is kept as the `cause` so the
+    // run log's FAILURE block still shows the full output. `guidance` is
+    // specialized at the call site for the common account/permission signal (a
+    // 403/404 on a write) versus a network or auth failure.
+    KB_R0011: {
+      why: (p: { detail: string }) => `krutrimbox: a GitHub CLI (\`gh\`) command failed.\n${p.detail}`,
+      fix: (p: { guidance: string }) => p.guidance
+    },
+
+    // sandbox-runner.ts (hostGit) — a host `git` command exited non-zero. The
+    // counterpart to KB_R0011 for `gh`: it wraps the raw child-process failure of
+    // git run on the host — the `fetch` from the `sandbox-<name>` remote and the
+    // `push` to origin that publish a sandbox commit. A rejected push, a protected
+    // branch, or missing credentials is the operator's environment, not a
+    // krutrimbox bug, so coding it keeps the failure out of the top-level "likely a
+    // bug" handler. `detail` carries the command and git's stderr; the original
+    // error is kept as the `cause`. `guidance` is specialized at the call site for
+    // push rejection, authentication, and network signals.
+    KB_R0012: {
+      why: (p: { detail: string }) => `krutrimbox: a git command failed on the host.\n${p.detail}`,
+      fix: (p: { guidance: string }) => p.guidance
     }
   }
 });

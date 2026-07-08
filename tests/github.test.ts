@@ -1,5 +1,7 @@
+import { Diagnostic } from "nostics";
 import { Writable } from "node:stream";
 import { afterEach, describe, expect, test, vi } from "vitest";
+import { REPORTABLE_INTERNAL_CODES } from "../src/lib/diagnostics";
 import { createExecFileCommandRunner, createGitHubCliClient, type CommandRunner } from "../src/lib/github";
 
 function fixtureRunner(responses: Map<string, string>) {
@@ -624,6 +626,45 @@ describe("GitHubCliClient", () => {
         ]
       }
     ]);
+  });
+});
+
+describe("runGh failure wrapping", () => {
+  function rejectingRunner(message: string): CommandRunner {
+    return async () => {
+      throw new Error(message);
+    };
+  }
+
+  test("wraps a gh failure as the operator-facing KB_R0011 diagnostic, not a raw bug", async () => {
+    const client = createGitHubCliClient(
+      rejectingRunner(
+        "Command failed with exit code 1: gh label create ready-for-human\nHTTP 404: Not Found (https://api.github.com/repos/o/r/labels)"
+      )
+    );
+
+    const error = await client.ensureRequiredLabels().catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(Diagnostic);
+    const diagnostic = error as Diagnostic;
+    expect(diagnostic.name).toBe("KB_R0011");
+    // Not one of the internal-invariant codes, so it is presented as fixable, not reported.
+    expect(REPORTABLE_INTERNAL_CODES.has(diagnostic.name)).toBe(false);
+    // The 404 signal steers the fix at gh account/permissions.
+    expect(diagnostic.fix).toContain("gh auth");
+    // The original stderr is preserved for the run log's FAILURE block.
+    expect(diagnostic.message).toContain("HTTP 404: Not Found");
+  });
+
+  test("steers a network failure at connectivity rather than gh auth", async () => {
+    const client = createGitHubCliClient(
+      rejectingRunner("Command failed with exit code 1: gh repo view\ndial tcp: lookup api.github.com: no such host")
+    );
+
+    const error = (await client.ensureRequiredLabels().catch((caught: unknown) => caught)) as Diagnostic;
+
+    expect(error.name).toBe("KB_R0011");
+    expect(error.fix).toContain("network");
   });
 });
 

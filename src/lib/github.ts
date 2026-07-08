@@ -110,8 +110,21 @@ export function createGitHubCliClient(
 ): GitHubClient {
   let repository: RepositoryInfo | null = null;
 
+  // Every host GitHub call funnels through here, so it is the one place to turn a
+  // raw `gh` child-process failure into a coded, operator-facing diagnostic. Left
+  // unwrapped, a non-zero `gh` exit is an uncoded Error that the Expected/Unexpected
+  // split reports as a likely krutrimbox bug (see lib/factory/failure.ts) and, for
+  // pre-flight calls that run outside a Factory Run's diagnosed path, crashes with a
+  // raw Node stack. gh runs on the host with the operator's own credentials, so the
+  // cause is almost always their gh setup, not krutrimbox.
   function runGh(args: string[]): Promise<string> {
-    return runner("gh", args);
+    return runner("gh", args).catch((error: unknown) => {
+      throw diagnostics.KB_R0011({
+        detail: commandFailureDetail("gh", args, error),
+        guidance: ghFailureGuidance(error),
+        cause: error
+      });
+    });
   }
 
   async function getRepository(): Promise<RepositoryInfo> {
@@ -419,6 +432,41 @@ export function createExecFileCommandRunner(): CommandRunner {
         reject(error);
       });
     });
+}
+
+// The command line plus the failure's own message (which, from the default runner,
+// already carries the child's stderr). Prefixes the command only when the message
+// does not already include it, so a custom runner's error still names what failed.
+// Shared by the `gh` (runGh) and host-`git` (hostGit) failure wraps.
+export function commandFailureDetail(command: string, args: string[], error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const commandLine = [command, ...args].join(" ");
+  return message.includes(commandLine) ? message : `${commandLine}\n${message}`;
+}
+
+// Turns a `gh` failure into a remedy aimed at the most likely cause. The signals
+// are read from gh's stderr text, most-specific first:
+// - GitHub masks "you can see this repo but cannot write to it" as 404 (and denies
+//   other writes with 403). With multiple `gh` accounts this usually means the
+//   wrong account is active for the repository's owner — the common real case.
+// - a connectivity failure, or missing host authentication entirely.
+// Anything unrecognized falls back to "run the command yourself and check auth".
+function ghFailureGuidance(error: unknown): string {
+  const text = (error instanceof Error ? error.message : String(error)).toLowerCase();
+
+  if (/http 40[34]|not found|forbidden|resource not accessible|must have admin/.test(text)) {
+    return "The active `gh` account likely lacks write access to this repository — GitHub reports that as HTTP 404/403. Run `gh auth status` to see which account is active, switch with `gh auth switch` if it is the wrong one, and confirm that account can write to the repo. krutrimbox performs every GitHub write on the host with your `gh` credentials.";
+  }
+
+  if (/could not resolve host|network is unreachable|timeout|dial tcp|connection refused|no such host/.test(text)) {
+    return "Check your network connection and that api.github.com is reachable, then re-run.";
+  }
+
+  if (/gh auth login|not logged in|bad credentials|http 401/.test(text)) {
+    return "Authenticate the GitHub CLI on the host with `gh auth login` using a write-capable account, then re-run.";
+  }
+
+  return "Run the failed `gh` command yourself to see the underlying error, then check `gh auth status` — the active account needs write access to this repository — and your network. krutrimbox performs every GitHub write on the host with your `gh` credentials.";
 }
 
 interface RawGhIssue {

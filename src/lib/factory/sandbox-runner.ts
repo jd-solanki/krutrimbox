@@ -1,4 +1,4 @@
-import type { CommandRunner } from "../github";
+import { commandFailureDetail, type CommandRunner } from "../github";
 import { diagnostics } from "../diagnostics";
 import type { CodingAgent } from "./agents/coding-agent";
 import { RunLogStream } from "./run-log/run-log-stream";
@@ -285,8 +285,38 @@ export class CommandSandboxRunner {
   // This is how a sandbox commit reaches `origin` without a write credential ever
   // entering the sandbox.
   private hostGit(command: string[]): Promise<string> {
-    return this.runner("git", ["-C", this.workspacePath, ...command]);
+    const args = ["-C", this.workspacePath, ...command];
+    return this.runner("git", args).catch((error: unknown) => {
+      throw diagnostics.KB_R0012({
+        detail: commandFailureDetail("git", args, error),
+        guidance: hostGitGuidance(error),
+        cause: error
+      });
+    });
   }
+}
+
+// Turns a host `git` failure into a remedy aimed at the most likely cause, read
+// from git's stderr text, most-specific first: a push rejected by the remote (a
+// branch-protection rule or a diverged branch), an authentication/permission
+// failure, or a connectivity failure. Anything unrecognized falls back to
+// inspecting the host repository state.
+function hostGitGuidance(error: unknown): string {
+  const text = (error instanceof Error ? error.message : String(error)).toLowerCase();
+
+  if (/\[rejected\]|non-fast-forward|failed to push|protected branch|push declined|hook declined|cannot lock ref/.test(text)) {
+    return "The push to origin was rejected — commonly a branch-protection rule or a diverged branch. Check the repository's branch protection and that the branch can be pushed, then re-run to resume the branch.";
+  }
+
+  if (/authentication failed|permission denied|could not read from remote|access denied|not authorized|403 forbidden/.test(text)) {
+    return "git could not authenticate to origin. Ensure your host git credentials can push to the repository (the same account krutrimbox uses for GitHub writes), then re-run.";
+  }
+
+  if (/could not resolve host|connection timed out|connection refused|network is unreachable|no such host/.test(text)) {
+    return "Check your network connection and access to the git remote, then re-run.";
+  }
+
+  return "Run the failed git command yourself to see the underlying error, resolve the host repository or remote state, then re-run.";
 }
 
 // Parses `sbx ls --json`, tolerating any non-JSON preamble `sbx` prints before
