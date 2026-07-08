@@ -37,6 +37,20 @@ The chosen base drives **both** the branch creation and the Target Issue Pull Re
 
 Because the branch is created from `origin/<base-branch>` (and resumed from `origin/<branch>`), a run is unaffected by your host working tree: you can be on any branch, with uncommitted changes or local commits that are not yet pushed, and none of that leaks into the Target Issue Branch.
 
+## Choosing the model
+
+By default each Agent Backend runs whichever **model** its own CLI picks — Codex and Claude Code each ship a maintained default. Pass `--model` to choose one explicitly; the value is handed straight to the backend's own model flag:
+
+```sh
+kb run --issue 1 --agent claude --model opus       # Claude Code, Opus
+kb run --issue 1 --agent codex  --model gpt-5-codex # Codex, a specific model
+kb run --agent claude                               # no --model → backend auto-picks
+```
+
+`--model` is **optional** — unlike `--agent`, which is always required. The model name is passed through unchanged, so use whatever names your chosen backend accepts, and one run's model always belongs to that one backend (a run uses a single Agent Backend end to end). There is no allowlist: if you mistype a model, the backend rejects it and the run fails with a clear "model not found" error rather than silently falling back to a different model.
+
+To review with a different model than you implemented with — for example implement with a fast model but review with a stronger one — set a per-step `model` on a hook Agent Action; see [Configuration → Hooks](/guide/configuration#hooks).
+
 ## Which issues krutrimbox works on
 
 krutrimbox works on issues assigned to **you** — the GitHub account `gh` is authenticated as — that carry the `ready-for-agent` label. An issue must be assigned to you alone; one assigned to someone else or to several people is skipped. Solo developers who don't assign issues can pass `--implement-unassigned` to also run issues with no assignee.

@@ -45,7 +45,11 @@ export interface CodingAgent {
   // Builds the argv run via `sbx exec ... -- <argv>` for one Sandboxed Agent
   // prompt. Each agent runs non-interactively (no human is attached to an AFK
   // Issue) and never resumes a prior session, keeping context fresh per issue.
-  buildExecCommand(prompt: string): string[];
+  //
+  // `model` is the operator-selected Model (ADR-0023), passed through verbatim to
+  // the backend CLI's own model flag. Omitted, no model flag is added and the
+  // backend CLI auto-picks its default — the pre-Model behavior, byte-for-byte.
+  buildExecCommand(prompt: string, model?: string): string[];
   // Present only for an agent that emits structured session output; absent for a
   // plain-prose agent (Codex), whose output streams and returns verbatim.
   readonly runLogCodec?: RunLogCodec;
@@ -55,8 +59,15 @@ const CODEX_AGENT: CodingAgent = {
   name: "codex",
   sbxAgentName: "codex",
   defaultTemplate: "docker.io/library/krutrimbox-codex:pnpm",
-  buildExecCommand(prompt) {
-    return ["codex", "exec", "--ephemeral", "--dangerously-bypass-approvals-and-sandbox", prompt];
+  buildExecCommand(prompt, model) {
+    return [
+      "codex",
+      "exec",
+      ...modelFlag(model),
+      "--ephemeral",
+      "--dangerously-bypass-approvals-and-sandbox",
+      prompt
+    ];
   }
 };
 
@@ -64,7 +75,7 @@ const CLAUDE_AGENT: CodingAgent = {
   name: "claude",
   sbxAgentName: "claude",
   defaultTemplate: "docker.io/library/krutrimbox-claude:pnpm",
-  buildExecCommand(prompt) {
+  buildExecCommand(prompt, model) {
     // `claude -p` is a fresh one-shot by construction — never `--continue` or
     // `--resume` — so it satisfies the fresh-context-per-AFK-Issue invariant
     // (ADR-0005). `--dangerously-skip-permissions` is the no-human analog of
@@ -80,6 +91,7 @@ const CLAUDE_AGENT: CodingAgent = {
       "claude",
       "-p",
       prompt,
+      ...modelFlag(model),
       "--output-format",
       "stream-json",
       "--verbose",
@@ -88,6 +100,14 @@ const CLAUDE_AGENT: CodingAgent = {
   },
   runLogCodec: claudeRunLogCodec
 };
+
+// The model argv fragment shared by both backends: `--model <value>` when a Model
+// is selected, nothing otherwise. Codex and Claude Code both accept `--model`, so
+// one canonical flag covers both — the value is passed through verbatim and each
+// CLI validates it (ADR-0023).
+function modelFlag(model?: string): string[] {
+  return model ? ["--model", model] : [];
+}
 
 const AGENTS_BY_NAME: Record<AgentName, CodingAgent> = {
   codex: CODEX_AGENT,

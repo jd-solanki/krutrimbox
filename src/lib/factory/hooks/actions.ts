@@ -83,6 +83,8 @@ class HookActionRunner {
     const output = await this.deps.sandbox.runAgentSession({
       sandboxName: context.sandboxName,
       prompt,
+      // The step's own Model overrides; absent, it inherits the run-level Model (ADR-0023).
+      model: action.model ?? this.deps.runModel,
       output: this.deps.output
     });
 

@@ -20,6 +20,9 @@ export interface SandboxCheckoutInput extends SandboxBranchInput {
 
 export interface SandboxAfkInput extends SandboxBranchInput {
   prompt: string;
+  // The run-level Model for this AFK Issue's Sandboxed Agent session (ADR-0023);
+  // omitted, the backend CLI auto-picks its default.
+  model?: string;
   output?: NodeJS.WritableStream;
 }
 
@@ -33,6 +36,10 @@ export interface SandboxCommitInput extends SandboxBranchInput {
 
 export interface SandboxAgentSessionInput extends SandboxInput {
   prompt: string;
+  // The Model for this Agent Action's session (ADR-0023): the step's own `model`
+  // when set, otherwise the run-level Model it inherits. Omitted, the backend CLI
+  // auto-picks its default.
+  model?: string;
   output?: NodeJS.WritableStream;
 }
 
@@ -155,11 +162,11 @@ export class CommandSandboxRunner {
   }
 
   public async runAfkIssue(input: SandboxAfkInput): Promise<void> {
-    await this.runAgent(input.sandboxName, input.prompt, input.output);
+    await this.runAgent(input.sandboxName, input.prompt, input.model, input.output);
   }
 
   public async runAgentSession(input: SandboxAgentSessionInput): Promise<string> {
-    return this.runAgent(input.sandboxName, input.prompt, input.output);
+    return this.runAgent(input.sandboxName, input.prompt, input.model, input.output);
   }
 
   // Runs one Sandboxed Agent session and returns its caller-facing text. The two
@@ -174,9 +181,10 @@ export class CommandSandboxRunner {
   private async runAgent(
     sandboxName: string,
     prompt: string,
+    model?: string,
     output?: NodeJS.WritableStream
   ): Promise<string> {
-    const command = this.agent.buildExecCommand(prompt);
+    const command = this.agent.buildExecCommand(prompt, model);
     const codec = this.agent.runLogCodec;
 
     try {

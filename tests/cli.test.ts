@@ -76,6 +76,34 @@ describe("krutrimbox CLI", () => {
     });
   });
 
+  test("forwards an explicit Model to a run", async () => {
+    const dispatch = createTestDispatch();
+    const program = createTestProgram(dispatch);
+
+    await program.parseAsync([
+      "node", "kb", "run", "--issue", "42", "--agent", "claude", "--model", "opus"
+    ]);
+
+    expect(dispatch.runExplicit).toHaveBeenCalledWith(42, "claude", {
+      baseBranch: undefined,
+      implementUnassigned: undefined,
+      model: "opus"
+    });
+  });
+
+  test("leaves the Model unset when --model is omitted, so the backend auto-picks", async () => {
+    const dispatch = createTestDispatch();
+    const program = createTestProgram(dispatch);
+
+    await program.parseAsync(["node", "kb", "run", "--agent", "codex"]);
+
+    expect(dispatch.runBatch).toHaveBeenCalledWith("codex", {
+      baseBranch: undefined,
+      implementUnassigned: undefined,
+      model: undefined
+    });
+  });
+
   test("requires an Agent Backend so a run never starts without one chosen", async () => {
     const program = createTestProgram(createTestDispatch());
 

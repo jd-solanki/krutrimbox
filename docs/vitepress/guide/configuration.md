@@ -76,7 +76,7 @@ A Hook Action is one of three kinds:
 
 | Action    | Does                                                                                                    |
 | --------- | ------------------------------------------------------------------------------------------------------ |
-| `agent`   | Runs a fresh AI session in the Target Issue Sandbox with your `prompt` (a file under `.krutrimbox/`). Captures its text as `{{steps.<id>.output}}`, and if the session changed code, commits and pushes it. |
+| `agent`   | Runs a fresh AI session in the Target Issue Sandbox with your `prompt` (a file under `.krutrimbox/`) and an optional `model`. Captures its text as `{{steps.<id>.output}}`, and if the session changed code, commits and pushes it. |
 | `comment` | Posts `body` as a pull request comment.                                                                 |
 | `command` | Runs one allowlisted `gh` command on the host (`run[0]` must be `gh`).                                  |
 
@@ -111,6 +111,20 @@ Agent prompts, comment bodies, and command arguments interpolate `{{...}}` place
 ### Agent actions
 
 An Agent Action owns its whole prompt (unlike the append-only Prompt Extensions above). The session runs with the sandbox's **read-only** GitHub token, so it gathers context itself — for example `gh pr diff {{pr_number}}` — and never mutates GitHub. If it changes code, krutrimbox commits and pushes that change **from the host**, with a message referencing the action and its prompt; these commits carry no `Refs` footer, so they stay out of the Done Set.
+
+An Agent Action may set its own `model`. When omitted, it **inherits** the run's [`--model`](/guide/running#choosing-the-model) (and, failing that, the backend CLI's default); when set, it overrides — so you can implement with one model and review with another:
+
+```json
+{
+  "hooks": {
+    "pull-request:ready": [
+      { "type": "agent", "id": "review", "prompt": "prompts/final-review.md", "model": "opus" }
+    ]
+  }
+}
+```
+
+The `model` is passed through to the same Agent Backend the run uses (a run never switches backends), so name a model that backend accepts; an unknown one fails the hook rather than falling back silently.
 
 ### Command actions
 

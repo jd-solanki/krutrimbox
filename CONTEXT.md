@@ -16,6 +16,10 @@ _Avoid_: worker, implementer, inner agent, Codex session
 The swappable coding agent that backs a Factory Run, selected per run by the required `--agent` flag (`codex` or `claude`). An Agent Backend encapsulates what differs between agents: the Docker Sandboxes agent name passed to `sbx create`, the non-interactive exec command built from a Sandboxed Agent prompt, the default krutrimbox Sandbox Template, and — when the agent emits structured rather than plain-prose session output — how that output is rendered into the run log. It does not own GitHub state or git operations.
 _Avoid_: agent type, model, provider, Sandboxed Agent
 
+**Model**:
+The specific LLM the selected Agent Backend runs, chosen by the optional `kb run --model` flag and overridable per hook Agent Action by an optional `model` field; the string is passed through verbatim to the backend CLI's own model flag, and when omitted the backend CLI auto-picks its default. Orthogonal to the Agent Backend, which selects the CLI, not the LLM.
+_Avoid_: agent, backend, provider, LLM
+
 **Read-Only GitHub Access**:
 Permission for a Sandboxed Agent to inspect GitHub state with non-mutating GitHub CLI commands while leaving issue, pull request, and label mutations to krutrimbox.
 _Avoid_: GitHub access, gh permissions, live state
@@ -206,6 +210,7 @@ _Avoid_: crash, unhandled error, panic
 - krutrimbox implements an **Implementation Issue** only when it is an **Owned Issue** for the **Operator**; on a shared **Parent Target Issue** the **Due Issue** decides whose turn it is, and a **Factory Run** pauses (handoff) or errors when the Due Issue is not the Operator's.
 - A **Factory Run** runs against exactly one **Agent Backend**, chosen by the required `--agent` flag; the Agent Backend supplies the **Sandboxed Agent** session and the **krutrimbox Sandbox Template** for that run's **Target Issue Sandbox**.
 - A built-in Sandboxed Agent prompt may carry one **Prompt Extension** per prompt, supplied through **Project Configuration**; unlike a **Template Slot**, it appends to the prompt rather than replacing it, so krutrimbox keeps ownership of the prompt's safety boundaries.
+- The **Model** an **Agent Backend** runs is chosen by the optional `--model` flag (auto-picked by the backend CLI when omitted) and defaults through to every **Agent Action** in the run, which may override it with its own `model`. It is orthogonal to the Agent Backend: one Agent Backend serves an entire **Factory Run**'s lifecycle, so a run's Model always belongs to that one backend's namespace.
 
 ## Flagged ambiguities
 

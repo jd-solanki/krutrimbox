@@ -211,6 +211,59 @@ describe("CommandSandboxRunner", () => {
     ]);
   });
 
+  test("passes a run-level Model through to the AFK Issue's exec command", async () => {
+    const calls: Array<{ command: string; args: string[] }> = [];
+    const runner: CommandRunner = async (command, args) => {
+      calls.push({ command, args });
+      return "";
+    };
+    const sandbox = new CommandSandboxRunner(runner, "/workspace/krutrimbox", claude, "template");
+
+    await sandbox.runAfkIssue({
+      sandboxName: "krutrimbox-issue-1-claude",
+      branchName: "krutrimbox/issue-1",
+      prompt: "implement #4",
+      model: "opus"
+    });
+
+    expect(calls[0].args.slice(5)).toEqual([
+      "claude",
+      "-p",
+      "implement #4",
+      "--model",
+      "opus",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--dangerously-skip-permissions"
+    ]);
+  });
+
+  test("passes an Agent Step's Model through to its exec command", async () => {
+    const calls: Array<{ command: string; args: string[] }> = [];
+    const runner: CommandRunner = async (command, args) => {
+      calls.push({ command, args });
+      return "review body";
+    };
+    const sandbox = new CommandSandboxRunner(runner, "/workspace/krutrimbox", codex, "template");
+
+    await sandbox.runAgentSession({
+      sandboxName: "krutrimbox-issue-1-codex",
+      prompt: "review the diff",
+      model: "gpt-5-codex"
+    });
+
+    expect(calls[0].args.slice(5)).toEqual([
+      "codex",
+      "exec",
+      "--model",
+      "gpt-5-codex",
+      "--ephemeral",
+      "--dangerously-bypass-approvals-and-sandbox",
+      "review the diff"
+    ]);
+  });
+
   test("tolerates a non-JSON preamble in `sbx ls` output instead of failing to parse it", async () => {
     // `sbx ls --json` can print progress (e.g. "Starting sandbox daemon...") before
     // the JSON. The existing sandbox must still be recognized so no duplicate create runs.

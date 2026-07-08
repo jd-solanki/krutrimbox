@@ -34,6 +34,37 @@ describe("resolveCodingAgent", () => {
     ]);
   });
 
+  test("passes an explicit Model through to Codex's own `--model` flag", () => {
+    expect(resolveCodingAgent("codex").buildExecCommand("do the work", "gpt-5-codex")).toEqual([
+      "codex",
+      "exec",
+      "--model",
+      "gpt-5-codex",
+      "--ephemeral",
+      "--dangerously-bypass-approvals-and-sandbox",
+      "do the work"
+    ]);
+  });
+
+  test("passes an explicit Model through to Claude's own `--model` flag", () => {
+    expect(resolveCodingAgent("claude").buildExecCommand("do the work", "opus")).toEqual([
+      "claude",
+      "-p",
+      "do the work",
+      "--model",
+      "opus",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--dangerously-skip-permissions"
+    ]);
+  });
+
+  test("omits the Model flag entirely when none is given, leaving the backend to auto-pick", () => {
+    expect(resolveCodingAgent("codex").buildExecCommand("work")).not.toContain("--model");
+    expect(resolveCodingAgent("claude").buildExecCommand("work")).not.toContain("--model");
+  });
+
   test("gives Claude a run-log codec to decode its structured output, but not Codex", () => {
     expect(resolveCodingAgent("claude").runLogCodec).toBeDefined();
     expect(resolveCodingAgent("codex").runLogCodec).toBeUndefined();

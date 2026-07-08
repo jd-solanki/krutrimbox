@@ -283,6 +283,35 @@ describe("Project Configuration fails fast", () => {
       { kind: "command", run: ["gh", "pr", "ready", "{{pr_number}}"] }
     ]);
   });
+
+  test("resolves an agent action's optional Model, carrying it onto the loaded action", async () => {
+    await project.writeFileUnder("prompts/review.md", "Review the PR.");
+    await project.writeConfig(
+      JSON.stringify({
+        hooks: {
+          "pull-request:ready": [
+            { type: "agent", id: "review", prompt: "prompts/review.md", model: "opus" }
+          ]
+        }
+      })
+    );
+
+    expect(loadProjectConfig(project.dir).hooks.get("pull-request:ready")).toEqual([
+      { kind: "agent", id: "review", prompt: "Review the PR.", model: "opus" }
+    ]);
+  });
+
+  test("rejects a non-string Model on an agent action", async () => {
+    await project.writeFileUnder("prompts/review.md", "Review the PR.");
+    await project.writeConfig(
+      JSON.stringify({
+        hooks: {
+          "pull-request:ready": [{ type: "agent", prompt: "prompts/review.md", model: 5 }]
+        }
+      })
+    );
+    expectInvalid(/hooks\.pull-request:ready\.0\.model/);
+  });
 });
 
 describe("built-in Markdown assets ship with the package", () => {

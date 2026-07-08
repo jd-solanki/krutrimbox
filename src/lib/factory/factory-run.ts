@@ -49,6 +49,10 @@ export interface FactoryRunDependencies {
   // The Agent Backend chosen for this run. It scopes the Target Issue Sandbox
   // name; the SandboxRunner is already wired to the same agent.
   agent: CodingAgent;
+  // The run-level Model (`kb run --model`, ADR-0023): the default Model for every
+  // Sandboxed Agent session this run starts — AFK implementation and any Agent
+  // Action (which may override it). Omitted, the backend CLI auto-picks its default.
+  model?: string;
   // The current repository's `owner/name`, resolved once at dispatch. Scopes the
   // Target Issue Sandbox name to this repository (ADR-0007).
   repositorySlug: string;
@@ -105,6 +109,8 @@ export class FactoryRun {
   // The run's Agent Backend name, surfaced in rerun commands so a resumed run
   // re-selects the same agent (`--agent` is required and has no default).
   private readonly agentName: string;
+  // The run-level Model, applied to AFK sessions and inherited by Agent Actions.
+  private readonly model?: string;
   private readonly baseBranch: string;
   private readonly operator: string;
   private readonly allowUnassigned: boolean;
@@ -134,6 +140,7 @@ export class FactoryRun {
     this.output = dependencies.output;
     this.logFilePath = dependencies.logFilePath ?? null;
     this.agentName = dependencies.agent.name;
+    this.model = dependencies.model;
     this.baseBranch = dependencies.baseBranch;
     this.operator = dependencies.operator;
     this.allowUnassigned = dependencies.allowUnassigned;
@@ -310,6 +317,7 @@ export class FactoryRun {
         sandboxName: this.sandboxName,
         branchName: this.branchName,
         prompt: await this.buildAfkPrompt(issue, priorIssues, laterIssues),
+        model: this.model,
         output: this.output
       });
 
@@ -447,6 +455,7 @@ export class FactoryRun {
       sandbox: this.sandbox,
       runHostCommand: this.hostCommandRunner,
       logger: this.logger,
+      runModel: this.model,
       output: this.output
     };
 

@@ -52,6 +52,10 @@ export interface RunOptions {
   // The Implement-Unassigned Override (`--implement-unassigned`): run zero-assignee
   // issues too. A solo-developer escape hatch (ADR-0018).
   implementUnassigned?: boolean;
+  // The run-level Model (`--model`, ADR-0023): the LLM the Agent Backend runs, the
+  // default for every Sandboxed Agent session this run starts. Omitted, the backend
+  // CLI auto-picks its default.
+  model?: string;
 }
 
 // The resolved per-run context: everything a dispatch needs that does not vary
@@ -62,6 +66,8 @@ interface RunContext {
   baseBranch: string;
   operator: string;
   allowUnassigned: boolean;
+  // The run-level Model, resolved once and passed to every dispatched Factory Run.
+  model?: string;
 }
 
 // The top-level orchestrator: discovers the Operator's Target Issues and
@@ -149,7 +155,8 @@ export class Krutrimbox {
       agent,
       baseBranch: options.baseBranch ?? (await this.github.getDefaultBranch()),
       operator: await this.github.getAuthenticatedUser(),
-      allowUnassigned: options.implementUnassigned ?? false
+      allowUnassigned: options.implementUnassigned ?? false,
+      model: options.model
     };
   }
 
@@ -211,6 +218,7 @@ export class Krutrimbox {
       github: this.github,
       sandbox: this.buildSandbox(context.agent),
       agent: context.agent,
+      model: context.model,
       repositorySlug: await this.github.getRepositorySlug(),
       baseBranch: context.baseBranch,
       operator: context.operator,

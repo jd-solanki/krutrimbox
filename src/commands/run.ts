@@ -44,16 +44,27 @@ export function createRunCommand(dispatch: CliDispatch = runKrutrimbox): Command
         "also run issues that have no assignee (solo-developer escape hatch)"
       )
     )
+    .addOption(
+      // Optional: the Model the Agent Backend runs (ADR-0023). Passed through
+      // verbatim to the backend CLI; omitted, that CLI auto-picks its default. Unlike
+      // `--agent`, there is no allowlist — an unknown model fails at the backend.
+      new Option(
+        "--model <model>",
+        "the model the Agent Backend runs (default: the backend CLI's own default)"
+      )
+    )
     .action(
       async (options: {
         issue?: number;
         agent: AgentName;
         baseBranch?: string;
         implementUnassigned?: boolean;
+        model?: string;
       }) => {
         const runOptions: RunOptions = {
           baseBranch: options.baseBranch,
-          implementUnassigned: options.implementUnassigned
+          implementUnassigned: options.implementUnassigned,
+          model: options.model
         };
 
         if (typeof options.issue === "number") {

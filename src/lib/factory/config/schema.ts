@@ -20,10 +20,16 @@ import { ALLOWED_GH_COMMANDS, isAllowedGhCommand } from "./gh-allowlist";
 //              `.krutrimbox/`; its text result is exposed as `{{steps.<id>.output}}`.
 //   - comment: posts `body` as a pull request comment.
 //   - command: runs the `gh` invocation in `run` on the host (allowlisted).
+//
+// `model` selects the Model this step's session runs (ADR-0023); omitted, the step
+// inherits the run-level `--model`, or the backend CLI's default when that too is
+// absent. It is passed through verbatim, so an unknown value fails the step at the
+// backend rather than being rejected here.
 const AgentActionSchema = v.strictObject({
   type: v.literal("agent"),
   id: v.optional(v.string()),
-  prompt: v.string()
+  prompt: v.string(),
+  model: v.optional(v.string())
 });
 
 const CommentActionSchema = v.strictObject({

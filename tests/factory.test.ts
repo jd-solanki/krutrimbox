@@ -712,6 +712,56 @@ describe("Krutrimbox", () => {
     expect(sandbox.removeSandbox).toHaveBeenCalledWith({ sandboxName: fakeCodexSandbox(1) });
   });
 
+  test("applies the run-level Model to the AFK Issue's Sandboxed Agent session", async () => {
+    const github = new FakeGitHubClient({
+      targetIssues: [targetIssue()],
+      subIssuesByTargetIssue: new Map([
+        [1, [implementationIssue({ number: 3, title: "Bootstrap", labels: ["ready-for-agent"] })]]
+      ])
+    });
+    const sandbox = new FakeSandboxRunner();
+    const factory = new Krutrimbox({
+      github,
+      sandbox,
+      lockStore: fakeLockStore(),
+      templates: fixtureTemplates
+    });
+
+    await factory.runExplicit(1, "codex", { model: "gpt-5-codex" });
+
+    const afkCall = sandbox.calls.find((call) => call.name === "runAfkIssue");
+    expect(afkCall?.input.model).toBe("gpt-5-codex");
+  });
+
+  test("an Agent Action inherits the run-level Model, and its own model overrides it", async () => {
+    const github = new FakeGitHubClient({
+      targetIssues: [targetIssue()],
+      pullRequests: [{ number: 10, isDraft: true, labels: [{ name: "krutrimbox" }] }],
+      subIssuesByTargetIssue: new Map([
+        [1, [implementationIssue({ number: 3, title: "Bootstrap", labels: ["ready-for-agent"] })]]
+      ]),
+      branchCommitMessages: ["Bootstrap\n\nRefs #3"]
+    });
+    const sandbox = new FakeSandboxRunner();
+    const factory = new Krutrimbox({
+      github,
+      sandbox,
+      lockStore: fakeLockStore(),
+      templates: fixtureTemplates,
+      hooks: prReadyHook([
+        { kind: "agent", id: "inherits", prompt: "Inherit the run Model." },
+        { kind: "agent", id: "overrides", prompt: "Use my own Model.", model: "opus" }
+      ])
+    });
+
+    await factory.runExplicit(1, "codex", { model: "sonnet" });
+
+    const sessionModels = sandbox.calls
+      .filter((call) => call.name === "runAgentSession")
+      .map((call) => call.input.model);
+    expect(sessionModels).toEqual(["sonnet", "opus"]);
+  });
+
   test("skips the pull-request:ready hook when the pull request is already ready", async () => {
     const github = new FakeGitHubClient({
       targetIssues: [targetIssue()],

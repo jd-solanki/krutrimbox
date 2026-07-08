@@ -27,7 +27,7 @@ const CONFIG_FILE = `${PROJECT_CONFIG_DIRNAME}/${PROJECT_CONFIG_FILENAME}`;
 // loaded values, not raw config: an Agent Action's `prompt` here is the Markdown
 // contents read from disk, not the path written in `config.json`.
 export type ResolvedHookAction =
-  | { kind: "agent"; id?: string; prompt: string }
+  | { kind: "agent"; id?: string; prompt: string; model?: string }
   | { kind: "comment"; body: string }
   | { kind: "command"; run: string[] };
 
@@ -119,7 +119,8 @@ class ProjectConfigLoader {
             "hook agent prompt",
             action.id ?? `${hookName}[${index}]`,
             action.prompt
-          )
+          ),
+          model: action.model
         };
       case "comment":
         return { kind: "comment", body: action.body };
