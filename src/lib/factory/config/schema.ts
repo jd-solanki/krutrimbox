@@ -21,7 +21,7 @@ import { ALLOWED_GH_COMMANDS, isAllowedGhCommand } from "./gh-allowlist";
 //   - comment: posts `body` as a pull request comment.
 //   - command: runs the `gh` invocation in `run` on the host (allowlisted).
 //
-// `model` selects the Model this step's session runs (ADR-0023) and `effort` its
+// `model` selects the Model this action's session runs (ADR-0023) and `effort` its
 // Reasoning Effort (ADR-0024); omitted, each inherits the run-level `--model` /
 // `--effort`, or the backend CLI's default when that too is absent. Both are passed
 // through verbatim, so an unknown value is handled by the backend rather than being

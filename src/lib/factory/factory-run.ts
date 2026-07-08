@@ -557,7 +557,7 @@ export class FactoryRun {
   }
 
   // Ensures the Target Issue Sandbox exists and records that it now needs teardown.
-  // Both AFK implementation and Agent Steps route through here so cleanup is
+  // Both AFK implementation and Agent Actions route through here so cleanup is
   // decided in one place (ADR-0006).
   private async ensureSandbox(): Promise<void> {
     await this.sandbox.ensureSandbox({ sandboxName: this.sandboxName });

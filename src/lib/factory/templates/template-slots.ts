@@ -30,7 +30,7 @@ export function isTemplateSlot(value: string): value is TemplateSlot {
 // overridable, but each one accepts an append-only Prompt Extension keyed by
 // these same names through `.krutrimbox/config.json` (ADR-0013). Final review is
 // no longer a built-in prompt: review is an operator-authored Review Pipeline
-// whose Agent Steps supply their own prompts (ADR-0021).
+// whose Agent Actions supply their own prompts (ADR-0021).
 export const PROMPT_ASSETS = {
   afkIssue: "prompts/afk-issue.md"
 } as const;

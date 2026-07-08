@@ -39,7 +39,7 @@ export interface SandboxCommitInput extends SandboxBranchInput {
 export interface SandboxAgentSessionInput extends SandboxInput {
   prompt: string;
   // The Model (ADR-0023) and Reasoning Effort (ADR-0024) for this Agent Action's
-  // session: the step's own value when set, otherwise the run-level value it
+  // session: the action's own value when set, otherwise the run-level value it
   // inherits. Each omitted knob lets the backend CLI auto-pick its default.
   model?: string;
   effort?: string;
@@ -47,8 +47,8 @@ export interface SandboxAgentSessionInput extends SandboxInput {
 }
 
 export interface SandboxReviewCommitInput extends SandboxBranchInput {
-  // The commit subject and body for an Agent Step's code changes. The body
-  // carries the step's prompt for traceability (ADR-0021). Unlike AFK commits,
+  // The commit subject and body for an Agent Action's code changes. The body
+  // carries the action's prompt for traceability (ADR-0021). Unlike AFK commits,
   // a review commit carries no `Refs #` footer, so it never enters the Done Set.
   subject: string;
   body: string;
@@ -175,8 +175,8 @@ export class CommandSandboxRunner {
   }
 
   // Runs one Sandboxed Agent session and returns its caller-facing text. The two
-  // public entry points differ only in whether they use that text: a Review
-  // Pipeline Agent Step returns it as a Step Output, an AFK Issue discards it.
+  // public entry points differ only in whether they use that text: an Agent Action
+  // returns it as an Action Output, an AFK Issue discards it.
   //
   // A structured-output agent (one with a run-log codec) speaks newline-delimited
   // JSON: its raw stdout is decoded to readable lines on the way to the run log,
@@ -198,7 +198,7 @@ export class CommandSandboxRunner {
       }
 
       // Render to the run log only when there is one; the caller-facing text is
-      // extracted regardless (an Agent Step needs it even with no run-log output).
+      // extracted regardless (an Agent Action needs it even with no run-log output).
       const renderStream = output ? new RunLogStream(codec, output) : undefined;
       const stdout = await this.exec(sandboxName, command, { output: renderStream ?? output });
       renderStream?.flush();
@@ -244,17 +244,17 @@ export class CommandSandboxRunner {
     await this.publishBranch(input.sandboxName, input.branchName);
   }
 
-  // Whether the sandbox working tree has uncommitted changes — the signal that a
-  // Review Pipeline Agent Step modified code that should be committed (ADR-0021).
+  // Whether the sandbox working tree has uncommitted changes — the signal that an
+  // Agent Action modified code that should be committed (ADR-0021).
   // Kept a pure query so the caller decides whether to commit (see commitReviewChanges).
   public async hasWorkingTreeChanges(input: SandboxInput): Promise<boolean> {
     const status = await this.exec(input.sandboxName, ["git", "status", "--porcelain"]);
     return status.trim().length > 0;
   }
 
-  // Commits an Agent Step's code changes in the sandbox and publishes them from the
+  // Commits an Agent Action's code changes in the sandbox and publishes them from the
   // HOST, the same read-only-token-in / host-push-out boundary as commitAndPush.
-  // The body carries the step's prompt for traceability, and there is deliberately
+  // The body carries the action's prompt for traceability, and there is deliberately
   // no `Refs #` footer: a review commit completes no Implementation Issue, so it
   // must stay out of the Done Set.
   public async commitReviewChanges(input: SandboxReviewCommitInput): Promise<void> {

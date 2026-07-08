@@ -69,7 +69,7 @@ describe("ProjectTemplateRenderer built-in defaults", () => {
     expect(prompt).toContain("Work on the Target Issue Branch: `krutrimbox/issue-1`.");
   });
 
-  test("interpolates dotted placeholder keys such as Step Outputs", () => {
+  test("interpolates dotted placeholder keys such as Action Outputs", () => {
     expect(interpolate("Review:\n\n{{steps.review.output}}", { "steps.review.output": "LGTM" }))
       .toBe("Review:\n\nLGTM");
   });

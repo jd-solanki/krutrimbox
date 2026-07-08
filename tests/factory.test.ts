@@ -1887,7 +1887,7 @@ function recordingLockStore({ lockedTargetIssues = new Set<number>() }: { locked
 const fixtureTemplates: TemplateRenderer = new ProjectTemplateRenderer();
 
 // The common AFK-failure fixture: a Target Issue #1 with one agent-ready
-// Implementation Issue #4, so a run reaches the agent step and can fail there.
+// Implementation Issue #4, so a run reaches the agent phase and can fail there.
 function afkFailureGitHub(): FakeGitHubClient {
   return new FakeGitHubClient({
     targetIssues: [targetIssue()],

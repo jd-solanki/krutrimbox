@@ -239,7 +239,7 @@ describe("CommandSandboxRunner", () => {
     ]);
   });
 
-  test("passes an Agent Step's Model through to its exec command", async () => {
+  test("passes an Agent Action's Model through to its exec command", async () => {
     const calls: Array<{ command: string; args: string[] }> = [];
     const runner: CommandRunner = async (command, args) => {
       calls.push({ command, args });
@@ -292,7 +292,7 @@ describe("CommandSandboxRunner", () => {
     ]);
   });
 
-  test("passes an Agent Step's Reasoning Effort through to Codex's config override", async () => {
+  test("passes an Agent Action's Reasoning Effort through to Codex's config override", async () => {
     const calls: Array<{ command: string; args: string[] }> = [];
     const runner: CommandRunner = async (command, args) => {
       calls.push({ command, args });
@@ -358,7 +358,7 @@ describe("CommandSandboxRunner", () => {
     expect(((failure as Error).cause as Error)).toBe(execError);
   });
 
-  test("runs an Agent Step session through the Codex Agent Backend's exec command", async () => {
+  test("runs an Agent Action session through the Codex Agent Backend's exec command", async () => {
     const calls: Array<{ command: string; args: string[] }> = [];
     const runner: CommandRunner = async (command, args) => {
       calls.push({ command, args });

@@ -38,7 +38,7 @@ export interface KrutrimboxDependencies {
   hooks?: Map<KrutrimboxHookName, ResolvedHookAction[]>;
   logger?: Pick<Console, "log">;
   openRunLog?: RunLogFactory;
-  // Runs `gh` Command Steps on the host. Injected in tests so a Command Step
+  // Runs `gh` Command Actions on the host. Injected in tests so a Command Action
   // never spawns a real `gh`; in production the exec-file runner is used.
   commandRunner?: CommandRunner;
   cwd?: string;

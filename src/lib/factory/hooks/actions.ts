@@ -81,7 +81,7 @@ class HookActionRunner {
     values: InterpolationValues
   ): Promise<string> {
     const prompt = interpolate(action.prompt, values);
-    // The step's own tuning overrides; absent, it inherits the run-level Model
+    // The action's own tuning overrides; absent, it inherits the run-level Model
     // (ADR-0023) and Reasoning Effort (ADR-0024). We log what we pass — the
     // resolved values are not echoed back by the backend.
     const options: AgentSessionOptions = {
