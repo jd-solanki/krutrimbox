@@ -20,10 +20,36 @@ import {
 } from "./factory-run";
 import { loadProjectConfig, type ResolvedHookAction } from "./config";
 import { type KrutrimboxHookName } from "./hooks/names";
-import { FileTargetIssueLockStore, type TargetIssueLockStore } from "./lock-store";
+import { FileTargetIssueLockStore, type TargetIssueLock, type TargetIssueLockStore } from "./lock-store";
 import { createFileRunLogFactory, type RunLogFactory } from "./run-log/run-log";
 import { CommandSandboxRunner, type SandboxRunner } from "./sandbox-runner";
 import { ProjectTemplateRenderer, type TemplateRenderer } from "./templates/template-renderer";
+
+// The termination signals a Factory Run traps: the two graceful stops (Ctrl+C and
+// `kill`) that would otherwise leave the Target Issue Lock behind and wedge the
+// next run. A hard kill (SIGKILL) cannot be trapped and is recovered from manually
+// via the enriched "already locked" message instead (#34, ADR-0026).
+export type TerminationSignal = "SIGINT" | "SIGTERM";
+
+const TERMINATION_SIGNALS: readonly TerminationSignal[] = ["SIGINT", "SIGTERM"];
+
+// The process-signal seam. Injected so a run can register termination handlers
+// without unit tests installing real handlers on the test process, and so
+// re-raising a handled signal is observable in tests rather than fatal.
+export interface ProcessSignals {
+  on(signal: TerminationSignal, handler: () => void): void;
+  off(signal: TerminationSignal, handler: () => void): void;
+  // Re-raise `signal` at this process. The caller removes its own handler first, so
+  // Node's default disposition then terminates with the conventional exit code.
+  raiseDefault(signal: TerminationSignal): void;
+}
+
+// The production seam, backed by the real process.
+const nodeProcessSignals: ProcessSignals = {
+  on: (signal, handler) => void process.on(signal, handler),
+  off: (signal, handler) => void process.off(signal, handler),
+  raiseDefault: (signal) => void process.kill(process.pid, signal)
+};
 
 export interface KrutrimboxDependencies {
   github?: GitHubClient;
@@ -37,6 +63,10 @@ export interface KrutrimboxDependencies {
   // otherwise loaded from `.krutrimbox/config.json` alongside the templates.
   hooks?: Map<KrutrimboxHookName, ResolvedHookAction[]>;
   logger?: Pick<Console, "log">;
+  // The process-signal seam (default: the real process). Injected in tests so
+  // registering termination handlers and re-raising a trapped signal are observable
+  // without touching the test process.
+  signals?: ProcessSignals;
   openRunLog?: RunLogFactory;
   // Runs `gh` Command Actions on the host. Injected in tests so a Command Action
   // never spawns a real `gh`; in production the exec-file runner is used.
@@ -87,6 +117,13 @@ export class Krutrimbox {
   private readonly github: GitHubClient;
   private readonly lockStore: TargetIssueLockStore;
   private readonly logger: Pick<Console, "log">;
+  private readonly signals: ProcessSignals;
+  // The lock the in-flight dispatch holds, so a termination signal can release it
+  // before the process exits. Null during discovery and between dispatched issues.
+  private activeLock: TargetIssueLock | null = null;
+  // Latched once a termination signal starts shutting the run down, so a second
+  // signal (an impatient second Ctrl+C) does not begin a second release.
+  private shuttingDown = false;
   private readonly openRunLog: RunLogFactory;
   private readonly templates: TemplateRenderer;
   private readonly hooks: Map<KrutrimboxHookName, ResolvedHookAction[]>;
@@ -106,6 +143,7 @@ export class Krutrimbox {
     this.github = dependencies.github ?? createGitHubCliClient();
     this.lockStore = dependencies.lockStore ?? new FileTargetIssueLockStore(cwd);
     this.logger = dependencies.logger ?? console;
+    this.signals = dependencies.signals ?? nodeProcessSignals;
     this.openRunLog = dependencies.openRunLog ?? createFileRunLogFactory(cwd, this.logger);
     // Load the committed config once and derive both the templates and the
     // lifecycle hooks from it, so an invalid config fails fast and is read a single
@@ -125,37 +163,111 @@ export class Krutrimbox {
     agentName: AgentName,
     options: RunOptions = {}
   ): Promise<void> {
-    const agent = resolveCodingAgent(agentName);
-    await this.github.ensureRequiredLabels();
-    const context = await this.buildRunContext(agent, options);
+    await this.runWithSignalRelease(async () => {
+      const agent = resolveCodingAgent(agentName);
+      await this.github.ensureRequiredLabels();
+      const context = await this.buildRunContext(agent, options);
 
-    this.logger.log(
-      `krutrimbox: starting Explicit Run for Target Issue #${issueNumber} with the ${agent.name} Agent Backend`
-      + `${formatSessionOptions(options)}.`
-    );
+      this.logger.log(
+        `krutrimbox: starting Explicit Run for Target Issue #${issueNumber} with the ${agent.name} Agent Backend`
+        + `${formatSessionOptions(options)}.`
+      );
 
-    const targetIssue = await this.github.getIssue(issueNumber);
-    await this.dispatch(targetIssue, context);
+      const targetIssue = await this.github.getIssue(issueNumber);
+      await this.dispatch(targetIssue, context);
+    });
   }
 
   public async runBatch(agentName: AgentName, options: RunOptions = {}): Promise<void> {
-    const agent = resolveCodingAgent(agentName);
-    this.logger.log(
-      `krutrimbox: starting Batch Run for ready Target Issues with the ${agent.name} Agent Backend`
-      + `${formatSessionOptions(options)}.`
-    );
-    await this.github.ensureRequiredLabels();
-    const context = await this.buildRunContext(agent, options);
-    this.logger.log(`krutrimbox: discovering Target Issues assigned to ${context.operator}.`);
+    await this.runWithSignalRelease(async () => {
+      const agent = resolveCodingAgent(agentName);
+      this.logger.log(
+        `krutrimbox: starting Batch Run for ready Target Issues with the ${agent.name} Agent Backend`
+        + `${formatSessionOptions(options)}.`
+      );
+      await this.github.ensureRequiredLabels();
+      const context = await this.buildRunContext(agent, options);
+      this.logger.log(`krutrimbox: discovering Target Issues assigned to ${context.operator}.`);
 
-    const targetIssues = await this.discoverBatchTargetIssues(context);
-    const outcomes: DispatchOutcome[] = [];
+      const targetIssues = await this.discoverBatchTargetIssues(context);
+      const outcomes: DispatchOutcome[] = [];
 
-    for (const targetIssue of targetIssues) {
-      outcomes.push(await this.dispatch(targetIssue, context));
+      for (const targetIssue of targetIssues) {
+        outcomes.push(await this.dispatch(targetIssue, context));
+      }
+
+      this.logBatchSummary(outcomes);
+    });
+  }
+
+  // Brackets a run with termination handlers so an interrupting SIGINT/SIGTERM
+  // releases the Target Issue Lock the in-flight dispatch holds before the process
+  // exits — otherwise the lock survives and wedges the next `kb run` (#34). Only the
+  // lock is released; the sandbox and run log are left for inspection (ADR-0026).
+  private async runWithSignalRelease(run: () => Promise<void>): Promise<void> {
+    const handlers = this.installSignalHandlers();
+    try {
+      await run();
+    } finally {
+      this.removeSignalHandlers(handlers);
     }
+  }
 
-    this.logBatchSummary(outcomes);
+  // Registers one handler per termination signal that releases the held lock and
+  // re-raises the signal. Returns the handlers so they can be removed once the run
+  // ends normally, leaving the process's signal disposition as it was.
+  private installSignalHandlers(): Map<TerminationSignal, () => void> {
+    const handlers = new Map<TerminationSignal, () => void>();
+    for (const signal of TERMINATION_SIGNALS) {
+      const handler = (): void => void this.releaseLockAndReraise(signal, handlers);
+      this.signals.on(signal, handler);
+      handlers.set(signal, handler);
+    }
+    return handlers;
+  }
+
+  private removeSignalHandlers(handlers: Map<TerminationSignal, () => void>): void {
+    for (const [signal, handler] of handlers) {
+      this.signals.off(signal, handler);
+    }
+    handlers.clear();
+  }
+
+  // Releases the held lock, then re-raises the signal so the process still exits
+  // with the conventional code. Handlers are removed first so a second signal
+  // during the release falls through to the default disposition, and `shuttingDown`
+  // guards against a second release if a second signal still slips in.
+  private async releaseLockAndReraise(
+    signal: TerminationSignal,
+    handlers: Map<TerminationSignal, () => void>
+  ): Promise<void> {
+    if (this.shuttingDown) {
+      return;
+    }
+    this.shuttingDown = true;
+    this.removeSignalHandlers(handlers);
+    try {
+      await this.releaseActiveLock();
+    } catch {
+      // The lock could not be released (e.g. an fs error deleting the lock dir).
+      // Swallow it and re-raise anyway: hanging here would relocate the very wedge
+      // #34 fixes, and the stale lock left behind is recoverable via the enriched
+      // "already locked" message on the next run.
+    } finally {
+      this.signals.raiseDefault(signal);
+    }
+  }
+
+  // Releases the lock the current dispatch holds, if any, and clears it. Reading and
+  // nulling `activeLock` synchronously before awaiting `release()` means a signal
+  // handler and a dispatch's `finally` racing to release it act exactly once.
+  private async releaseActiveLock(): Promise<void> {
+    const lock = this.activeLock;
+    if (!lock) {
+      return;
+    }
+    this.activeLock = null;
+    await lock.release();
   }
 
   // Resolves the once-per-run context: the Operator (the authenticated GitHub
@@ -218,9 +330,15 @@ export class Krutrimbox {
     const lock = await this.lockStore.acquire(targetIssue.number);
 
     if (!lock) {
-      this.logger.log(`krutrimbox: skipping Target Issue #${targetIssue.number}; issue is already locked.`);
+      this.logger.log(
+        `krutrimbox: skipping Target Issue #${targetIssue.number}; it is already locked `
+        + `(${this.lockStore.lockPath(targetIssue.number)}). If no run is active — e.g. after a `
+        + `crash — delete that directory to clear the stale lock.`
+      );
       return "skipped";
     }
+
+    this.activeLock = lock;
 
     const runLog = this.openRunLog(targetIssue.number);
     if (runLog.filePath) {
@@ -249,7 +367,7 @@ export class Krutrimbox {
       return await new FactoryRun(runDependencies, targetIssue).process();
     } finally {
       await runLog.close();
-      await lock.release();
+      await this.releaseActiveLock();
     }
   }
 

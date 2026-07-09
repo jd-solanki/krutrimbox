@@ -46,15 +46,24 @@ export class FileTargetIssueLockStore {
     }
   }
 
+  // The absolute path of a Target Issue's lock directory. Exposed so a run that
+  // fails to acquire the lock can name the exact directory in its skip message —
+  // the manual escape hatch for a stale lock a hard-killed run left behind, which
+  // krutrimbox does not auto-reclaim (#34, ADR-0026).
+  public lockPath(targetIssueNumber: number): string {
+    return this.lockDir(targetIssueNumber);
+  }
+
   private lockDir(targetIssueNumber: number): string {
     return path.join(this.cwd, ".krutrimbox", "locks", `issue-${targetIssueNumber}.lock`);
   }
 }
 
-// Injection seam for the Factory Run, which only ever acquires. The read-only
-// `isHeld` probe is deliberately outside it — Sandbox Inspection consumes that
-// through its own dependency, so the run path is never asked to provide it.
-export type TargetIssueLockStore = Pick<FileTargetIssueLockStore, "acquire">;
+// Injection seam for the Factory Run: it acquires the lock, and names its path when
+// acquisition fails. The read-only `isHeld` probe is deliberately outside it —
+// Sandbox Inspection consumes that through its own dependency, so the run path is
+// never asked to provide it.
+export type TargetIssueLockStore = Pick<FileTargetIssueLockStore, "acquire" | "lockPath">;
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error;

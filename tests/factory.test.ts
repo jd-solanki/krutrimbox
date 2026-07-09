@@ -18,9 +18,11 @@ import {
   ProjectTemplateRenderer,
   resolveCodingAgent,
   type KrutrimboxHookName,
+  type ProcessSignals,
   type ResolvedHookAction,
   type TargetIssueLock,
   type TargetIssueLockStore,
+  type TerminationSignal,
   type SandboxRunner,
   type TemplateRenderer
 } from "../src/lib/factory/index";
@@ -237,6 +239,130 @@ describe("Krutrimbox", () => {
 
     expect(lockStore.acquire).toHaveBeenCalledWith(1);
     expect(github.getAttachedSubIssues).not.toHaveBeenCalled();
+  });
+
+  test("names the lock directory and the manual-clear remedy when a Target Issue is already locked (#34)", async () => {
+    const logger = { log: vi.fn() };
+    const factory = new Krutrimbox({
+      github: new FakeGitHubClient({ targetIssues: [targetIssue()] }),
+      sandbox: new FakeSandboxRunner(),
+      lockStore: fakeLockStore({ locked: true }),
+      templates: fixtureTemplates,
+      logger
+    });
+
+    await factory.runExplicit(1, "codex");
+
+    expect(logger.log).toHaveBeenCalledWith(expect.stringContaining(".krutrimbox/locks/issue-1.lock"));
+    expect(logger.log).toHaveBeenCalledWith(
+      expect.stringContaining("delete that directory to clear the stale lock")
+    );
+  });
+
+  test("installs SIGINT and SIGTERM handlers around a run and removes them once it ends", async () => {
+    const signals = fakeSignals();
+    const factory = new Krutrimbox({
+      github: new FakeGitHubClient({ targetIssues: [targetIssue()] }),
+      sandbox: new FakeSandboxRunner(),
+      lockStore: fakeLockStore({ locked: true }),
+      templates: fixtureTemplates,
+      signals,
+      logger: { log: vi.fn() }
+    });
+
+    await factory.runExplicit(1, "codex");
+
+    expect(signals.on.mock.calls.map(([signal]) => signal)).toEqual(["SIGINT", "SIGTERM"]);
+    expect(signals.handlerCount("SIGINT")).toBe(0);
+    expect(signals.handlerCount("SIGTERM")).toBe(0);
+  });
+
+  test("releases the held lock and re-raises the signal when a run is interrupted (#34)", async () => {
+    const github = new FakeGitHubClient({
+      targetIssues: [targetIssue()],
+      subIssuesByTargetIssue: new Map([[1, [implementationIssue({ number: 4, labels: ["ready-for-agent"] })]]])
+    });
+    const lockStore = recordingLockStore();
+    const signals = fakeSignals();
+
+    // Pause the run at its first sandbox call so the signal arrives while the lock is
+    // held; unblock afterwards so the interrupted run can unwind within the test
+    // (a real run would already be terminating via the re-raised signal).
+    const reachedSandbox = deferred<void>();
+    const unblockSandbox = deferred<void>();
+    const sandbox = new FakeSandboxRunner();
+    sandbox.ensureSandbox.mockImplementation(async () => {
+      reachedSandbox.resolve();
+      await unblockSandbox.promise;
+    });
+
+    const factory = new Krutrimbox({
+      github,
+      sandbox,
+      lockStore,
+      templates: fixtureTemplates,
+      signals,
+      logger: { log: vi.fn() }
+    });
+
+    const run = factory.runExplicit(1, "codex");
+    await reachedSandbox.promise;
+
+    signals.fire("SIGINT");
+    // Re-raising is the last step of the handler, so awaiting it guarantees the
+    // release that precedes it has already run.
+    await vi.waitFor(() => expect(signals.raised).toEqual(["SIGINT"]));
+
+    expect(lockStore.released).toContain(1);
+    expect(signals.handlerCount("SIGINT")).toBe(0);
+
+    unblockSandbox.resolve();
+    await run;
+  });
+
+  test("re-raises the signal even when releasing the lock fails, so an interrupt never hangs (#34)", async () => {
+    const github = new FakeGitHubClient({
+      targetIssues: [targetIssue()],
+      subIssuesByTargetIssue: new Map([[1, [implementationIssue({ number: 4, labels: ["ready-for-agent"] })]]])
+    });
+    const signals = fakeSignals();
+
+    const reachedSandbox = deferred<void>();
+    const unblockSandbox = deferred<void>();
+    const sandbox = new FakeSandboxRunner();
+    sandbox.ensureSandbox.mockImplementation(async () => {
+      reachedSandbox.resolve();
+      await unblockSandbox.promise;
+    });
+
+    // A lock whose release rejects — e.g. an fs error deleting the lock dir. The
+    // interrupt must still re-raise and terminate rather than hang on the failure.
+    const unreleasableLockStore: TargetIssueLockStore = {
+      acquire: vi.fn(async () => ({
+        release: vi.fn(async () => {
+          throw new Error("cannot remove lock dir");
+        })
+      })),
+      lockPath: (targetIssueNumber: number) => `.krutrimbox/locks/issue-${targetIssueNumber}.lock`
+    };
+
+    const factory = new Krutrimbox({
+      github,
+      sandbox,
+      lockStore: unreleasableLockStore,
+      templates: fixtureTemplates,
+      signals,
+      logger: { log: vi.fn() }
+    });
+
+    const run = factory.runExplicit(1, "codex");
+    await reachedSandbox.promise;
+
+    signals.fire("SIGINT");
+    await vi.waitFor(() => expect(signals.raised).toEqual(["SIGINT"]));
+
+    unblockSandbox.resolve();
+    await run;
   });
 
   test("updates an idempotent HITL pause comment and does not create a sandbox", async () => {
@@ -1854,7 +1980,8 @@ function fakeLockStore({ locked = false }: { locked?: boolean } = {}): TargetIss
 
       const lock: TargetIssueLock = { release: vi.fn(async () => undefined) };
       return lock;
-    })
+    }),
+    lockPath: (targetIssueNumber: number) => `.krutrimbox/locks/issue-${targetIssueNumber}.lock`
   };
 }
 
@@ -1875,10 +2002,55 @@ function recordingLockStore({ lockedTargetIssues = new Set<number>() }: { locked
         })
       };
       return lock;
-    })
+    }),
+    lockPath: (targetIssueNumber: number) => `.krutrimbox/locks/issue-${targetIssueNumber}.lock`
   };
 
   return store satisfies TargetIssueLockStore & { acquired: number[]; released: number[] };
+}
+
+// A promise whose resolution the test controls, used to pause a run at a chosen
+// point so a termination signal can arrive mid-run.
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+// An in-memory ProcessSignals seam: records the handlers a run registers, re-raises
+// into a list instead of terminating, and lets a test fire the registered handlers.
+function fakeSignals() {
+  const handlers = new Map<TerminationSignal, Array<() => void>>();
+  const raised: TerminationSignal[] = [];
+
+  return {
+    raised,
+    on: vi.fn((signal: TerminationSignal, handler: () => void) => {
+      handlers.set(signal, [...(handlers.get(signal) ?? []), handler]);
+    }),
+    off: vi.fn((signal: TerminationSignal, handler: () => void) => {
+      handlers.set(signal, (handlers.get(signal) ?? []).filter((registered) => registered !== handler));
+    }),
+    raiseDefault: vi.fn((signal: TerminationSignal) => {
+      raised.push(signal);
+    }),
+    // Test-only: invoke every handler currently registered for a signal.
+    fire(signal: TerminationSignal): void {
+      for (const handler of [...(handlers.get(signal) ?? [])]) {
+        handler();
+      }
+    },
+    // Test-only: how many handlers remain registered for a signal.
+    handlerCount(signal: TerminationSignal): number {
+      return (handlers.get(signal) ?? []).length;
+    }
+  } satisfies ProcessSignals & {
+    raised: TerminationSignal[];
+    fire(signal: TerminationSignal): void;
+    handlerCount(signal: TerminationSignal): number;
+  };
 }
 
 // The factory tests run through the real renderer with no Project Configuration,

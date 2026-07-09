@@ -34,3 +34,11 @@ describe("FileTargetIssueLockStore.isHeld", () => {
     await expect(store.isHeld(1)).resolves.toBe(false);
   });
 });
+
+describe("FileTargetIssueLockStore.lockPath", () => {
+  test("names the lock directory a stale-lock message points an operator at (#34)", () => {
+    const store = new FileTargetIssueLockStore("/repo");
+
+    expect(store.lockPath(34)).toBe(path.join("/repo", ".krutrimbox", "locks", "issue-34.lock"));
+  });
+});

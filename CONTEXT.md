@@ -181,7 +181,7 @@ The coarse condition a Sandbox Inspection reports: **BUSY** (the Sandboxed Agent
 _Avoid_: status, state, health
 
 **Sandbox Liveness**:
-Whether a Factory Run is driving the sandbox: **LIVE** (a Sandboxed Agent process is running — the ground-truth signal). When no agent runs, the Target Issue Lock tells the two idle cases apart: **STALE** (lock still held — a crashed or between-sessions run) or **LEFT-BEHIND** (no lock — a paused or failed run kept for inspection).
+Whether a Factory Run is driving the sandbox: **LIVE** (a Sandboxed Agent process is running — the ground-truth signal). When no agent runs, the Target Issue Lock tells the two idle cases apart: **STALE** (lock still held — a hard-killed run, or a run momentarily between Sandboxed Agent sessions; a graceful stop releases the lock and lands in LEFT-BEHIND instead) or **LEFT-BEHIND** (no lock — a run that paused at a HITL Issue, failed, or was Ctrl+C-stopped, kept for inspection).
 _Avoid_: running, alive, up
 
 **krutrimbox Sandbox Template**:
