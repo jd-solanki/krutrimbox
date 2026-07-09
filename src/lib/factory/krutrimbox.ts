@@ -118,12 +118,6 @@ export class Krutrimbox {
   private readonly lockStore: TargetIssueLockStore;
   private readonly logger: Pick<Console, "log">;
   private readonly signals: ProcessSignals;
-  // The lock the in-flight dispatch holds, so a termination signal can release it
-  // before the process exits. Null during discovery and between dispatched issues.
-  private activeLock: TargetIssueLock | null = null;
-  // Latched once a termination signal starts shutting the run down, so a second
-  // signal (an impatient second Ctrl+C) does not begin a second release.
-  private shuttingDown = false;
   private readonly openRunLog: RunLogFactory;
   private readonly templates: TemplateRenderer;
   private readonly hooks: Map<KrutrimboxHookName, ResolvedHookAction[]>;
@@ -133,6 +127,14 @@ export class Krutrimbox {
   private readonly commandRunner: CommandRunner;
   private readonly injectedSandbox?: SandboxRunner;
   private readonly sandboxTemplateOverride?: string;
+
+  // Mutable per-run state, distinct from the injected seams above.
+  // The lock the in-flight dispatch holds, so a termination signal can release it
+  // before the process exits. Null during discovery and between dispatched issues.
+  private activeLock: TargetIssueLock | null = null;
+  // Latched once a termination signal starts shutting the run down, so a second
+  // signal (an impatient second Ctrl+C) does not begin a second release.
+  private shuttingDown = false;
 
   public constructor(githubOrDependencies: GitHubClient | KrutrimboxDependencies = {}) {
     const dependencies = isGitHubClient(githubOrDependencies)
