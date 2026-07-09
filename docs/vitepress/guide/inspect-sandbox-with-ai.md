@@ -4,6 +4,10 @@ When a factory run looks stuck, slow, or silent, you rarely need to debug it by 
 
 The prompt is deliberately project-agnostic: it reads the sandbox's live process tree and Git state rather than assuming a language, so it works the same whether your project uses npm, pip/uv, Go modules, Cargo, or anything else. It also starts by asking you a short, focused question or two (which Target Issue, what symptom) so the AI hunts for the answer instead of exploring your whole repo and burning tokens.
 
+::: tip For a quick answer, try `kb status` first
+If you just want to know whether the agent is busy, stalled, or gone, run `kb status --issue <number>` — it does the same live inspection deterministically and prints a verdict with the evidence, no coding agent or tokens required (see [Troubleshooting](./troubleshooting#a-sandbox-is-left-behind-after-a-failure)). Reach for the prompt below when you want an agent to *reason* about the cause and recommend a fix, not just report the state.
+:::
+
 ::: tip Target Issue Sandbox names are long and deterministic
 A sandbox name is keyed on the repository, the Target Issue, and the agent — `krutrimbox-issue-<number>-<repository-slug>-<fingerprint>-<agent>` (e.g. `krutrimbox-issue-1-acme-webapp-1a2b3c4d-codex`), never just `krutrimbox-issue-1`. The AI resolves the exact name from `sbx ls`.
 :::

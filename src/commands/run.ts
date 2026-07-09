@@ -88,7 +88,8 @@ export function createRunCommand(dispatch: CliDispatch = runKrutrimbox): Command
     );
 }
 
-function parseIssueNumber(value: string): number {
+// Shared with `kb status`, whose `--issue` obeys the same positive-integer rule.
+export function parseIssueNumber(value: string): number {
   const issueNumber = Number(value);
 
   if (!Number.isInteger(issueNumber) || issueNumber < 1) {

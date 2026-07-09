@@ -172,6 +172,18 @@ _Avoid_: agent done, run passed, implementation complete
 The Docker sandbox used by krutrimbox while delivering one Target Issue. It may be reused across AFK Issues for code and dependency continuity, while Sandboxed Agent sessions inside it remain fresh per issue.
 _Avoid_: container, VM, issue sandbox
 
+**Sandbox Inspection**:
+A read-only reading of a Target Issue Sandbox's live state — its process tree, network policy log, and git state — to report what the Sandboxed Agent is doing, surfaced by the `kb status` command. It never changes the sandbox, the issue, or GitHub, and needs no network, unlike a Factory Run.
+_Avoid_: debug, monitor, health check
+
+**Sandbox Verdict**:
+The coarse condition a Sandbox Inspection reports: **BUSY** (the Sandboxed Agent's command is making progress), **STALLED** (a command pinned with no CPU progress across two samples), or **EXITED** (no Sandboxed Agent process — the run crashed or finished). Deliberately coarser than the AI-prompt guide's split of the stalled case, which krutrimbox declines to guess at.
+_Avoid_: status, state, health
+
+**Sandbox Liveness**:
+Whether a Factory Run is driving the sandbox: **LIVE** (a Sandboxed Agent process is running — the ground-truth signal). When no agent runs, the Target Issue Lock tells the two idle cases apart: **STALE** (lock still held — a crashed or between-sessions run) or **LEFT-BEHIND** (no lock — a paused or failed run kept for inspection).
+_Avoid_: running, alive, up
+
 **krutrimbox Sandbox Template**:
 The custom Docker Sandboxes template image used for Target Issue Sandboxes, one per Agent Backend. Each is built from a single parameterized `Dockerfile.sandbox` that extends the Agent Backend's stock Docker template (`docker/sandbox-templates:codex` or `docker/sandbox-templates:claude-code`) with repository-required tools, currently `pnpm`, so fresh Sandboxed Agent sessions have the same package-manager surface krutrimbox expects.
 _Avoid_: Dockerfile, base image, custom container

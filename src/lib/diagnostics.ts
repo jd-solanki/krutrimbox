@@ -178,6 +178,25 @@ export const diagnostics = /*#__PURE__*/ defineDiagnostics({
       why: (p: { detail: string }) =>
         `The Sandboxed Agent stopped on a transient model-provider API error (${p.detail}) — an upstream problem, not your issue, configuration, or sandbox.`,
       fix: "Rerun krutrimbox. If it persists, check the model provider's status page for an outage."
+    },
+
+    // sandbox-inspector.ts — `kb status --issue <n>` found a Target Issue Sandbox
+    // for that issue under more than one Agent Backend, so the agent cannot be
+    // inferred. The operator names it, exactly as `kb run` requires.
+    KB_R0014: {
+      why: (p: { issueNumber: number; agents: string }) =>
+        `Target Issue #${p.issueNumber} has a sandbox under more than one Agent Backend (${p.agents}).`,
+      fix: "Re-run with --agent to choose which one to inspect."
+    },
+
+    // sandbox-inspector.ts — the initial `sbx ls` failed, so Sandbox Inspection
+    // cannot even find the sandbox. Unlike a stopped container (a reportable EXITED
+    // state), a failing `sbx` is an environment problem: it is not installed, not on
+    // PATH, or its daemon is down. Coded so it does not reach the top-level "likely a
+    // bug" handler; the raw error is kept as the cause.
+    KB_R0015: {
+      why: "krutrimbox: could not list sandboxes — `sbx` failed.",
+      fix: "Ensure the `sbx` CLI is installed and on your PATH (`sbx ls` should work), then re-run."
     }
   }
 });

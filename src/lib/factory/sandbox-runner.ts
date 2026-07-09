@@ -337,7 +337,7 @@ function hostGitGuidance(error: unknown): string {
 // progress line makes a strict `JSON.parse` throw and aborts the whole run before
 // the agent ever starts. The JSON object is the substring from the first `{` to
 // the last `}`.
-function parseSandboxList(output: string): { sandboxes: Array<{ name: string }> } {
+export function parseSandboxList(output: string): { sandboxes: Array<{ name: string }> } {
   const start = output.indexOf("{");
   const end = output.lastIndexOf("}");
   const json = start === -1 || end === -1 ? output : output.slice(start, end + 1);

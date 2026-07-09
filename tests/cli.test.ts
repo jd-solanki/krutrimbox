@@ -1,6 +1,8 @@
 import { describe, expect, test, vi } from "vitest";
 import { Command } from "commander";
 import { createRunCommand, type CliDispatch } from "../src/commands/run";
+import { createStatusCommand } from "../src/commands/status";
+import type { InspectOutcome, StatusDispatch } from "../src/lib/factory/inspect";
 
 function createTestDispatch(): CliDispatch {
   return {
@@ -155,3 +157,52 @@ function createTestProgram(dispatch: CliDispatch): Command {
   program.addCommand(runCommand);
   return program;
 }
+
+describe("krutrimbox CLI: status", () => {
+  const noSandbox: InspectOutcome = { kind: "no-sandbox", issueNumber: 1 };
+
+  function createStatusDispatch(): StatusDispatch {
+    return { inspect: vi.fn(async () => noSandbox) };
+  }
+
+  function createStatusProgram(dispatch: StatusDispatch): Command {
+    const program = new Command("kb");
+    program.exitOverride();
+    program.addCommand(createStatusCommand(dispatch).exitOverride());
+    return program;
+  }
+
+  test("inspects the given Target Issue, inferring the Agent Backend when omitted", async () => {
+    const dispatch = createStatusDispatch();
+    const program = createStatusProgram(dispatch);
+
+    await program.parseAsync(["node", "kb", "status", "--issue", "1"]);
+
+    expect(dispatch.inspect).toHaveBeenCalledWith({ issueNumber: 1, agent: undefined });
+  });
+
+  test("narrows to the named Agent Backend when --agent is given", async () => {
+    const dispatch = createStatusDispatch();
+    const program = createStatusProgram(dispatch);
+
+    await program.parseAsync(["node", "kb", "status", "--issue", "1", "--agent", "claude"]);
+
+    expect(dispatch.inspect).toHaveBeenCalledWith({ issueNumber: 1, agent: "claude" });
+  });
+
+  test("requires --issue, since inspection is always of one named issue", async () => {
+    const program = createStatusProgram(createStatusDispatch());
+
+    await expect(program.parseAsync(["node", "kb", "status"])).rejects.toThrow(
+      /required option .*--issue/
+    );
+  });
+
+  test("rejects an unknown Agent Backend", async () => {
+    const program = createStatusProgram(createStatusDispatch());
+
+    await expect(
+      program.parseAsync(["node", "kb", "status", "--issue", "1", "--agent", "gemini"])
+    ).rejects.toThrow(/--agent/);
+  });
+});

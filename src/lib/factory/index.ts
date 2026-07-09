@@ -14,4 +14,5 @@ export * from "./config";
 export * from "./lock-store";
 export * from "./run-log";
 export * from "./sandbox-runner";
+export * from "./inspect";
 export * from "./krutrimbox";

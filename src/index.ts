@@ -5,6 +5,7 @@ import { Diagnostic, formatDiagnostic } from "nostics";
 import updateNotifier from "update-notifier";
 import packageJson from "../package.json" with { type: "json" };
 import { createRunCommand } from "./commands/run";
+import { createStatusCommand } from "./commands/status";
 
 // notify() defers its message to process exit, so registering it before
 // parseAsync guarantees the listener is in place no matter which command runs.
@@ -18,6 +19,7 @@ program
   .version(packageJson.version);
 
 program.addCommand(createRunCommand());
+program.addCommand(createStatusCommand());
 
 // Diagnostics krutrimbox raises itself (the `KB_*` catalog in lib/diagnostics)
 // carry a `fix` and a `docs` URL beyond their message; render those on the way

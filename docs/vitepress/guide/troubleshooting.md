@@ -131,8 +131,16 @@ echo "$CREATE_READ_ONLY_TOKEN" | sbx secret set <sandbox-name> github
 
 krutrimbox intentionally keeps Target Issue Sandboxes after HITL pauses and failures so you can inspect them.
 
-::: tip Let an AI inspect it for you
-Instead of running these commands by hand, you can hand a coding agent the ready-made prompt in [Inspect a Sandbox with AI](./inspect-sandbox-with-ai) — it reports whether the sandboxed agent is busy, blocked, wedged, or crashed, with the evidence.
+The quickest way to find out what a run is doing is `kb status`, which reads the sandbox for you and prints a verdict — **BUSY**, **STALLED**, or **EXITED** — with the evidence:
+
+```sh
+kb status --issue <number>
+```
+
+It infers the agent from the one sandbox that issue has; pass `--agent codex|claude` only if you ran the same issue under both. It's read-only and needs no network — just the `sbx` CLI on your `PATH`.
+
+::: tip Want an AI to reason about it instead?
+For a free-form investigation ("why is it stuck, and what should I do?"), hand a coding agent the ready-made prompt in [Inspect a Sandbox with AI](./inspect-sandbox-with-ai). `kb status` gives you the fast deterministic answer; the AI prompt goes deeper when you want reasoning.
 :::
 
 List sandboxes:
